@@ -53,7 +53,7 @@ def cap_daily_turnover(
 
     # 当前持仓权重
     current_weights: dict[str, float] = {}
-    for code, info in account.holdings.items():
+    for code, info in state.holdings.items():
         p = prices.get(code, 0)
         if p and p > 0:
             current_weights[code] = (info["shares"] * p) / equity

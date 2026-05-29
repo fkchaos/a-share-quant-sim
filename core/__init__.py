@@ -13,5 +13,5 @@ from core.account import (
     PortfolioState, buy, sell, check_stop_loss,
     portfolio_value, status_report,
 )
-from core.scoring import composite_score, composite_score_equal, standardize, rel_strength_adjust
+from core.scoring import composite_score, composite_score_equal, standardize, score_all_stocks, rel_strength_adjust
 from core.position import Position, holdings_to_dict, holdings_from_dict, copy_holdings

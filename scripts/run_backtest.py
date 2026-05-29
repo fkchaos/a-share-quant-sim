@@ -23,11 +23,18 @@ A股量化回测系统 - 统一回测工具
         └── report.md             # Markdown 回测报告
 
 策略：
-    v3_baseline     – 原始 v3 策略（等权31因子, top_n=20, rebal=5, stop=15%）
-    v3_optimized    – v3 风控优化参数（top_n=20, rebal=5, stop=15%, vol_scaling）
+    v3_baseline     – FACTOR_WEIGHTS 加权（29因子, top_n=20, rebal=5, stop=15%）
+    v3_optimized    – FACTOR_WEIGHTS 加权 + vol_scaling（29因子, top_n=12, rebal=20, stop=20%）
     ic_ir_weighted  – IC-IR 因子加权（用 IC 信息比率给因子赋权）
     ic_selected     – IC-IR 加权 + 仅保留有效因子（|IC_IR|>=0.03）
     markowitz       – 等权因子 + Markowitz 组合权重优化
+
+架构：
+    所有因子计算、评分、交易逻辑均委托给 core/ 引擎。
+    core/factors.py   → calc_factors_panel() 计算 29 个因子
+    core/scoring.py   → composite_score() / composite_score_equal() 合成评分
+    core/config.py    → DEFAULT_FACTOR_WEIGHTS 29 因子权重（权威来源）
+    core/account.py   → PortfolioState + buy/sell/check_stop_loss 交易引擎
 
 依赖：
     - Python 3.11+, pandas, numpy, scipy
@@ -49,6 +56,12 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
+# ── Core engine (single source of truth) ────────────────────────────
+from core.config import config as core_config
+from core.factors import calc_factors_panel
+from core.scoring import composite_score, composite_score_equal, standardize
+from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
+
 # ============================================================
 # 配置
 # ============================================================
@@ -56,64 +69,11 @@ DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "data")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
-# Legacy config loading (kept for backward compat)
-def _load_config(config_path=None):
-    """Load config.yaml and return dict. Falls back to empty dict if unavailable."""
-    if config_path is None:
-        candidates = [
-            "config.yaml",
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml"),
-            os.path.expanduser("~/.a-share-backtest/config.yaml"),
-        ]
-        for p in candidates:
-            if os.path.exists(p):
-                config_path = p
-                break
-    if config_path is None:
-        return {}
-    try:
-        import yaml
-        with open(config_path) as f:
-            return yaml.safe_load(f) or {}
-    except Exception:
-        return {}
-
-def _merge_args_into_config(args, config):
-    """Build final param dict: config.yaml < CLI args."""
-    cfg_bt = config.get("backtest", {})
-    cfg_costs = config.get("costs", {})
-    return {
-        "start_date": args.start or cfg_bt.get("start_date", "2021-01-01"),
-        "end_date": args.end or cfg_bt.get("end_date", datetime.now().strftime("%Y-%m-%d")),
-        "initial_capital": cfg_costs.get("initial_capital", 1_000_000),
-        "commission_rate": cfg_costs.get("commission_rate", 0.0003),
-        "stamp_tax_rate": cfg_costs.get("stamp_tax_rate", 0.001),
-        "slippage_rate": cfg_costs.get("slippage_rate", 0.001),
-    }
-
-# Module-level constants (still used as fallbacks; override via config.yaml or CLI)
+# Module-level constants (override via config.yaml or CLI)
 START_DATE = "2021-01-01"
 END_DATE = datetime.now().strftime("%Y-%m-%d")
-INITIAL_CAPITAL = 1_000_000
-COMMISSION_RATE = 0.0003
-STAMP_TAX_RATE = 0.001
-SLIPPAGE_RATE = 0.001
 
-# 因子权重（与 sim_daily.py 保持一致；config.yaml 中的值会在加载时覆盖）
-FACTOR_WEIGHTS = {
-    'mom_5': 0.05, 'mom_10': 0.10, 'mom_20': 0.10, 'mom_60': 0.08, 'mom_120': 0.05,
-    'rev_3': 0.05, 'rev_5': 0.08, 'rev_10': 0.05,
-    'vol_10': -0.03, 'vol_20': -0.05, 'vol_60': -0.05,
-    'vol_change': 0.03,
-    'vol_ratio_5': 0.05, 'vol_ratio_20': 0.05, 'amount_ratio': 0.05,
-    'rsi_6': 0.03, 'rsi_14': 0.05, 'rsi_28': 0.02,
-    'macd_12_26': 0.08, 'macd_5_35': 0.04,
-    'boll_pos_10': 0.03, 'boll_pos_20': 0.03, 'boll_width_20': -0.02,
-    'atr_14': -0.03,
-    'skew_20': 0.02, 'kurt_20': -0.02,
-    'vwap_mom': 0.03,
-    'rel_strength_20': 0.05, 'rel_strength_60': 0.03,
-}
+FACTOR_WEIGHTS = core_config.factor_weights  # 权威权重，来自 core/config.py
 
 
 # ============================================================
@@ -156,94 +116,6 @@ def load_and_build_panel(start_date=None, end_date=None):
         volume_panel.loc[common_dates].sort_index(),
         amount_panel.loc[common_dates].sort_index()
     ), list(valid.keys())
-
-
-# ============================================================
-# 因子计算
-# ============================================================
-def calc_factors(close_panel, volume_panel, amount_panel):
-    """计算全部技术因子。"""
-    factors = {}
-    returns = close_panel.pct_change()
-
-    for w in [5, 10, 20, 60, 120]:
-        factors[f'mom_{w}'] = close_panel.pct_change(w)
-
-    for w in [3, 5, 10]:
-        factors[f'rev_{w}'] = -close_panel.pct_change(w)
-
-    for w in [10, 20, 60]:
-        factors[f'vol_{w}'] = returns.rolling(w).std()
-    factors['vol_change'] = returns.rolling(20).std() / returns.rolling(60).std()
-
-    factors['vol_ratio_5'] = volume_panel / volume_panel.rolling(5).mean()
-    factors['vol_ratio_20'] = volume_panel / volume_panel.rolling(20).mean()
-    factors['amount_ratio'] = amount_panel / amount_panel.rolling(20).mean()
-
-    for w in [6, 14, 28]:
-        delta = close_panel.diff()
-        gain = delta.where(delta > 0, 0).rolling(w).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(w).mean()
-        rs = gain / loss.replace(0, np.nan)
-        factors[f'rsi_{w}'] = 100 - (100 / (1 + rs))
-
-    for fast, slow in [(12, 26), (5, 35)]:
-        ema_f = close_panel.ewm(span=fast).mean()
-        ema_s = close_panel.ewm(span=slow).mean()
-        macd_line = ema_f - ema_s
-        factors[f'macd_{fast}_{slow}'] = macd_line - macd_line.ewm(span=9).mean()
-
-    for w in [10, 20]:
-        ma = close_panel.rolling(w).mean()
-        std = close_panel.rolling(w).std()
-        lower = ma - 2 * std
-        upper = ma + 2 * std
-        factors[f'boll_pos_{w}'] = (close_panel - lower) / (upper - lower + 1e-10)
-        factors[f'boll_width_{w}'] = (upper - lower) / (ma + 1e-10)
-
-    high_low = close_panel.rolling(2).max() - close_panel.rolling(2).min()
-    factors['atr_14'] = high_low.rolling(14).mean() / (close_panel + 1e-10)
-
-    factors['skew_20'] = returns.rolling(20).skew()
-    factors['kurt_20'] = returns.rolling(20).kurt()
-
-    vol_price = close_panel * volume_panel
-    factors['vwap_mom'] = (vol_price.rolling(20).mean() /
-                           (volume_panel.rolling(20).mean() + 1e-10))
-
-    cross_mean_ret_20 = close_panel.mean(axis=1).pct_change(20)
-    factors['rel_strength_20'] = close_panel.pct_change(20).sub(cross_mean_ret_20, axis=0)
-
-    cross_mean_ret_60 = close_panel.mean(axis=1).pct_change(60)
-    factors['rel_strength_60'] = close_panel.pct_change(60).sub(cross_mean_ret_60, axis=0)
-
-    return factors
-
-
-def standardize(df):
-    """截面 Z-Score 标准化。"""
-    mean = df.mean(axis=1)
-    std = df.std(axis=1).replace(0, np.nan)
-    return df.sub(mean, axis=0).div(std, axis=0)
-
-
-def composite_score_weighted(factors, weights=None):
-    """加权因子合成（默认使用 FACTOR_WEIGHTS）。"""
-    if weights is None:
-        weights = FACTOR_WEIGHTS
-    score = pd.DataFrame(0, index=factors[list(factors.keys())[0]].index,
-                         columns=factors[list(factors.keys())[0]].columns)
-    for name, w in weights.items():
-        if name in factors:
-            score = score.add(w * standardize(factors[name]), fill_value=0)
-    return score
-
-
-def composite_score_equal(factors):
-    """等权因子合成（v3 baseline）。"""
-    n = len(factors)
-    weights = {name: 1.0 / n for name in factors}
-    return composite_score_weighted(factors, weights)
 
 
 # ============================================================
@@ -649,16 +521,11 @@ def main():
     parser.add_argument("--max-position", type=float, default=0.10, help="单只最大仓位")
     parser.add_argument("--scan", action="store_true", help="启用参数网格扫描")
     parser.add_argument("--output-dir", default=None, help="结果输出目录")
-    parser.add_argument("--config", default=None, help="config.yaml 路径")
     parser.add_argument("--report-markdown", action="store_true",
                         help="输出 Markdown 报告到 stdout")
     parser.add_argument("--ic-analysis", action="store_true",
                         help="运行 IC 因子分析")
     args = parser.parse_args()
-
-    # Load config and merge with CLI args
-    config = _load_config(args.config)
-    params = _merge_args_into_config(args, config)
 
     # Load stock names for industry classification
     stock_names = {}
@@ -673,10 +540,9 @@ def main():
         ))
     except Exception:
         pass
-    print(f"  使用配置: {len(config)} 个字段已加载")
 
     print("=" * 60)
-    print("A股量化回测系统")
+    print("A股量化回测系统  |  core/engine: factors+scoring+account")
     print("=" * 60)
     t0 = time.time()
 
@@ -687,9 +553,9 @@ def main():
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只股票")
     print(f"  区间: {close_panel.index[0].date()} ~ {close_panel.index[-1].date()}")
 
-    # 2. 因子计算
+    # 2. 因子计算（委托 core.factors.calc_factors_panel）
     print(f"\n[2/5] 计算因子...")
-    factors = calc_factors(close_panel, volume_panel, amount_panel)
+    factors = calc_factors_panel(close_panel, volume_panel, amount_panel)
     print(f"  共 {len(factors)} 个因子")
 
     # 3. IC 分析（可选）
@@ -697,33 +563,33 @@ def main():
     if args.ic_analysis:
         print(f"\n[3/5] IC 分析...")
         ic_results = run_ic_analysis(factors, close_panel)
+
+    # 4. 构建评分（委托 core.scoring）
+    print(f"\n[3/5] 构建评分矩阵...")
+    score_equal = composite_score_equal(factors)
+    if ic_results:
+        # IC 分析输出
         selected, discarded = select_factors_ic(ic_results)
         print(f"  有效因子: {len(selected)} / {len(factors)}")
         if discarded:
             print(f"  淘汰因子: {discarded}")
-
-        # 打印 IC 表格
         ic_table = pd.DataFrame({
             name: {k: round(v, 4) for k, v in stats.items()}
             for name, stats in sorted(ic_results.items(), key=lambda x: abs(x[1]['ic_ir']), reverse=True)
         }).T
         print(f"\n  IC 统计（按 |IC_IR| 降序）:\n{ic_table.to_string()}")
 
-    # 4. 构建评分
-    print(f"\n[3/5] 构建评分矩阵...")
-    score_equal = composite_score_equal(factors)
-    if ic_results:
         selected_weights = {name: abs(stats['ic_ir'])
                             for name, stats in ic_results.items()
                             if abs(stats['ic_ir']) >= 0.03 and stats['ic_positive_rate'] >= 0.50}
         total_w = sum(selected_weights.values())
         if total_w > 0:
             selected_weights = {k: v / total_w for k, v in selected_weights.items()}
-        score_ic = composite_score_weighted(factors, selected_weights)
+        score_ic = composite_score(factors, selected_weights)
     else:
         score_ic = None
 
-    # 5. 回测
+    # 5. 回测（委托 core.account）
     print(f"\n[4/5] 运行回测...")
     strategies = args.strategy
     run_all = "all" in strategies
@@ -742,7 +608,7 @@ def main():
     if run_all or "v3_baseline" in strategies:
         configs.append({
             'label': 'v3_baseline',
-            'score': composite_score_weighted(factors),  # 使用 FACTOR_WEIGHTS 加权
+            'score': composite_score(factors),  # 使用 core/config.py FACTOR_WEIGHTS 加权
             'kwargs': dict(top_n=top_n or 20, rebalance_freq=rebal_freq or 5,
                            stop_loss=sl or 0.15,
                            max_industry_weight=0.25, max_daily_turnover=0.30,
@@ -751,7 +617,7 @@ def main():
     if run_all or "v3_optimized" in strategies:
         configs.append({
             'label': 'v3_optimized',
-            'score': composite_score_weighted(factors),
+            'score': composite_score(factors),
             'kwargs': dict(top_n=top_n or 12, rebalance_freq=rebal_freq or 20,
                            stop_loss=sl or 0.20, use_vol_scaling=True,
                            max_industry_weight=0.25, max_daily_turnover=0,
@@ -760,7 +626,7 @@ def main():
     if (run_all or "ic_ir_weighted" in strategies) and ic_results:
         configs.append({
             'label': 'ic_ir_all',
-            'score': composite_score_weighted(
+            'score': composite_score(
                 factors,
                 {name: abs(s['ic_ir']) / sum(abs(st['ic_ir']) for st in ic_results.values())
                  for name, s in ic_results.items()}),
@@ -788,7 +654,7 @@ def main():
         # 没有 IC 分析结果时，ic 策略不可用，用等权替代
         print("  ⚠️ 未启用 --ic-analysis，IC 相关策略不可用，用 v3_baseline + markowitz")
         configs = [
-            {'label': 'v3_baseline', 'score': composite_score_weighted(factors),
+            {'label': 'v3_baseline', 'score': composite_score(factors),
              'kwargs': dict(top_n=20, rebalance_freq=5, stop_loss=0.15,
                             max_industry_weight=0.25, max_daily_turnover=0.30,
                             stock_names=stock_names)},

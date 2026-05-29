@@ -58,8 +58,10 @@ def calc_factors_for_signal(df):
 
 
 def generate_scores():
-    """Score all stocks using core factor engine + config weights."""
-    from core.config import config as cfg
+    """Score all stocks using core engine (delegates to core.scoring.score_all_stocks)."""
+    from core.factors import calc_factors_single
+    from core.scoring import score_all_stocks
+
     files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
     all_factors = {}
 
@@ -67,16 +69,9 @@ def generate_scores():
         code = f.replace(".csv", "")
         df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
         if len(df) > 120:
-            all_factors[code] = calc_factors_for_signal(df)
+            all_factors[code] = calc_factors_single(df)
 
-    # Standardize cross-sectionally
-    weights = cfg.factor_weights
-    scores = {}
-    for code, factors in all_factors.items():
-        score = sum(factors.get(n, 0) * w for n, w in weights.items() if not np.isnan(factors.get(n, 0)))
-        scores[code] = score
-
-    return scores
+    return score_all_stocks(all_factors)
 
 
 def load_account():

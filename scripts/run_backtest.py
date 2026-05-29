@@ -336,11 +336,11 @@ def markowitz_optimize(expected_returns, cov_matrix, max_weight=0.15):
 # ============================================================
 # 回测引擎（使用 core.account 交易逻辑 → 与模拟盘一致）
 # ============================================================
-def run_backtest(close_panel, score, top_n=20, rebalance_freq=5, stop_loss=0.15,
-                 max_position=0.10, use_vol_scaling=False, vol_target=0.20,
-                 weight_method='equal', label='default',
+def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20,
+                 max_position=0.10, use_vol_scaling=True, vol_target=0.20,
+                 weight_method='weighted', label='default',
                  initial_capital=None,
-                 max_industry_weight=0.25, max_daily_turnover=0.30,
+                 max_industry_weight=0.25, max_daily_turnover=0,
                  stock_names=None):
     """
     完整回测引擎。
@@ -751,10 +751,10 @@ def main():
     if run_all or "v3_optimized" in strategies:
         configs.append({
             'label': 'v3_optimized',
-            'score': composite_score_weighted(factors),  # 使用 FACTOR_WEIGHTS 加权
-            'kwargs': dict(top_n=top_n or 20, rebalance_freq=rebal_freq or 5,
-                           stop_loss=sl or 0.15, use_vol_scaling=True,
-                           max_industry_weight=0.25, max_daily_turnover=0.30,
+            'score': composite_score_weighted(factors),
+            'kwargs': dict(top_n=top_n or 12, rebalance_freq=rebal_freq or 20,
+                           stop_loss=sl or 0.20, use_vol_scaling=True,
+                           max_industry_weight=0.25, max_daily_turnover=0,
                            stock_names=stock_names),
         })
     if (run_all or "ic_ir_weighted" in strategies) and ic_results:

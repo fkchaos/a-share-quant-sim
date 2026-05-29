@@ -1,10 +1,12 @@
 """
-模拟盘交易 - 每日操作脚本 (v4)
+模拟盘交易 - 每日操作脚本 (v5)
 ================================
 新增：
   - P0-1: A股交易约束（涨跌停/停牌/T+1 检查）
   - P0-2: 数据质量门禁（过期/空值/异常涨跌/复权异常）
   - P0-3: 组合换手率上限控制
+  - P1-1: 行业仓位上限约束（单一行业≤25%）
+  - P1-2: 指数趋势展示（HS300/CSI500/CSI1000/上证50/深证成指/创业板指）
 """
 import sys, os, pandas as pd, numpy as np, json, time
 from datetime import datetime
@@ -16,6 +18,8 @@ from sim_account import SimAccount, generate_scores, load_hs300_names, DAILY_DIR
 from constraints import build_trade_context
 from data_quality import DataQualityAuditor, print_quality_report
 from portfolio_controls import cap_daily_turnover
+from industry import get_industry, portfolio_industry_breakdown, cap_industry_weights
+from indices import get_index_trends, IndexBenchmarkService
 
 DATA_DIR = "data"
 PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
@@ -27,8 +31,10 @@ STOP_LOSS = 0.20
 TOP_N = 10
 SLIPPAGE_RATE = 0.001
 
-# P0-3: 换手率上限（一仓换手占总净值比例），0 表示不限制
+# P0-3: 换手率上限
 MAX_DAILY_TURNOVER = 0.30
+# P1-1: 行业仓位上限
+MAX_INDUSTRY_WEIGHT = 0.25
 
 
 def load_account():
@@ -191,6 +197,7 @@ def daily_operation():
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
 
     turnover_info = None  # P0-3 记录
+    industry_info = None  # P1-1 记录
 
     if need_rebalance:
         print(f"\n  {'🔄 调仓日':=^60}")
@@ -258,6 +265,7 @@ def daily_operation():
                 target_weights[code] = weight_per_stock
 
         # P0-3: 应用换手率上限
+        industry_info = None
         if target_weights:
             target_weights, turnover_info = cap_daily_turnover(
                 account, target_weights, price_dict, max_turnover=MAX_DAILY_TURNOVER
@@ -265,6 +273,23 @@ def daily_operation():
             if turnover_info["applied"]:
                 print(f"\n  📊 换手率控制: 请求 {turnover_info['requested_turnover']:.1%} → "
                       f"上限 {turnover_info['max_turnover']:.1%}，缩放系数 {turnover_info['scale']}")
+
+            # P1-1: 应用行业仓位上限
+            # 构建代码→行业映射
+            code_industry = {code: names.get(code, code) for code in target_weights}
+            # 需要用真实行业名称，这里用股票名称代替（get_industry 需要代码+名称）
+            code_industry_map = {}
+            for code in target_weights:
+                industry = get_industry(code, names.get(code, ""))
+                code_industry_map[code] = industry
+
+            target_weights, industry_info = cap_industry_weights(
+                target_weights, code_industry_map, MAX_INDUSTRY_WEIGHT
+            )
+            if industry_info["applied"]:
+                violated = industry_info.get("violated_industries", {})
+                print(f"\n  🏭 行业仓位上限触发: {', '.join(f'{k}({v:.1%})' for k,v in violated.items())}"
+                      f" → 压缩至 {MAX_INDUSTRY_WEIGHT:.0%}")
 
         # ── 补仓到目标权重 ────────────────────────────────────────
         existing_target = [c for c in top_stocks if c in account.holdings]
@@ -351,6 +376,32 @@ def daily_operation():
     if turnover_info and turnover_info.get("applied"):
         print(f"  换手率控制: {turnover_info['requested_turnover']:.1%}→{turnover_info['max_turnover']:.1%} "
               f"(×{turnover_info['scale']})")
+    if industry_info and industry_info.get("applied"):
+        print(f"  行业上限:   触发 {len(industry_info.get('violated_industries',{}))} 个行业压缩")
+
+    # ── P1-2: 指数趋势展示 ─────────────────────────────────────
+    try:
+        index_trends = get_index_trends(os.path.join(DATA_DIR, "cache", "indices"))
+        if index_trends:
+            print(IndexBenchmarkService.format_trends(index_trends))
+    except Exception as e:
+        print(f"  ⚠️ 指数趋势获取失败: {e}")
+
+    # ── P1-1: 行业分布展示 ─────────────────────────────────────
+    try:
+        if account.holdings:
+            code_industry_map = {}
+            for code in account.holdings:
+                code_industry_map[code] = get_industry(code, names.get(code, ""))
+            breakdown = portfolio_industry_breakdown(account.holdings, price_data, code_industry_map)
+            if breakdown:
+                print(f"\n  {'行业分布':=^60}")
+                for ind, w in list(breakdown.items())[:10]:
+                    bar = "█" * int(w * 40)
+                    print(f"  {ind:<12} {w:>6.1%} {bar}")
+    except Exception:
+        pass
+
     if quality_blocked:
         print(f"  ⚠️  数据质量门禁有阻塞问题，本次交易可能受影响")
 

@@ -34,7 +34,7 @@
 
 ## 特性
 
-- **多因子策略**: 31个技术因子（动量、反转、成交量、波动率、RSI、MACD、布林带、偏度、峰度、ATR、VWAP、相对强度等），权重在 `config.yaml` 中配置
+- **多因子策略**: 29个技术因子（动量、反转、成交量、波动率、RSI、MACD、布林带、偏度、峰度、ATR、VWAP、相对强度等），权重在 `config.yaml` 中配置
 - **共享交易逻辑**: `sim_daily_v6.py`（模拟盘）和 `run_backtest.py`（回测）共用 `core/account.py` 的 `buy()` / `sell()` / `check_stop_loss()` — 修一处 bug 两边同时生效
 - **风控机制**: 单只止损 -20%，每20个交易日调仓，单一行业 ≤25%，日换手率 ≤30%
 - **完整交易模拟**: 佣金(0.03%)、印花税(0.1%)、滑点(0.1%)，100股整数倍，加权平均成本
@@ -126,6 +126,7 @@ a-share-quant-sim/
 ├── core/                           # ⭐ 共享引擎 (回测 + 模拟盘共用)
 │   ├── __init__.py                 # 统一导出
 │   ├── config.py                   # Config dataclass + config.yaml loader
+│   ├── position.py                 # Position 领域模型 (替代裸 dict)
 │   ├── factors.py                  # 因子计算 (单股模式 + 面板模式)
 │   ├── account.py                  # PortfolioState + buy/sell/check_stop_loss
 │   └── scoring.py                  # Z-score 标准化 + 复合评分
@@ -188,7 +189,7 @@ date,open,high,low,close,volume,amount,outstanding_share,turnover
 }
 ```
 
-## 因子列表（31个，权重见 `config.yaml` → `factor_weights`）
+## 因子列表（29个，权重见 `config.yaml` → `factor_weights`）
 
 | 类别 | 因子 | 说明 |
 |------|------|------|
@@ -213,12 +214,11 @@ date,open,high,low,close,volume,amount,outstanding_share,turnover
 ## 分支策略
 
 ```
-dev/default      开发分支 — 日常开发、测试、代码审查在这里进行
+dev/default      开发分支 — 日常开发、测试在这里进行
 release/default  发布分支 — 稳定版本，每日 cron job 从这里拉取脚本执行
-main             已退役（改名为 dev/default）
 
 开功能:  dev/default → git checkout -b feature/xxx → 开发完后 merge 进 dev/default
-发版:    dev/default git push origin release/default  （测试 OK 后同步）
+发版:    dev/default 测试通过后 → git push origin release/default
 回退:    直接 reset release/default 到上一个稳定 commit
 ```
 

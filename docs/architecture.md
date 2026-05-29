@@ -17,7 +17,7 @@
 │                         core/                                │
 │  config.py   ← yaml → Config dataclass (唯一参数源)           │
 │  position.py ← Position 领域模型 (替代裸 dict)                 │
-│  factors.py  ← Factor Registry (29因子 Strategy pattern)     │
+│  factors.py  ← Factor Registry (29因子 Strategy pattern)            │
 │  account.py  ← PortfolioState + buy/sell/stop_loss (参数注入) │
 │  scoring.py  ← Z-score + composite_score                     │
 └──────────┬───────────────────────────────┬──────────────────┘
@@ -62,7 +62,7 @@
 class Config:
     costs: TradingCosts          # initial_capital, commission_rate, stamp_tax_rate, slippage_rate
     risk: RiskLimits             # stop_loss, top_n, rebalance_freq, max_single_weight
-    factor_weights: Dict[str, float]   # 31 个因子权重
+    factor_weights: Dict[str, float]   # 29 个因子权重
     strategies: Dict[str, StrategyConfig]  # 策略预设
     data_dir, daily_dir, ...     # 路径配置
 
@@ -245,7 +245,7 @@ run_backtest.py  ──▶ core.account.buy/sell/check_stop_loss
 
 | 策略 | weight_method | 核心差异 |
 |------|-------------|---------|
-| v3_baseline | equal | 31 因子等权，top_n=20, rebal=5 |
+| v3_baseline | equal | 29 因子等权，top_n=20, rebal=5 |
 | v3_optimized | equal | 等权 + 波动率目标化 |
 | ic_ir_weighted | ic_ir | IC-IR 加权因子 |
 | ic_selected | ic_ir | IC-IR 加权 + 仅保留有效因子 |

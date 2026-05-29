@@ -15,10 +15,11 @@
            ▼                                 ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                         core/                                │
-│  config.py  ← yaml → Config dataclass (唯一参数源)            │
-│  factors.py ← 因子计算 (calc_factors_single / _panel)        │
-│  account.py ← PortfolioState + buy/sell/check_stop_loss      │
-│  scoring.py ← Z-score + composite_score                      │
+│  config.py   ← yaml → Config dataclass (唯一参数源)           │
+│  position.py ← Position 领域模型 (替代裸 dict)                 │
+│  factors.py  ← Factor Registry (29因子 Strategy pattern)     │
+│  account.py  ← PortfolioState + buy/sell/stop_loss (参数注入) │
+│  scoring.py  ← Z-score + composite_score                     │
 └──────────┬───────────────────────────────┬──────────────────┘
            │                               │
            ▼                               ▼

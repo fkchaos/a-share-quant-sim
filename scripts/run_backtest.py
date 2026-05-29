@@ -40,6 +40,10 @@ import os
 import sys
 import time
 from datetime import datetime
+
+# Ensure repo root is on sys.path so `core` package is importable
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from itertools import product
 
 import numpy as np
@@ -621,7 +625,8 @@ def main():
     parser.add_argument("--config", default=None, help="config.yaml 路径")
     parser.add_argument("--report-markdown", action="store_true",
                         help="输出 Markdown 报告到 stdout")
-    parser.add_argument("--output-dir", default=None, help="结果输出目录")
+    parser.add_argument("--ic-analysis", action="store_true",
+                        help="运行 IC 因子分析")
     args = parser.parse_args()
 
     # Load config and merge with CLI args
@@ -797,7 +802,7 @@ def main():
 
     print(f"\n结果已保存: {saved}/")
 
-    if args.report_md:
+    if args.report_markdown:
         report = generate_report(metrics_list, scan_results)
         print(f"\n\n{report}")
 

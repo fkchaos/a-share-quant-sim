@@ -2,37 +2,40 @@
 
 ## 概述
 
-独立的回测工具，用于 A 股量化策略的历史数据验证。支持多策略对比、参数网格扫描、IC 因子分析。
+独立的回测工具，用于 A 股量化策略的历史数据验证。
 
-与 `sim_daily.py`（每日模拟盘运行脚本）配合使用：回测验证通过 → 更新模拟盘脚本。
+**与模拟盘的关系**：`run_backtest.py` 和 `sim_daily_v6.py` 共用 `core/account.py` 中的 `buy()` / `sell()` / `check_stop_loss()` 交易函数，保证回测行为与模拟盘 100% 一致。一个 bug fix 两边同时生效。
 
 ## 快速开始
 
 ```bash
 # 完整回测（全部策略 + IC 分析）
-python run_backtest.py --ic-analysis
+python scripts/run_backtest.py --ic-analysis
 
 # 仅跑 v3 baseline
-python run_backtest.py --strategy v3_baseline
+python scripts/run_backtest.py --strategy v3_baseline
 
 # IC 分析 + 参数扫描
-python run_backtest.py --ic-analysis --scan
+python scripts/run_backtest.py --ic-analysis --scan
 
 # 指定参数回测
-python run_backtest.py --strategy v3_baseline --top-n 15 --rebalance-freq 10 --stop-loss 0.20
+python scripts/run_backtest.py --strategy v3_baseline --top-n 15 --rebalance-freq 10 --stop-loss 0.20
 
 # 指定回测区间
-python run_backtest.py --start 2023-01-01 --end 2024-12-31
+python scripts/run_backtest.py --start 2023-01-01 --end 2024-12-31
+
+# 自定义配置
+python scripts/run_backtest.py --config my_config.yaml
 
 # 输出 Markdown 报告
-python run_backtest.py --ic-analysis --report-markdown > report.md
+python scripts/run_backtest.py --ic-analysis --report-markdown > report.md
 ```
 
 ## 命令行参数
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--strategy` | `all` | 策略列表（空格分隔）：`v3_baseline`, `v3_optimized`, `ic_ir_weighted`, `ic_selected`, `markowitz` |
+| `--strategy` | `all` | 策略列表：`v3_baseline`, `v3_optimized`, `ic_ir_weighted`, `ic_selected`, `markowitz` |
 | `--start` | `2021-01-01` | 回测起始日期 |
 | `--end` | 今天 | 回测结束日期 |
 | `--top-n` | (策略预设) | 持仓数量 |
@@ -41,111 +44,129 @@ python run_backtest.py --ic-analysis --report-markdown > report.md
 | `--max-position` | `0.10` | 单只最大仓位 |
 | `--scan` | off | 启用参数网格扫描 |
 | `--ic-analysis` | off | 输出 IC 因子分析 |
+| `--config` | `config.yaml` | 配置文件路径 |
 | `--report-markdown` | off | 输出 Markdown 报告到 stdout |
+
+## 策略说明
+
+| 策略 | 权重方法 | 核心差异 |
+|------|---------|---------|
+| v3_baseline | 等权 | 31 因子等权合成，最有效基线 |
+| v3_optimized | 等权 | 等权 + 波动率目标化缩放 |
+| ic_ir_weighted | IC-IR | 按 IC-IR 绝对值分配因子权重 |
+| ic_selected | IC-IR | IC-IR 加权 + 淘汰无效因子（\|IC_IR\|<0.03） |
+| markowitz | Markowitz | 均值-方差优化组合权重 |
 
 ## 测试逻辑
 
-### 1. 回测引擎正确性
+### 1. 回测引擎正确性测试
 
 ```bash
-# 测试1：净值守恒（无交易时净值不变）
+# 测试1：净值守恒（无交易时不变）
 python -c "
 import pandas as pd, numpy as np
-from run_backtest import *
-close = pd.DataFrame({'TEST': [100.0]*200}, 
-                     index=pd.date_range('2023-01-01', periods=200))
-vol = pd.DataFrame({'TEST': [1e6]*200}, index=close.index)
-amt = pd.DataFrame({'TEST': [1e9]*200}, index=close.index)
-factors = calc_factors(close, vol, amt)
+from scripts.run_backtest import *
+close = pd.DataFrame({'TEST': [100.0]*200}, index=pd.date_range('2023-01-01', periods=200))
+factors = calc_factors(close, close*0+1e6, close*1e6)
 score = composite_score_equal(factors)
 m, nav, trades = run_backtest(close, score, top_n=1, rebalance_freq=999)
-assert abs(m['total_cost']) < 1, '无交易时不应有成本'
-print('✅ 净值守恒测试通过')
+assert m['total_cost'] == 0, '无交易时不应有成本'
+print('PASS: 净值守恒')
 "
 
 # 测试2：止损触发
 python -c "
 import pandas as pd, numpy as np
-from run_backtest import *
+from scripts.run_backtest import *
 dates = pd.date_range('2023-01-01', periods=200)
-prices = [100.0 - i*0.3 for i in range(200)]  # 持续下跌
+prices = [100.0 - i*0.3 for i in range(200)]
 close = pd.DataFrame({'DROP': prices}, index=dates)
-vol = pd.DataFrame({'DROP': [1e6]*200}, index=dates)
-amt = pd.DataFrame({'DROP': [1e9]*200}, index=dates)
-factors = calc_factors(close, vol, amt)
+factors = calc_factors(close, close*0+1e6, close*1e6)
 score = composite_score_equal(factors)
 m, nav, trades = run_backtest(close, score, top_n=1, rebalance_freq=5, stop_loss=0.15)
-sl_df = trades[trades['action'] == 'STOP_LOSS']
-assert len(sl_df) > 0, '应触发止损'
-print(f'✅ 止损测试通过 (触发{len(sl_df)}次止损)')
+sl = [t for t in trades.to_dict('records') if t['action'] == 'STOP_LOSS']
+assert len(sl) > 0, '应触发止损'
+print(f'PASS: 止损触发 {len(sl)} 次')
 "
 
 # 测试3：交易成本扣除
 python -c "
-import pandas as pd, numpy as np
-from run_backtest import *
+import pandas as pd, numpy as np, math
+from scripts.run_backtest import *
 dates = pd.date_range('2023-01-01', periods=200)
-# 震荡行情，确保有交易
-import math
 prices = [100 + 5*math.sin(i/10) for i in range(200)]
 close = pd.DataFrame({'WAVE': prices}, index=dates)
-vol = pd.DataFrame({'WAVE': [1e6]*200}, index=dates)
-amt = pd.DataFrame({'WAVE': [1e9]*200}, index=dates)
-factors = calc_factors(close, vol, amt)
+factors = calc_factors(close, close*0+1e6, close*1e6)
 score = composite_score_equal(factors)
 m, nav, trades = run_backtest(close, score, top_n=1, rebalance_freq=5)
 assert m['total_cost'] > 0, '有交易时应有成本'
-print(f'✅ 成本测试通过 (总成本=¥{m[\"total_cost\"]:.2f}, {m[\"total_trades\"]}笔交易)')
+print(f'PASS: 成本扣除 总成本=¥{m[\"total_cost\"]:.2f}')
 "
 ```
 
 ### 2. 与模拟盘一致性验证
 
-```bash
-from run_backtest import *
-from sim_account import SimAccount
+```python
+from core.account import PortfolioState, portfolio_value
+from scripts.run_backtest import run_backtest
 
-# 回测 2024 全年，与模拟盘同期表现对比
+# 回测 2024 全年
 metrics, nav, trades = run_backtest(close_panel, score_equal,
-    top_n=10, rebalance_freq=20, stop_loss=0.20,
-    label='rebalance_check')
+    top_n=10, rebalance_freq=20, stop_loss=0.20, label='consistency_check')
 
 # 读模拟盘 2024 年末净值
+import json
 with open('data/portfolio/account.json') as f:
     acct = json.load(f)
-    sim_nav = acct['nav_history'][-1]['nav']
 
 # 回测净值应接近模拟盘（允许交易成本差异）
-backtest_nav = nav.iloc[-1]
-diff_pct = abs(backtest_nav - sim_nav) / sim_nav * 100
+diff_pct = abs(nav.iloc[-1] - sim_nav) / sim_nav * 100
 assert diff_pct < 1.0, f'差异 {diff_pct:.2f}% 过大'
-print(f'✅ 一致性验证通过: 回测={backtest_nav:,.0f}, 模拟盘={sim_nav:,.0f}, 差异={diff_pct:.2f}%')
+print(f'PASS: 回测={nav.iloc[-1]:,.0f}, 模拟盘={sim_nav:,.0f}, 差异={diff_pct:.2f}%')
 ```
 
 ### 3. 边界条件测试
 
-| 场景 | 预期行为 | 验证方式 |
-|------|---------|---------|
-| 数据不足 120 日 | 跳过，不交易 | `close_panel < 120 行` |
-| 全部股票停牌 | 保持空仓，净值=现金 | `price_data 全 NaN` |
-| 调仓日无有效评分 | 维持现有持仓 | `score 全 NaN` |
-| 现金不足买 1 手 | 跳过买入 | `cash < 100 * price` |
-| 首日即调仓日 (i=120) | 正常建仓 | `(120-120) % freq == 0` |
+| 场景 | 预期行为 |
+|------|---------|
+| 数据不足 120 日 | 跳过，不交易 |
+| 全部股票停牌 | 保持空仓，净值=现金 |
+| 调仓日无有效评分 | 维持现有持仓 |
+| 现金不足买 1 手 | 跳过买入 |
+| 首日即调仓日 (i=120) | 正常建仓 |
 
-### 4. 运行正面测试
-
-```bash
-python run_backtest.py --ic-analysis
-```
-
-### 5. 边界/异常测试
+### 4. 运行测试套件
 
 ```bash
-tests/test_backtest_edge_cases.py
+python scripts/tests/test_backtest_smoke.py       # 6 个冒烟测试 (~20s)
+python scripts/tests/test_backtest_edge_cases.py  # 6 个边界测试
 ```
 
-### 6. 脚本 smoke test
+### 5. 输出位置
 
-```bash
-tests/test_backtest_smoke.py
 ```
+data/backtest_results/YYYYMMDD_HHMMSS/
+├── summary.json          # 全部策略绩效指标
+├── comparison.csv        # 策略对比表
+├── nav_v3_baseline.csv   # 各策略净值曲线
+├── trades_v3_baseline.csv # 交易记录 (core.account 格式)
+├── param_scan.json       # 参数扫描 Top 20
+├── param_scan.csv
+└── report.md             # Markdown 回测报告
+```
+
+## 与 core/ 的关系
+
+`run_backtest.py` 使用 `core/` 中的模块如下：
+
+| 调用 | 来自 core |
+|------|----------|
+| `PortfolioState()` | `account.py` — 账户状态 |
+| `buy(state, code, price, date)` | `account.py` — 买入 |
+| `sell(state, code, price, date, reason)` | `account.py` — 卖出 |
+| `check_stop_loss(state, date, prices)` | `account.py` — 止损 |
+| `portfolio_value(state, date, prices)` | `account.py` — 净值 |
+| `config.factor_weights` | `config.py` — 因子权重 |
+| `config.costs.commission_rate` | `config.py` — 佣金率 |
+
+**交易逻辑零自行实现** — buy/sell 的所有细节（滑点、佣金、100股限、加权平均成本、现金检查）全部由 `core/account.py` 处理。

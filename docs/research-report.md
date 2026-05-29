@@ -292,3 +292,54 @@ class BenchmarkRelativeMonitor:
 | 生产监控 | 策略失效自动降仓 | 🟡 可选 |
 
 补完 P0 的三个模块后，回测结果会更可信。再补 P1-P2，系统就从"能跑的原型"变成"可靠的模拟交易系统"。
+
+---
+
+## 七、实施结果（截至 2026-05-30）
+
+### 7.1 已完成模块
+
+| 模块 | 优先级 | 完成日期 | 代码文件 |
+|------|--------|---------|---------|
+| P0-1 交易约束 | 🔴 P0 | 2026-05-29 | `scripts/constraints.py` |
+| P0-2 数据质量门禁 | 🔴 P0 | 2026-05-29 | `scripts/data_quality.py` |
+| P0-3 换手率控制 | 🔴 P0 | 2026-05-29 | `scripts/portfolio_controls.py` |
+| P1-1 行业仓位上限 | 🟠 P1 | 2026-05-29 | `scripts/industry.py` |
+| P1-2 指数趋势展示 | 🟠 P1 | 2026-05-29 | `scripts/indices.py` |
+| 统一回测引擎 | 🟡 P2 | 2026-05-30 | `scripts/run_backtest.py` |
+| 参数配置抽离 | 🟡 P2 | 2026-05-30 | `config.yaml` |
+| 测试套件 | 🟡 P2 | 2026-05-30 | `scripts/tests/` |
+| **core/ 解耦重构** | ⭐ | 2026-05-30 | `core/` |
+
+### 7.2 关键架构决策：core/ 解耦
+
+**重构前的问题**：`run_backtest.py`（回测）自己实现了一套 buy/sell/rebalance 逻辑，与 `sim_account.py`（模拟盘）不完全一致，可能导致回测结果和模拟盘有差异。
+
+**重构后**：提取 `core/` 包（config / factors / account / scoring），模拟盘和回测共用同一套交易函数。
+
+```
+之前:  sim_daily.py → SimAccount (交易逻辑 A)
+       run_backtest.py → 自己实现 (交易逻辑 B)  ⚠️ 不一致
+
+之后:  sim_daily_v6.py → core.account.buy/sell ─┐
+       run_backtest.py  → core.account.buy/sell ─┘  ✓ 完全一致
+```
+
+### 7.3 回测验证
+
+v6（core-based）vs v3（原始版）对比：
+- 净值差异：**0.000%**（无回退，证明重构正确）
+- 所有 12 个测试通过（6 冒烟 + 6 边界）
+
+### 7.4 与 Neyray 对比更新
+
+| 维度 | Neyray/a_share_quant | 我们的系统 |
+|------|---------------------|-----------|
+| 单股票池策略 | 趋势/多因子/ML 三选一 | 31 因子多策略并行对比 |
+| 回测引擎 | 有独立 backtest.py | ✅ `run_backtest.py`（IC分析+Markowitz+参数扫描） |
+| 交易约束 | ✅ 完整 | ✅ 完整（同级别） |
+| 数据质量 | ✅ 有 | ✅ 有（四维检查） |
+| 配置管理 | config.py 硬编码 | ✅ config.yaml（无代码改动调参） |
+| 测试覆盖 | 部分 | ✅ 12 个单元测试（smoke + edge） |
+| 代码复用 | 回测+模拟盘部分分离 | ✅ core/ 完全共享（零重复） |
+| 生产监控 | ✅ 三信号监控 | 📋 待实现 |

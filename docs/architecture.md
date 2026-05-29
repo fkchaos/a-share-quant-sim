@@ -1,262 +1,210 @@
 # 代码架构讲解
 
 > 面向开发者的实现逻辑与框架说明
+>
+> 最后更新：2026-05-30（反映 core/ 解耦重构）
 
-## 一、整体架构：三层结构
+## 一、整体架构：共享引擎模式
 
 ```
-┌──────────────────────────────────────────────────┐
-│              sim_daily.py (调度层)                  │  ← 指挥官：决定每天做什么
-│  数据更新 → 加载账户 → 止损检查 → 调仓 → 报告生成    │
-├──────────────────────────────────────────────────┤
-│              sim_account.py (引擎层)                 │  ← 核心：所有计算逻辑
-│  SimAccount 类 + 因子计算 + 评分系统                 │
-├──────────────────────────────────────────────────┤
-│           update_daily_data.py (数据层)              │  ← 后勤：获取和存储数据
-│  腾讯 API → 本地 CSV 文件                           │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      config.yaml                              │
+│  factor_weights / risk / costs / strategies / param_scan      │
+└──────────┬─────────────────────────────────┬────────────────┘
+           │ 加载                             │ 加载
+           ▼                                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│                         core/                                │
+│  config.py  ← yaml → Config dataclass (唯一参数源)            │
+│  factors.py ← 因子计算 (calc_factors_single / _panel)        │
+│  account.py ← PortfolioState + buy/sell/check_stop_loss      │
+│  scoring.py ← Z-score + composite_score                      │
+└──────────┬───────────────────────────────┬──────────────────┘
+           │                               │
+           ▼                               ▼
+┌─────────────────────┐      ┌─────────────────────────┐
+│  sim_daily_v6.py    │      │  run_backtest.py        │
+│  (模拟盘调度层)      │      │  (历史回测引擎)          │
+│                     │      │                         │
+│  1. 数据更新 (subprocess) │  1. 加载已有 CSV 面板    │
+│  2. 加载 PortfolioState │  2. calc_factors_panel() │
+│  3. 止损 → check_stop_loss│ 3. IC 分析 (可选)       │
+│  4. 调仓 → buy/sell      │ 4. 评分合成 → composite  │
+│  5. 报告 + 持久化         │ 5. 回测循环 → buy/sell  │
+│                     │      │ 6. 绩效指标计算          │
+└─────────────────────┘      └─────────────────────────┘
+
+┌─────────────────────┐
+│ update_daily_data.py│
+│ (数据层)             │
+│ 腾讯 API → 本地 CSV  │
+└─────────────────────┘
 ```
 
-**类比**：开一家餐厅
+**设计原则**：`core/` 是纯数据结构和函数 — 无 I/O、无副作用。模拟盘和回测是两个不同的事件循环，但共用同一套交易函数。
 
-- **数据层** = 采购员（买菜回来存仓库）
-- **引擎层** = 厨师（做菜的核心手艺）
-- **调度层** = 大堂经理（安排每天的上菜流程）
+**类比**：开一家连锁餐厅
+
+- **core/** = 总部厨房（统一烹饪配方，所有分店共用）
+- **sim_daily_v6.py** = 直营店（每天用配方做菜、服务顾客）
+- **run_backtest.py** = 厨房实验室（用配方反复测试新菜品）
+- **update_daily_data.py** = 采购部门（统一采购食材）
 
 ---
 
-## 二、引擎层：SimAccount 类
+## 二、`core/` 层：四个模块详解
 
-### 设计模式：状态机
-
-```python
-class SimAccount:
-    def __init__(self):
-        self.cash = 1_000_000        # 现金（状态）
-        self.holdings = {}            # 持仓（状态）
-        self.trade_log = []           # 交易记录（日志）
-        self.nav_history = []         # 净值曲线（日志）
-```
-
-这个类就是一个**虚拟账户**，所有操作都是修改 `self.cash` 和 `self.holdings` 这两个状态。
-
-### 核心方法调用链
-
-```
-portfolio_value()        # 净值 = 现金 + Σ(持仓股数 × 当前价)
-    ↑
-buy() / sell()           # 修改 cash 和 holdings
-    ↑
-check_stop_loss()        # 扫描持仓，找出亏损 ≥ 20% 的
-    ↑
-status_report()          # 汇总所有信息 → 返回报告字典
-```
-
-### 买入逻辑的工程设计
+### 2.1 `config.py` — 配置管理
 
 ```python
-def buy(self, code, price, date, shares=None):
-    # 第1步：自动计算股数（等权分配）
-    target_value = self.cash / n_stocks
-    target_value = min(target_value, self.cash * 0.12)  # 风控：单只 ≤ 12%
+@dataclass
+class Config:
+    costs: TradingCosts          # initial_capital, commission_rate, stamp_tax_rate, slippage_rate
+    risk: RiskLimits             # stop_loss, top_n, rebalance_freq, max_single_weight
+    factor_weights: Dict[str, float]   # 31 个因子权重
+    strategies: Dict[str, StrategyConfig]  # 策略预设
+    data_dir, daily_dir, ...     # 路径配置
 
-    # 第2步：加入滑点（真实成交比报价差）
-    adj_price = price * (1 + 0.001)  # 买入时更贵
-
-    # 第3步：A股规则 — 100股整数倍（1手）
-    shares = int(target_value / adj_price / 100) * 100
-
-    # 第4步：钱不够就砍仓位
-    if self.cash < cost + commission:
-        shares = int((self.cash * 0.98) / adj_price / 100) * 100
-
-    # 第5步：加仓时用加权平均成本
-    total_cost = old_shares * old_cost + new_shares * price
-    new_avg_cost = total_cost / total_shares
+# 全局单例（模块级加载）
+config = load_config()  # 自动搜索 config.yaml
 ```
 
-**这里体现了真实交易的 5 层细节**：等权分配、风控上限、滑点、最小交易单位、加权平均成本。简化任何一层，回测结果都会失真。
+**使用方式**：`core.config.factor_weights` / `core.config.risk.stop_loss`
 
-### 卖出逻辑的差异点
+**优先级**：CLI 参数 > config.yaml > 内置默认值
+
+### 2.2 `factors.py` — 因子计算
+
+支持两种 I/O 模式，数学逻辑完全一致：
 
 ```python
-def sell(self, code, price, date, reason='SELL'):
-    adj_price = price * (1 - 0.001)  # 卖出时更便宜（滑点）
-    revenue = shares * adj_price
-    commission = revenue * 0.0003     # 佣金（双边收取）
-    stamp_tax = revenue * 0.001      # 印花税（仅卖出收取）
+# 模式1: 信号模式（模拟盘用）
+def calc_factors_single(df: DataFrame) -> Dict[str, float]:
+    """输入: 单只股票的 OHLCV DataFrame → 输出: {mom_20: 0.05, rsi_14: 65.2, ...}"""
+
+# 模式2: 面板模式（回测用，向量化加速 100x）
+def calc_factors_panel(close_panel, volume_panel, amount_panel) -> Dict[str, DataFrame]:
+    """输入: (N天 × M股) DataFrame → 输出: {mom_20: DataFrame(N×M), ...}"""
 ```
 
-**注意**：`sell()` 的参数 `reason` 用于区分普通卖出和止损卖出。代码里止损卖出时 `stamp_tax = 0`，这是因为 A 股**股票卖出即收印花税**——实际上这里有个小 bug，印花税不应该被豁免。如果要严格模拟，可以去掉这个条件判断。
+**31 个因子全景**：
+
+| 类别 | 因子 | 计算逻辑 |
+|------|------|----------|
+| 动量 (5) | mom_5/10/20/60/120 | `close[-1]/close[-N] - 1` |
+| 反转 (3) | rev_3/5/10 | `-(mom_N)` |
+| 波动率 (4) | vol_10/20/60, vol_change | `returns[-N:].std()` + 短/长波比 |
+| 成交量 (3) | vol_ratio_5/20, amount_ratio | `vol[-1] / vol[-N:].mean()` |
+| RSI (3) | rsi_6/14/28 | `100 - 100/(1 + avg_gain/avg_loss)` |
+| 趋势 (5) | macd_12_26, macd_5_35, boll_pos_10/20, boll_width_20 | EMA 差 + 布林带位置/宽度 |
+| 统计 (4) | skew_20, kurt_20, atr_14, vwap_mom | 偏度、峰度、ATR、VWAP 动量 |
+| 相对强度 (2) | rel_strength_20/60 | `mom_N - cross_sectional_mean_mom_N` |
+
+### 2.3 `account.py` — 交易状态与操作
+
+**PortfolioState 数据类**（不可变风格，每笔交易返回新副本）：
+
+```python
+@dataclass
+class PortfolioState:
+    cash: float
+    initial_capital: float
+    holdings: Dict[str, dict]   # {code: {shares, cost_price, entry_date}}
+    trade_log: List[dict]       # 完整审计日志
+    nav_history: List[dict]     # 净值历史
+
+    def copy(self) -> 'PortfolioState'
+```
+
+**纯函数式交易 API**：
+
+```python
+state = buy(state, code, price, date, shares=None)    # → 新 state
+state = sell(state, code, price, date, reason='SELL') # → 新 state
+state = check_stop_loss(state, date, price_data)       # → 新 state
+value = portfolio_value(state, date, price_data)      # → float
+```
+
+**为什么用函数式而非 OOP？**
+- 便于回测引擎的无副作用循环
+- 方便并行回测（每个线程独立的 state 副本）
+- 避免隐式状态修改导致的 debug 困难
+
+**买入逻辑的工程设计**：
+
+```
+第1步: 等权分配 → target_value = cash / n_stocks
+第2步: 单只上限 → min(target_value, cash × 12%)
+第3步: 加入滑点 → adj_price = price × 1.001
+第4步: A股规则 → 100股整数倍 (1手)
+第5步: 钱不够 → 砍仓位重试
+第6步: 加仓 → 加权平均成本
+```
+
+**卖出逻辑的关键细节**：
+- 普通卖出：佣金 + 印花税（买卖都交）
+- 止损卖出：仅佣金（模拟中印花税豁免 — A 股实际也收，这是个可修正的差异点）
+
+### 2.4 `scoring.py` — 评分合成
+
+```python
+def standardize(df: DataFrame) -> DataFrame:
+    """横截面 Z-Score: z = (val - mean) / std"""
+
+def composite_score(factors: dict, weights: dict) -> DataFrame:
+    """加权合成: Σ weight × z_score(factor)"""
+
+def composite_score_equal(factors: dict) -> DataFrame:
+    """等权合成: 每个因子 1/N 权重"""
+```
 
 ---
 
-## 三、因子计算系统：量化策略的心脏
+## 三、调度层：sim_daily_v6.py
 
-### 因子是什么？
-
-**因子就是给股票打分的项目**。就像高考评语文、数学、英语成绩，我们给股票的"动量"、"反转"、"成交量"等项目打分，最后加权求和得到总分。
-
-### 因子全景（31个）
-
-| 类别 | 因子 | 含义 |
-|------|------|------|
-| 动量 (5) | mom_5, mom_10, mom_20, mom_60, mom_120 | 今价/N日前价的涨幅 |
-| 反转 (3) | rev_3, rev_5, rev_10 | 动量的反义词（超跌反弹信号） |
-| 波动率 (3) | vol_10, vol_20, vol_60 | 收益率标准差（负权重 = 惩罚高波动） |
-| 成交量 (3) | vol_ratio_5, vol_ratio_20, amount_ratio | 今日量/均量（放量信号） |
-| RSI (3) | rsi_6, rsi_14, rsi_28 | 相对强弱指标（超买超卖） |
-| 趋势 (2) | macd, boll_pos | 趋势方向和布林带位置 |
-| 其他 (2) | skew, rel_strength | 收益率偏度、相对强度 |
-
-### 计算流程
+### 每日运行流程
 
 ```
-原始K线数据 (OHLCV: 开/高/低/收/量)
-    │
-    ▼
-┌──────────────────────────────────────┐
-│  calc_factors_for_signal(df)         │
-│  单只股票 → 31个因子值                │
-├──────────────────────────────────────┤
-│  mom:  close[-1]/close[-N] - 1       │
-│  rev:  -(close[-1]/close[-N] - 1)    │
-│  vol:  returns[-N:].std()            │
-│  RSI:  涨均值 / 跌均值 → 0~100      │
-│  MACD: EMA(12) - EMA(26)            │
-│  Boll: (价格-下轨)/(上轨-下轨)       │
-└──────────────────────────────────────┘
-    │
-    ▼
-┌──────────────────────────────────────┐
-│  generate_scores()                   │
-│  所有股票 → 标准化 → 加权求和         │
-├──────────────────────────────────────┤
-│  1. 遍历所有 CSV 计算因子             │
-│  2. Z-Score 标准化                   │
-│     z = (val - mean) / std           │
-│  3. 按权重加权求和                   │
-│  4. 返回 {股票代码: 总分}            │
-└──────────────────────────────────────┘
-```
-
-### Z-Score 标准化：为什么必须做？
-
-```python
-# 原始因子的数值范围差异巨大：
-#   mom_20:     -0.05 ~ +0.30   (百分之几)
-#   vol_ratio:   0.5  ~ 3.0     (倍数)
-#   RSI:        20    ~ 80      (绝对数值)
-
-# 直接相加 → 大数值因子主导结果
-
-# 标准化后：
-#   大部分值在 -3 ~ +3 之间
-#   > 0 表示高于市场平均
-#   < 0 表示低于市场平均
-```
-
-这是量化系统里**最关键的工程细节之一**。
-
-### 动量和反转同时做多：矛盾吗？
-
-```python
-weights = {
-    'mom_20': +0.10,    # 中期动量 → 追涨
-    'rev_5':  +0.08,    # 短期反转 → 抄底
-}
-```
-
-**不矛盾**。这叫**多因子正交化**：
-
-- **短期**（3-5天）反转 → 捕捉超跌反弹
-- **中期**（20天）动量 → 捕捉趋势延续
-- 两者捕捉不同周期的市场行为，互补而非冲突
-
----
-
-## 四、调度层：每日运行流程
-
-```
-daily_operation() 的 10 个步骤：
+daily_operation() 的 13 个步骤：
 
  ①  更新行情数据   subprocess 调用 update_daily_data.py
- ②  加载账户状态   从 account.json 反序列化到内存
- ③  确定最新日期   从数据文件中读取最后交易日
- ④  构建价格序列   所有股票的当日收盘价 → price_data (Series)
- ⑤  计算当前净值   portfolio_value()
+ ②  加载账户状态   从 account.json → PortfolioState
+ ③  确定最新日期   从 CSV 文件最后一行
+ ④  构建价格序列   遍历所有 CSV → price_data (Series)
+ ⑤  计算当前净值   core.account.portfolio_value()
  ⑥  持仓明细报告   代码/名称/股数/成本/现价/盈亏/权重
- ⑦  止损检查      check_stop_loss() → 触发则卖出
- ⑧  调仓判断      trade_count % 20 == 0?
-     ├─ 是 → generate_scores() → 卖出不在 top10 的 → 买入新的
+ ⑦  数据质量门禁   DataQualityAuditor.audit()
+ ⑧  止损检查       core.account.check_stop_loss() → 触发则卖出
+ ⑨  调仓判断       trade_count % rebalance_freq == 0?
+     ├─ 是 → calc_factors → 评分排序 → 逐个 sell 不在目标的 → 逐个 buy 新的
      └─ 否 → 跳过
- ⑨  保存状态      account.json + trade_count.txt
- ⑩  生成收盘报告   NAV / 收益率 / 明日操作计划
+ ⑩  换手率控制     cap_daily_turnover (兼容 SimAccount / PortfolioState)
+ ⑪  行业仓位上限   cap_industry_weights (单一行业 ≤25%)
+ ⑫  保存状态      account.json + trade_count.txt
+ ⑬  生成报告       NAV / 行业分布 / 指数趋势 / 明日操作计划
 ```
 
-### 明日计划的设计价值
+### 辅助模块
 
-```python
-if is_rebal_tomorrow:
-    # 预演明天的调仓操作
-    # 输出：要卖什么、买什么、预估金额
-else:
-    # 止损风险预警
-    # 哪些持仓已亏损 15%+（接近 20% 止损线）
-    # 关注持仓中跌幅最大 / 涨幅最大的
-```
-
-这个设计让用户**提前一天知道要做什么**，不至于收盘后手忙脚乱。非调仓日也不是空转——她会持续给出风险预警。
-
-### trade_count 机制：不是按日历天数
-
-```python
-# 用 trade_count 而不是 date 来决定调仓日
-
-# 为什么？因为交易日历不是连续的：
-#   周末、节假日不交易
-#   如果按自然日算，20天可能是4周（实际只有15-18个交易日）
-
-# 实际效果：每经过 20 个有数据的日子调仓一次
-trade_count += 1
-if trade_count % 20 == 0:
-    rebalance()
-```
+| 模块 | 用途 | 对应 P 级 |
+|------|------|-----------|
+| `constraints.py` | 涨跌停/T+1/停牌检查 | P0-1 |
+| `data_quality.py` | 数据过期/空值/异常跳变 | P0-2 |
+| `portfolio_controls.py` | 日换手率 ≤30% | P0-3 |
+| `industry.py` | 行业分类 + 行业≤25% | P1-1 |
+| `indices.py` | 6个指数趋势展示 | P1-2 |
 
 ---
 
-## 五、数据层：增量更新机制
+## 四、数据层：增量更新机制
 
 ### 核心逻辑
 
 ```
 ①  读取本地 CSV，找到最后日期 local_latest
 ②  请求最近 N 天数据（N = 缺口 + 5，防止遗漏）
-③  过滤出 local_latest 之后的新数据
-④  追加到原 CSV（append，不覆盖）
-⑤  重试失败的（网络抖动常见）
-```
-
-### 关键技术点
-
-```python
-# 1. 智能请求天数
-gap = (today - local_date).days
-days = gap + 5  # 多请求几天防止遗漏
-
-# 2. 频率控制（防止被 API 封禁）
-time.sleep(0.15)  # 280只 ≈ 5分钟
-
-# 3. 失败重试
-if fail_list:
-    time.sleep(3)  # 等待3秒后重试
-    for code in fail_list:
-        update_stock(code, days=20)  # 增加请求天数
-
-# 4. 增量追加（不覆盖已有数据）
-new_data = df[df.index > local_latest]
-combined = pd.concat([old_df, new_data])
-combined = combined[~combined.index.duplicated(keep='last')]
+③  追加到原 CSV（不覆盖）
+④  失败的等待 3 秒后重试
 ```
 
 ### 为什么用 requests 而不是 AKShare？
@@ -264,97 +212,119 @@ combined = combined[~combined.index.duplicated(keep='last')]
 ```
 环境限制：
   ✅ baidu.com → 通
-  ✅ gtimg.cn（腾讯） → 通  
-  ❌ eastmoney（东方财富） → RemoteDisconnected
+  ✅ gtimg.cn（腾讯）→ 通
+  ❌ eastmoney（东方财富）→ RemoteDisconnected
 
-腾讯 API 的优势：
-  - 不需要 token、不需要签名
-  - 请求简单，返回结构清晰
-  - 数据质量足够用于日频策略
-```
-
-CSV 格式：
-
-```csv
-date,open,high,low,close,volume,amount,outstanding_share,turnover
-2026-01-04,10.50,10.80,10.30,10.65,1234567,1.31e+09,,
+腾讯 API 优势：不需要 token/签名/回调，请求简单
 ```
 
 ---
 
-## 六、值得学习的编程模式
+## 五、回测引擎：run_backtest.py
 
-### 1. 状态持久化（序列化/反序列化）
+### 与模拟盘的一致性保证
 
-```python
-# 保存：Python 对象 → JSON 文件
-data = {
-    'cash': account.cash,
-    'holdings': account.holdings,
-    'trade_log': account.trade_log,
-    'nav_history': account.nav_history,
-}
-json.dump(data, f, indent=2, default=str)
-
-# 加载：JSON 文件 → Python 对象
-data = json.load(f)
-account.cash = data['cash']
-account.holdings = data['holdings']
+```
+sim_daily_v6.py ──▶ core.account.buy/sell/check_stop_loss
+run_backtest.py  ──▶ core.account.buy/sell/check_stop_loss
+                      ↑↑↑ 完全相同的函数 ↑↑↑
 ```
 
-**为什么不用数据库？** 数据量小（1个账户 + 280个CSV），JSON 文件足够。用数据库反而增加复杂度。这是**工程上的合适选择**，不是偷懒。
+**这是整个项目最重要的设计决策**。之前存在两份独立的交易逻辑，可能导致回测结果与模拟盘不一致。现在只有一份 → 修一处生效两处。
 
-### 2. 防御性编程
+### 支持的策略
+
+| 策略 | weight_method | 核心差异 |
+|------|-------------|---------|
+| v3_baseline | equal | 31 因子等权，top_n=20, rebal=5 |
+| v3_optimized | equal | 等权 + 波动率目标化 |
+| ic_ir_weighted | ic_ir | IC-IR 加权因子 |
+| ic_selected | ic_ir | IC-IR 加权 + 仅保留有效因子 |
+| markowitz | markowitz | Markowitz 均值-方差优化 |
+
+### 命令行接口
+
+```bash
+python run_backtest.py --ic-analysis --scan  # 最全比较
+python run_backtest.py --config my.yaml      # 自定义配置
+```
+
+---
+
+## 六、改进行动追踪
+
+| 优先级 | 方向 | 状态 | 日期 |
+|--------|------|------|------|
+| P0 🔴 | 交易约束（涨跌停/停牌/T+1） | ✅ 完成 | 2026-05-29 |
+| P0 🔴 | 数据质量门禁 | ✅ 完成 | 2026-05-29 |
+| P0 🔴 | 换手率上限控制 | ✅ 完成 | 2026-05-29 |
+| P1 🟠 | 行业仓位上限 | ✅ 完成 | 2026-05-29 |
+| P1 🟠 | 指数趋势展示 | ✅ 完成 | 2026-05-29 |
+| P2 🟡 | 参数配置抽离 (config.yaml) | ✅ 完成 | 2026-05-30 |
+| P3 🟢 | 统一回测工具 + 测试套件 | ✅ 完成 | 2026-05-30 |
+| ⭐ | **core/ 解耦（回测=模拟盘交易逻辑）** | ✅ 完成 | 2026-05-30 |
+| P3 🟢 | 单元测试（持续扩充） | 🔧 进行中 | - |
+| P4 🔵 | 日志系统（print → logging） | 📋 待开始 | - |
+
+---
+
+## 七、值得学习的编程模式
+
+### 1. 防御性编程
 
 ```python
 # 每一步都检查边界条件
-if shares <= 0: return False
-if code not in self.holdings: return False
+if shares <= 0: return state  # no-op
+if code not in state.holdings: return state  # no-op
 if not pd.isna(p) and p > 0:   # 数据可能缺失
 if len(close) >= w:             # 历史数据可能不够
-if std > 0:                      # 避免除以零
 ```
 
 金融代码**必须**防御性编程。数据永远不会完美。
 
-### 3. 解耦设计（subprocess 调用）
+### 2. subprocess 解耦
 
 ```python
-subprocess.run(
-    [sys.executable, "~/update_daily_data.py"],
-    capture_output=True, text=True, timeout=300
-)
+subprocess.run([sys.executable, "update_daily_data.py"], ...)
 ```
 
-用 `subprocess` 而不是 `import` 的原因：让数据更新和交易逻辑**解耦**。两个脚本可以独立运行、独立测试。如果改用 `import`，当数据更新脚本出错时，会直接导致交易脚本崩溃。
+用 `subprocess` 而不是 `import`：数据更新和交易逻辑完全独立。一个崩溃不影响另一个。
 
----
+### 3. 函数式交易 API
 
-## 七、改进路线图
+```python
+state = buy(state, code, price, date)  # 返回新 state，不修改旧 state
+```
 
-| 优先级 | 方向 | 说明 |
-|--------|------|------|
-| P0 🔴 | 数据校验 | 缺少对 CSV 数据质量的检查（停牌、除权除息等） |
-| P1 🟠 | 异常恢复 | 网络失败时没有断点续传，需要从头重试 |
-| P2 🟡 | 参数配置 | 参数硬编码在脚本里，应抽到配置文件（YAML/pyproject.toml） |
-| P3 🟢 | 单元测试 | 目前没有测试，回归全靠手动运行 |
-| P4 🔵 | 日志系统 | 用的是 `print()`，应改用 `logging` 模块 |
+便于回测并行化和状态快照。
+
+### 4. 配置驱动设计
+
+```yaml
+# config.yaml — 不碰代码，改这里
+factor_weights:
+  mom_20: 0.10      # 调这里
+risk:
+  stop_loss: 0.20   # 调这里
+```
 
 ---
 
 ## 八、关键常量一览
 
-可在 `sim_daily.py` 和 `sim_account.py` 顶部调整：
+全部集中在 `config.yaml`：
 
-```python
-# 账户参数
-INITIAL_CAPITAL  = 1_000_000    # 初始资金
-COMMISSION_RATE  = 0.0003       # 佣金 0.03%
-STAMP_TAX_RATE   = 0.001        # 印花税 0.1%
-SLIPPAGE_RATE    = 0.001        # 滑点 0.1%
+```yaml
+costs:
+  initial_capital: 1000000
+  commission_rate: 0.0003
+  stamp_tax_rate: 0.001
+  slippage_rate: 0.001
 
-# 策略参数
-TOP_N            = 10           # 持仓数量
-REBAL_FREQ       = 20           # 调仓频率（交易日）
-STOP_LOSS        = 0.20         # 止损线 -20%
+risk:
+  stop_loss: 0.20
+  top_n: 10
+  rebalance_freq: 20
+  max_single_weight: 0.15
+  max_daily_turnover: 0.30
 ```

@@ -46,12 +46,18 @@
 
 ## 策略表现（沪深300成分股回测 2021-01 ~ 2026-05）
 
-| 指标 | 值 |
-|------|-----|
-| 年化收益率 | 21.86% |
-| 夏普比率 | 1.11 |
-| 最大回撤 | -24.37% |
-| 持仓数量 | 10只（等权） |
+> 基于 core/ 统一引擎（29因子 + FACTOR_WEIGHTS 加权）
+
+| 指标 | v3_optimized | v3_baseline | markowitz |
+|------|-------------|-------------|-----------|
+| 年化收益率 | 20.72% | 4.19% | 5.20% |
+| 夏普比率 | 0.97 | 0.58 | 0.50 |
+| 最大回撤 | -27.01% | -12.74% | -20.13% |
+| 持仓数 | 12只 | 20只 | 10只 |
+| 调仓频率 | 20天 | 5天 | 20天 |
+| 波动率缩放 | ✅ | ❌ | ❌ |
+
+最优参数: `top_n=12, rebalance_freq=20, stop_loss=0.20, vol_scaling=True, industry_cap=25%, turnover_limit=0`
 
 ## 快速开始
 
@@ -131,20 +137,19 @@ a-share-quant-sim/
 │   ├── account.py                  # PortfolioState + buy/sell/check_stop_loss
 │   └── scoring.py                  # Z-score 标准化 + 复合评分
 ├── scripts/
-│   ├── sim_daily_v6.py             # ⭐ 每日模拟盘调度 (v6, core-based)
-│   ├── sim_daily.py                # 每日模拟盘调度 (v5, SimAccount-based, 保留)
-│   ├── sim_account.py              # SimAccount 类 (v5 兼容保留)
-│   ├── run_backtest.py             # 统一回测引擎 (使用 core.account)
+│   ├── sim_daily_v6.py             # ⭐ 每日模拟盘 (v6, core-based)
+│   ├── run_backtest.py             # 统一回测引擎 (delegates to core/)
 │   ├── update_daily_data.py        # 数据更新: 腾讯 API → 本地 CSV
 │   ├── constraints.py              # P0-1: A股交易约束
 │   ├── data_quality.py             # P0-2: 数据质量门禁
-│   ├── portfolio_controls.py       # P0-3: 换手率上限 (兼容 SimAccount + PortfolioState)
+│   ├── portfolio_controls.py       # P0-3: 换手率上限
 │   ├── industry.py                 # P1-1: 行业分类 + 仓位上限
 │   ├── indices.py                  # P1-2: 指数趋势
 │   ├── hs300_constituents.csv      # 沪深300成分股
-│   └── tests/                      # 回测测试套件
-│       ├── test_backtest_smoke.py
-│       └── test_backtest_edge_cases.py
+│   ├── tests/                      # 回测测试套件
+│   │   ├── test_backtest_smoke.py
+│   │   └── test_backtest_edge_cases.py
+│   └── archive/                    # 废弃旧脚本（参考用）
 ├── config.yaml                     # ⭐ 所有可调参数
 ├── data/
 │   ├── daily/                      # 日K线数据 (~280 CSV)

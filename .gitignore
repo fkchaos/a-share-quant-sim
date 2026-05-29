@@ -1,0 +1,25 @@
+# Data files (too large for git)
+data/daily/*.csv
+data/signals/*.json
+
+# But keep the directory structure
+!data/daily/.gitkeep
+!data/signals/.gitkeep
+
+# Output files
+data/portfolio/*.json
+data/portfolio/*.txt
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -72,18 +72,23 @@ factor_weights:
 strategies:
   v3_baseline:
     label: "v3_baseline"
-    description: "v3 原始基线：等权31因子, top20, 5日调仓, 15%止损"
-    weight_method: "equal"                 # equal = 使用 factor_weights 加权合成
-    top_n: 20
-    rebalance_freq: 5
-    stop_loss: 0.15
+    description: "v3 基线：加权29因子, top12, 20日调仓, 20%止损, 行业上限25%, 波动率缩放"
+    weight_method: "weighted"                # weighted = 使用 factor_weights 加权合成
+    top_n: 12
+    rebalance_freq: 20
+    stop_loss: 0.20
     max_position: 0.10
-    use_vol_scaling: false
+    use_vol_scaling: true
+    vol_target: 0.20
+    max_industry_weight: 0.25
+    max_daily_turnover: 0                   # 0 = 不限制（换手率限制会显著降低收益）
 
   v3_optimized:
     label: "v3_optimized"
-    description: "v3 风控优化：基线 + 波动率目标化"
-    weight_method: "equal"
+    description: "v3 风控优化：基线 + 波动率目标化 + 行业上限 + 换手率控制"
+    weight_method: "weighted"
+    max_industry_weight: 0.25
+    max_daily_turnover: 0.30
     top_n: 20
     rebalance_freq: 5
     stop_loss: 0.15

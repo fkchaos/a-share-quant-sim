@@ -336,10 +336,12 @@ def markowitz_optimize(expected_returns, cov_matrix, max_weight=0.15):
 # ============================================================
 # 回测引擎（使用 core.account 交易逻辑 → 与模拟盘一致）
 # ============================================================
-def run_backtest(close_panel, score, top_n=20, rebalance_freq=5, stop_loss=0.15,
-                 max_position=0.10, use_vol_scaling=False, vol_target=0.20,
-                 weight_method='equal', label='default',
-                 initial_capital=None):
+def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20,
+                 max_position=0.10, use_vol_scaling=True, vol_target=0.20,
+                 weight_method='weighted', label='default',
+                 initial_capital=None,
+                 max_industry_weight=0.25, max_daily_turnover=0,
+                 stock_names=None):
     """
     完整回测引擎。
 
@@ -413,6 +415,31 @@ def run_backtest(close_panel, score, top_n=20, rebalance_freq=5, stop_loss=0.15,
                         weights = {c: 1.0 / len(top_stocks) for c in top_stocks}
                 else:
                     weights = {c: 1.0 / len(top_stocks) for c in top_stocks}
+
+                # ── 2a. 行业仓位上限 ──────────────────────────────────
+                if max_industry_weight and max_industry_weight > 0 and stock_names:
+                    from industry import get_industry, cap_industry_weights
+                    code_industry_map = {
+                        c: get_industry(c, stock_names.get(c, "")) for c in top_stocks
+                    }
+                    weights, _ = cap_industry_weights(
+                        weights, code_industry_map, max_industry_weight
+                    )
+
+                # ── 2b. 换手率限制 ────────────────────────────────────
+                if max_daily_turnover and max_daily_turnover > 0:
+                    from portfolio_controls import cap_daily_turnover
+                    price_dict = {c: price_data[c] for c in top_stocks
+                                  if c in price_data.index and not pd.isna(price_data[c]) and price_data[c] > 0}
+                    # 加入当前持仓中不在 top_stocks 的（换手率计算需要）
+                    for c in state.holdings:
+                        if c not in price_dict and c in price_data.index and not pd.isna(price_data[c]) and price_data[c] > 0:
+                            price_dict[c] = price_data[c]
+                    weights, _ = cap_daily_turnover(
+                        account=None, target_weights=weights,
+                        prices=price_dict, max_turnover=max_daily_turnover,
+                        current_state=state,
+                    )
 
                 # 对目标持仓买入（对每只股票调用 core.account.buy）
                 for c in top_stocks:
@@ -632,6 +659,20 @@ def main():
     # Load config and merge with CLI args
     config = _load_config(args.config)
     params = _merge_args_into_config(args, config)
+
+    # Load stock names for industry classification
+    stock_names = {}
+    hs300_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hs300_constituents.csv")
+    if not os.path.exists(hs300_path):
+        hs300_path = "/root/hs300_constituents.csv"
+    try:
+        hs300 = pd.read_csv(hs300_path)
+        stock_names = dict(zip(
+            hs300['品种代码'].astype(str).str.zfill(6),
+            hs300['品种名称']
+        ))
+    except Exception:
+        pass
     print(f"  使用配置: {len(config)} 个字段已加载")
 
     print("=" * 60)
@@ -701,16 +742,20 @@ def main():
     if run_all or "v3_baseline" in strategies:
         configs.append({
             'label': 'v3_baseline',
-            'score': score_equal,
+            'score': composite_score_weighted(factors),  # 使用 FACTOR_WEIGHTS 加权
             'kwargs': dict(top_n=top_n or 20, rebalance_freq=rebal_freq or 5,
-                           stop_loss=sl or 0.15),
+                           stop_loss=sl or 0.15,
+                           max_industry_weight=0.25, max_daily_turnover=0.30,
+                           stock_names=stock_names),
         })
     if run_all or "v3_optimized" in strategies:
         configs.append({
             'label': 'v3_optimized',
-            'score': score_equal,
-            'kwargs': dict(top_n=top_n or 20, rebalance_freq=rebal_freq or 5,
-                           stop_loss=sl or 0.15, use_vol_scaling=True),
+            'score': composite_score_weighted(factors),
+            'kwargs': dict(top_n=top_n or 12, rebalance_freq=rebal_freq or 20,
+                           stop_loss=sl or 0.20, use_vol_scaling=True,
+                           max_industry_weight=0.25, max_daily_turnover=0,
+                           stock_names=stock_names),
         })
     if (run_all or "ic_ir_weighted" in strategies) and ic_results:
         configs.append({
@@ -734,17 +779,23 @@ def main():
             'label': 'markowitz',
             'score': score_equal,
             'kwargs': dict(top_n=top_n or 10, rebalance_freq=rebal_freq or 20,
-                           stop_loss=sl or 0.20, weight_method='markowitz'),
+                           stop_loss=sl or 0.20, weight_method='markowitz',
+                           max_industry_weight=0.25, max_daily_turnover=0.30,
+                           stock_names=stock_names),
         })
 
     if not configs:
         # 没有 IC 分析结果时，ic 策略不可用，用等权替代
         print("  ⚠️ 未启用 --ic-analysis，IC 相关策略不可用，用 v3_baseline + markowitz")
         configs = [
-            {'label': 'v3_baseline', 'score': score_equal,
-             'kwargs': dict(top_n=20, rebalance_freq=5, stop_loss=0.15)},
+            {'label': 'v3_baseline', 'score': composite_score_weighted(factors),
+             'kwargs': dict(top_n=20, rebalance_freq=5, stop_loss=0.15,
+                            max_industry_weight=0.25, max_daily_turnover=0.30,
+                            stock_names=stock_names)},
             {'label': 'markowitz', 'score': score_equal,
-             'kwargs': dict(top_n=10, rebalance_freq=20, stop_loss=0.20, weight_method='markowitz')},
+             'kwargs': dict(top_n=10, rebalance_freq=20, stop_loss=0.20, weight_method='markowitz',
+                            max_industry_weight=0.25, max_daily_turnover=0.30,
+                            stock_names=stock_names)},
         ]
 
     for cfg in configs:

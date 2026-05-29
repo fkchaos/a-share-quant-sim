@@ -138,6 +138,9 @@ ic_analysis:
 
 # ── 风控参数 ──────────────────────────────────────────────
 risk:
-  min_rebalance_interval: 3               # 最小调仓间隔（日）
-  max_single_stock_weight: 0.15           # 单只最大权重
-  max_daily_turnover: 0.30                # 最大日换手率
+  stop_loss: 0.20
+  top_n: 10
+  rebalance_freq: 20
+  max_single_weight: 0.15
+  max_daily_turnover: 0.30
+  min_rebalance_interval: 3

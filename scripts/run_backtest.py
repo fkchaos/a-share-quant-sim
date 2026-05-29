@@ -52,13 +52,10 @@ DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "data")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
-# ============================================================
-# Config loading
-# ============================================================
+# Legacy config loading (kept for backward compat)
 def _load_config(config_path=None):
     """Load config.yaml and return dict. Falls back to empty dict if unavailable."""
     if config_path is None:
-        # Search: cwd → script dir → ~/.backtest/
         candidates = [
             "config.yaml",
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml"),
@@ -68,55 +65,27 @@ def _load_config(config_path=None):
             if os.path.exists(p):
                 config_path = p
                 break
-
     if config_path is None:
         return {}
-
     try:
         import yaml
         with open(config_path) as f:
             return yaml.safe_load(f) or {}
-    except ImportError:
-        print("⚠️  PyYAML not installed, using defaults. pip install pyyaml")
-        return {}
-    except Exception as e:
-        print(f"⚠️  Failed to load {config_path}: {e}")
+    except Exception:
         return {}
 
 def _merge_args_into_config(args, config):
-    """
-    Build final parameter dict: config.yaml < CLI args.
-    CLI args override config when explicitly provided.
-    """
+    """Build final param dict: config.yaml < CLI args."""
     cfg_bt = config.get("backtest", {})
     cfg_costs = config.get("costs", {})
-    cfg_factor = config.get("factor_weights", {})
-    cfg_strategies = config.get("strategies", {})
-    cfg_ic = config.get("ic_analysis", {})
-    cfg_risk = config.get("risk", {})
-
-    # Build factor weights dict from config
-    factor_weights = cfg_factor if cfg_factor else None
-
-    # Parse CLI args with config fallback
-    result = {
-        "data_dir": DATA_DIR,
-        "output_dir": config.get("data", {}).get("output_dir", REPORT_DIR),
+    return {
         "start_date": args.start or cfg_bt.get("start_date", "2021-01-01"),
         "end_date": args.end or cfg_bt.get("end_date", datetime.now().strftime("%Y-%m-%d")),
         "initial_capital": cfg_costs.get("initial_capital", 1_000_000),
         "commission_rate": cfg_costs.get("commission_rate", 0.0003),
         "stamp_tax_rate": cfg_costs.get("stamp_tax_rate", 0.001),
         "slippage_rate": cfg_costs.get("slippage_rate", 0.001),
-        "factor_weights": factor_weights,
-        "strategies": cfg_strategies,
-        "ic_forward_period": cfg_ic.get("forward_period", 5),
-        "ic_min_abs_ir": cfg_ic.get("min_abs_ir", 0.03),
-        "ic_min_positive_rate": cfg_ic.get("min_positive_rate", 0.50),
-        "risk_max_weight": cfg_risk.get("max_single_stock_weight", 0.15),
-        "risk_max_turnover": cfg_risk.get("max_daily_turnover", 0.30),
     }
-    return result
 
 # Module-level constants (still used as fallbacks; override via config.yaml or CLI)
 START_DATE = "2021-01-01"
@@ -361,51 +330,48 @@ def markowitz_optimize(expected_returns, cov_matrix, max_weight=0.15):
 
 
 # ============================================================
-# 回测引擎
+# 回测引擎（使用 core.account 交易逻辑 → 与模拟盘一致）
 # ============================================================
 def run_backtest(close_panel, score, top_n=20, rebalance_freq=5, stop_loss=0.15,
                  max_position=0.10, use_vol_scaling=False, vol_target=0.20,
-                 weight_method='equal', label='default'):
+                 weight_method='equal', label='default',
+                 initial_capital=None):
     """
     完整回测引擎。
 
+    交易逻辑全部委托给 core.account（buy/sell/check_stop_loss），
+    与 sim_daily.py 使用同一套代码，保证一致性。
+
     weight_method: 'equal' | 'markowitz'
     """
+    from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
+    from core.config import config
+
+    icap = initial_capital or config.costs.initial_capital
     dates = close_panel.index
-    cash = INITIAL_CAPITAL
-    holdings = {}
+
+    # 初始化 core.account 状态
+    state = PortfolioState(
+        cash=icap,
+        initial_capital=icap,
+    )
     nav_list = []
-    trade_log = []
     rebal_count = 0
 
     for i, date in enumerate(dates):
         if i < 120:
-            nav_list.append(INITIAL_CAPITAL)
+            nav_list.append(icap)
             continue
         if date not in close_panel.index:
-            nav_list.append(nav_list[-1] if nav_list else INITIAL_CAPITAL)
+            nav_list.append(nav_list[-1] if nav_list else icap)
             continue
 
         price_data = close_panel.loc[date]
 
-        # 止损（每日检查）
-        if holdings:
-            to_sell = []
-            for c, info in holdings.items():
-                if c in price_data.index and not pd.isna(price_data[c]):
-                    loss = (info['cost_price'] - price_data[c]) / info['cost_price']
-                    if loss >= stop_loss:
-                        to_sell.append((c, info, price_data[c]))
-            for c, info, sp in to_sell:
-                sp_adj = sp * (1 - SLIPPAGE_RATE)
-                sv = info['shares'] * sp_adj
-                cost = sv * (COMMISSION_RATE + STAMP_TAX_RATE)
-                cash += sv - cost
-                trade_log.append({'date': date, 'code': c, 'action': 'STOP_LOSS',
-                                  'shares': info['shares'], 'price': sp_adj, 'cost': cost})
-                del holdings[c]
+        # ── 1. 止损（委托 core.account.check_stop_loss）──
+        state = check_stop_loss(state, date, price_data)
 
-        # 调仓
+        # ── 2. 调仓 ──────────────────────────────────────────
         if (i - 120) % rebalance_freq == 0 and date in score.index:
             rebal_count += 1
             day_score = score.loc[date].dropna()
@@ -422,31 +388,21 @@ def run_backtest(close_panel, score, top_n=20, rebalance_freq=5, stop_loss=0.15,
             top_stocks = day_score.nlargest(top_n).index.tolist()
 
             if top_stocks:
-                # 当前总市值
-                cur_val = cash
-                for c, info in holdings.items():
-                    if c in price_data.index and not pd.isna(price_data[c]):
-                        cur_val += info['shares'] * price_data[c]
+                current_pv = portfolio_value(state, date, price_data)
 
-                # 卖出不在目标中的
-                new_holdings = {}
-                for c, info in holdings.items():
-                    if c in top_stocks:
-                        new_holdings[c] = info.copy()
-                    elif c in price_data.index and not pd.isna(price_data[c]):
-                        sp = price_data[c] * (1 - SLIPPAGE_RATE)
-                        sv = info['shares'] * sp
-                        cost = sv * (COMMISSION_RATE + STAMP_TAX_RATE)
-                        cash += sv - cost
-                        trade_log.append({'date': date, 'code': c, 'action': 'SELL',
-                                          'shares': info['shares'], 'price': sp, 'cost': cost})
+                # 卖出不在目标中的（对每只股票逐个 sell）
+                for c in list(state.holdings.keys()):
+                    if c not in top_stocks and c in price_data.index:
+                        p = price_data[c]
+                        if not pd.isna(p) and p > 0:
+                            state = sell(state, c, p, date, reason='SELL')
 
                 # 权重分配
                 if weight_method == 'markowitz':
                     top_scores = day_score[top_stocks].fillna(0)
                     expected_ret = top_scores / (top_scores.sum() + 1e-10)
                     ret_mat = close_panel[top_stocks].pct_change()
-                    cov = ret_mat.iloc[i-60:i].cov() if i >= 60 else ret_mat.cov()
+                    cov = ret_mat.iloc[max(0, i-60):i].cov() if i >= 60 else ret_mat.cov()
                     if cov is not None and not cov.empty:
                         weights = markowitz_optimize(expected_ret, cov, max_weight=max_position)
                     else:
@@ -454,32 +410,23 @@ def run_backtest(close_panel, score, top_n=20, rebalance_freq=5, stop_loss=0.15,
                 else:
                     weights = {c: 1.0 / len(top_stocks) for c in top_stocks}
 
-                # 买入
+                # 对目标持仓买入（对每只股票调用 core.account.buy）
                 for c in top_stocks:
-                    if c not in new_holdings and c in price_data.index and not pd.isna(price_data[c]):
-                        bp = price_data[c] * (1 + SLIPPAGE_RATE)
-                        if bp <= 0:
-                            continue
-                        w = weights.get(c, 1.0 / len(top_stocks))
-                        target_val = min(cur_val * w, cur_val * max_position)
-                        sh = int(target_val / bp / 100) * 100
-                        if sh > 0:
-                            bv = sh * bp
-                            cost = bv * COMMISSION_RATE
-                            if cash >= bv + cost:
-                                cash -= (bv + cost)
-                                new_holdings[c] = {'shares': sh, 'cost_price': price_data[c],
-                                                   'entry_date': date}
-                                trade_log.append({'date': date, 'code': c, 'action': 'BUY',
-                                                  'shares': sh, 'price': bp, 'cost': cost})
+                    if c not in state.holdings and c in price_data.index and not pd.isna(price_data[c]):
+                        p = price_data[c]
+                        if p > 0:
+                            w = weights.get(c, 1.0 / len(top_stocks))
+                            target_val = min(current_pv * w, current_pv * max_position)
+                            # 计算股数 (委托 buy 自动计算)
+                            # 但 buy 是"尽可能买"模式，需要传入 shares
+                            from core.account import compute_buy_shares
+                            adj_p = p * (1 + config.costs.slippage_rate)
+                            shares = int(target_val / adj_p / 100) * 100
+                            if shares > 0:
+                                state = buy(state, c, p, date, shares=shares)
 
-                holdings = new_holdings
-
-        # 当日净值
-        dv = cash
-        for c, info in holdings.items():
-            if c in price_data.index and not pd.isna(price_data[c]):
-                dv += info['shares'] * price_data[c]
+        # ── 记录净值 ──
+        dv = portfolio_value(state, date, price_data)
         nav_list.append(dv)
 
     # 绩效指标
@@ -494,7 +441,7 @@ def run_backtest(close_panel, score, top_n=20, rebalance_freq=5, stop_loss=0.15,
     calmar = ann_ret / max_dd if max_dd > 0 else 0
     win_rate = (rets > 0).sum() / len(rets) if len(rets) > 0 else 0
 
-    trades_df = pd.DataFrame(trade_log)
+    trades_df = pd.DataFrame(state.trade_log)
     sl_count = len(trades_df[trades_df['action'] == 'STOP_LOSS']) if len(trades_df) > 0 else 0
     total_cost = float(trades_df['cost'].sum()) if len(trades_df) > 0 else 0
 

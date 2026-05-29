@@ -1,0 +1,219 @@
+"""
+Factor calculation engine.
+
+Supports TWO modes:
+  1. Signal mode (single-stock):  df → {factor_name: float}
+     Used by sim_daily.py for live scoring.
+  2. Backtest mode (panel):       close_panel, volume_panel, amount_panel → {factor_name: DataFrame}
+     Used by run_backtest.py for historical backtesting.
+
+The underlying math is IDENTICAL — only the input shape differs.
+"""
+
+import numpy as np
+import pandas as pd
+
+
+# ── Single-stock (signal mode) ───────────────────────────────────────
+
+def calc_factors_single(df: pd.DataFrame) -> dict:
+    """Calculate all factors for a single stock from its OHLCV DataFrame.
+
+    Input:  DataFrame with columns ['open','high','low','close','volume','amount']
+            (amount optional, defaults to close*volume)
+    Output: {factor_name: float}  (latest value of each factor)
+    """
+    close = df['close']
+    volume = df.get('volume', pd.Series(1, index=df.index))
+    amount = df.get('amount', close * volume)
+    returns = close.pct_change()
+    eps = 1e-10
+
+    factors = {}
+
+    # Momentum
+    for w in [5, 10, 20, 60, 120]:
+        factors[f'mom_{w}'] = close.iloc[-1] / close.iloc[-w] - 1 if len(close) >= w else np.nan
+
+    # Reversal (negative momentum)
+    for w in [3, 5, 10]:
+        factors[f'rev_{w}'] = -(close.iloc[-1] / close.iloc[-w] - 1) if len(close) >= w else np.nan
+
+    # Volatility (lower is better → negative weight in scoring)
+    for w in [10, 20, 60]:
+        if len(returns) >= w:
+            factors[f'vol_{w}'] = returns.iloc[-w:].std()
+        else:
+            factors[f'vol_{w}'] = np.nan
+
+    # Volatility change (regime)
+    if len(returns) >= 60:
+        vol_20 = returns.iloc[-20:].std()
+        vol_60 = returns.iloc[-60:].std()
+        factors['vol_change'] = vol_20 / (vol_60 + eps)
+    else:
+        factors['vol_change'] = np.nan
+
+    # Volume ratio
+    if len(volume) >= 20:
+        factors['vol_ratio_5'] = volume.iloc[-1] / (volume.iloc[-5:].mean() + eps)
+        factors['vol_ratio_20'] = volume.iloc[-1] / (volume.iloc[-20:].mean() + eps)
+        factors['amount_ratio'] = amount.iloc[-1] / (amount.iloc[-20:].mean() + eps)
+    else:
+        factors['vol_ratio_5'] = factors['vol_ratio_20'] = factors['amount_ratio'] = np.nan
+
+    # RSI
+    for w in [6, 14, 28]:
+        if len(returns) >= w:
+            g = returns.clip(lower=0).iloc[-w:].mean()
+            l = (-returns.clip(upper=0)).iloc[-w:].mean()
+            rs = g / (l + eps)
+            factors[f'rsi_{w}'] = 100 - (100 / (1 + rs))
+        else:
+            factors[f'rsi_{w}'] = np.nan
+
+    # MACD
+    if len(close) >= 26:
+        ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
+        ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
+        macd_line = ema12 - ema26
+        factors['macd_12_26'] = macd_line * 0.2     # scaled for convenience
+    else:
+        factors['macd_12_26'] = np.nan
+
+    if len(close) >= 35:
+        ema5 = close.ewm(span=5, adjust=False).mean().iloc[-1]
+        ema35 = close.ewm(span=35, adjust=False).mean().iloc[-1]
+        macd_line = ema5 - ema35
+        factors['macd_5_35'] = macd_line * 0.2
+    else:
+        factors['macd_5_35'] = np.nan
+
+    # Bollinger
+    if len(close) >= 20:
+        ma20 = close.iloc[-20:].mean()
+        std20 = close.iloc[-20:].std()
+        factors['boll_pos_20'] = (close.iloc[-1] - ma20 + 2*std20) / (4*std20 + eps)
+        factors['boll_width_20'] = (4*std20) / (ma20 + eps)
+
+        ma10 = close.iloc[-10:].mean()
+        std10 = close.iloc[-10:].std()
+        factors['boll_pos_10'] = (close.iloc[-1] - ma10 + 2*std10) / (4*std10 + eps)
+    else:
+        factors['boll_pos_10'] = factors['boll_pos_20'] = factors['boll_width_20'] = np.nan
+
+    # ATR (using high-low range)
+    if len(close) >= 15:
+        high_low = df['high'].rolling(2).max() - df['low'].rolling(2).min() if 'high' in df and 'low' in df else abs(returns)
+        factors['atr_14'] = high_low.rolling(14).mean().iloc[-1] / (close.iloc[-1] + eps)
+    else:
+        factors['atr_14'] = np.nan
+
+    # Skewness & Kurtosis
+    if len(returns) >= 20:
+        factors['skew_20'] = returns.iloc[-20:].skew()
+        factors['kurt_20'] = returns.iloc[-20:].kurt()
+    else:
+        factors['skew_20'] = factors['kurt_20'] = np.nan
+
+    # VWAP momentum
+    if len(close) >= 20 and len(volume) >= 20:
+        vol_price = close * volume
+        vwap = vol_price.iloc[-20:].mean() / (volume.iloc[-20:].mean() + eps)
+        factors['vwap_mom'] = (close.iloc[-1] - vwap) / (close.iloc[-1] + eps)
+    else:
+        factors['vwap_mom'] = np.nan
+
+    # Relative strength (will be filled in after cross-sectional comparison)
+    factors['rel_strength_20'] = factors.get('mom_20', np.nan)
+    factors['rel_strength_60'] = factors.get('mom_60', np.nan)
+
+    return factors
+
+
+# ── Panel mode (same math, vectorized over all stocks) ───────────────
+
+def calc_factors_panel(
+    close_panel: pd.DataFrame,
+    volume_panel: pd.DataFrame = None,
+    amount_panel: pd.DataFrame = None,
+) -> dict:
+    """Calculate factor matrices for ALL stocks at ALL dates.
+
+    Input:  close_panel  — DataFrame (dates × stocks), adjusted close prices
+            volume_panel — DataFrame (dates × stocks), optional
+            amount_panel — DataFrame (dates × stocks), optional
+    Output: {factor_name: DataFrame (dates × stocks)}
+    """
+    if volume_panel is None:
+        volume_panel = pd.DataFrame(1.0, index=close_panel.index, columns=close_panel.columns)
+    if amount_panel is None:
+        amount_panel = close_panel * volume_panel
+
+    returns = close_panel.pct_change()
+    eps = 1e-10
+    factors = {}
+
+    # Momentum
+    for w in [5, 10, 20, 60, 120]:
+        factors[f'mom_{w}'] = close_panel.pct_change(w)
+
+    # Reversal
+    for w in [3, 5, 10]:
+        factors[f'rev_{w}'] = -close_panel.pct_change(w)
+
+    # Volatility
+    for w in [10, 20, 60]:
+        factors[f'vol_{w}'] = returns.rolling(w).std()
+
+    factors['vol_change'] = returns.rolling(20).std() / (returns.rolling(60).std() + eps)
+
+    # Volume
+    factors['vol_ratio_5'] = volume_panel / (volume_panel.rolling(5).mean() + eps)
+    factors['vol_ratio_20'] = volume_panel / (volume_panel.rolling(20).mean() + eps)
+    factors['amount_ratio'] = amount_panel / (amount_panel.rolling(20).mean() + eps)
+
+    # RSI
+    for w in [6, 14, 28]:
+        delta = close_panel.diff()
+        gain = delta.where(delta > 0, 0).rolling(w).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(w).mean()
+        rs = gain / loss.replace(0, np.nan)
+        factors[f'rsi_{w}'] = 100 - (100 / (1 + rs))
+
+    # MACD
+    for fast, slow in [(12, 26), (5, 35)]:
+        ema_f = close_panel.ewm(span=fast, adjust=False).mean()
+        ema_s = close_panel.ewm(span=slow, adjust=False).mean()
+        macd_line = ema_f - ema_s
+        factors[f'macd_{fast}_{slow}'] = macd_line * 0.2
+
+    # Bollinger
+    for w in [10, 20]:
+        ma = close_panel.rolling(w).mean()
+        std = close_panel.rolling(w).std()
+        lower = ma - 2 * std
+        upper = ma + 2 * std
+        factors[f'boll_pos_{w}'] = (close_panel - lower) / (upper - lower + eps)
+        factors[f'boll_width_{w}'] = (upper - lower) / (ma + eps)
+
+    # ATR (close-to-close range, simplified)
+    ct = close_panel.rolling(2).max() - close_panel.rolling(2).min()
+    factors['atr_14'] = ct.rolling(14).mean() / (close_panel + eps)
+
+    # Distribution
+    factors['skew_20'] = returns.rolling(20).skew()
+    factors['kurt_20'] = returns.rolling(20).kurt()
+
+    # VWAP momentum
+    vol_price = close_panel * volume_panel
+    vwap = vol_price.rolling(20).mean() / (volume_panel.rolling(20).mean() + eps)
+    factors['vwap_mom'] = (close_panel - vwap) / (close_panel + eps)
+
+    # Relative strength (vs cross-sectional mean return)
+    cross_mean_20 = close_panel.mean(axis=1).pct_change(20)
+    factors['rel_strength_20'] = close_panel.pct_change(20).sub(cross_mean_20, axis=0)
+    cross_mean_60 = close_panel.mean(axis=1).pct_change(60)
+    factors['rel_strength_60'] = close_panel.pct_change(60).sub(cross_mean_60, axis=0)
+
+    return factors

@@ -20,15 +20,17 @@ def cap_daily_turnover(
     target_weights: dict[str, float],
     prices: dict[str, float],
     max_turnover: float = 0.25,
+    current_state=None,
 ) -> tuple[dict[str, float], dict]:
     """
     等比缩放目标权重，使组合换手率不超过 max_turnover。
 
     参数:
-        account:       SimAccount 实例
+        account:       SimAccount 实例（旧接口，兼容）或 None
         target_weights: {code: 目标权重}，权重和应为 1.0（不含现金）
         prices:        {code: 当前价格}
         max_turnover:  换手率上限（0.25 = 25%），<= 0 则不限制
+        current_state: PortfolioState 实例（新接口，优先使用）
 
     返回:
         (调整后的 target_weights, 控制信息 dict)
@@ -36,9 +38,12 @@ def cap_daily_turnover(
     if max_turnover is None or max_turnover <= 0:
         return target_weights, {"applied": False, "reason": "disabled"}
 
+    # Support both SimAccount (old) and PortfolioState (new)
+    state = current_state if current_state is not None else account
+
     # 计算当前持仓权重
-    equity = account.cash
-    for code, info in account.holdings.items():
+    equity = state.cash
+    for code, info in state.holdings.items():
         p = prices.get(code, 0)
         if p and p > 0:
             equity += info["shares"] * p

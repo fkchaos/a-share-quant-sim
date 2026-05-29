@@ -80,7 +80,8 @@ def test_nan_prices():
     # NaN stock might be traded before/after NaN period, but not during
     if nan_stock in traded_stocks:
         nan_trades = trades[(trades['code'] == nan_stock) &
-                            (trades['date'].between(close.index[60], close.index[109]))]
+                            (trades['date'] >= str(close.index[60])) &
+                            (trades['date'] <= str(close.index[109]))]
         assert len(nan_trades) == 0, "Should not trade stock during NaN period"
 
     print("✅ test_nan_prices: PASSED")
@@ -100,7 +101,13 @@ def test_all_nan_day():
     # With all NaN prices, holdings are worthless → NAV = cash
     # This is acceptable: the engine doesn't crash
     assert nav.iloc[150] >= 0, "NAV must be non-negative"
-    print(f"✅ test_all_nan_day: PASSED (all-NAV day handled, NAV=¥{nav.iloc[150]:,.0f})")
+    print(f"✅ test_all_nan_day: PASSED (all-NaN day handled, NAV=¥{nav.iloc[150]:,.0f})")
+
+
+def _date_in_trades(trades, date):
+    """Check if a date appears in trades (handles both str and Timestamp)."""
+    d = str(date)
+    return any(d == str(t.get('date', '')) for t in trades)
 
 
 def test_crash_scenario():

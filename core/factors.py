@@ -195,7 +195,7 @@ def calc_factors_panel(
         lower = ma - 2 * std
         upper = ma + 2 * std
         factors[f'boll_pos_{w}'] = (close_panel - lower) / (upper - lower + eps)
-        factors[f'boll_width_{w}'] = (upper - lower) / (ma + eps)
+    factors['boll_width_20'] = (upper - lower) / (ma + eps)
 
     # ATR (close-to-close range, simplified)
     ct = close_panel.rolling(2).max() - close_panel.rolling(2).min()

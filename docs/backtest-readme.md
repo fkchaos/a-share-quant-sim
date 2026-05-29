@@ -51,11 +51,11 @@ python scripts/run_backtest.py --ic-analysis --report-markdown > report.md
 
 | 策略 | 权重方法 | 核心差异 |
 |------|---------|---------|
-| v3_baseline | 等权 | 31 因子等权合成，最有效基线 |
-| v3_optimized | 等权 | 等权 + 波动率目标化缩放 |
-| ic_ir_weighted | IC-IR | 按 IC-IR 绝对值分配因子权重 |
-| ic_selected | IC-IR | IC-IR 加权 + 淘汰无效因子（\|IC_IR\|<0.03） |
-| markowitz | Markowitz | 均值-方差优化组合权重 |
+| v3_baseline | weighted | FACTOR_WEIGHTS 加权，top_n=20, freq=5, sl=15% |
+| v3_optimized | weighted | FACTOR_WEIGHTS 加权 + vol_scaling，top_n=12, freq=20, sl=20% |
+| ic_ir_weighted | ic_ir | 按 IC-IR 绝对值分配因子权重 |
+| ic_selected | ic_ir | IC-IR 加权 + 淘汰无效因子（\|IC_IR\|<0.03） |
+| markowitz | equal+opt | 等权因子评分 + Markowitz 均值-方差优化 |
 
 ## 测试逻辑
 
@@ -65,9 +65,11 @@ python scripts/run_backtest.py --ic-analysis --report-markdown > report.md
 # 测试1：净值守恒（无交易时不变）
 python -c "
 import pandas as pd, numpy as np
-from scripts.run_backtest import *
+from core.factors import calc_factors_panel
+from core.scoring import composite_score_equal
+from scripts.run_backtest import run_backtest
 close = pd.DataFrame({'TEST': [100.0]*200}, index=pd.date_range('2023-01-01', periods=200))
-factors = calc_factors(close, close*0+1e6, close*1e6)
+factors = calc_factors_panel(close, close*0+1e6, close*1e6)
 score = composite_score_equal(factors)
 m, nav, trades = run_backtest(close, score, top_n=1, rebalance_freq=999)
 assert m['total_cost'] == 0, '无交易时不应有成本'
@@ -77,11 +79,13 @@ print('PASS: 净值守恒')
 # 测试2：止损触发
 python -c "
 import pandas as pd, numpy as np
-from scripts.run_backtest import *
+from core.factors import calc_factors_panel
+from core.scoring import composite_score_equal
+from scripts.run_backtest import run_backtest
 dates = pd.date_range('2023-01-01', periods=200)
 prices = [100.0 - i*0.3 for i in range(200)]
 close = pd.DataFrame({'DROP': prices}, index=dates)
-factors = calc_factors(close, close*0+1e6, close*1e6)
+factors = calc_factors_panel(close, close*0+1e6, close*1e6)
 score = composite_score_equal(factors)
 m, nav, trades = run_backtest(close, score, top_n=1, rebalance_freq=5, stop_loss=0.15)
 sl = [t for t in trades.to_dict('records') if t['action'] == 'STOP_LOSS']
@@ -92,11 +96,13 @@ print(f'PASS: 止损触发 {len(sl)} 次')
 # 测试3：交易成本扣除
 python -c "
 import pandas as pd, numpy as np, math
-from scripts.run_backtest import *
+from core.factors import calc_factors_panel
+from core.scoring import composite_score_equal
+from scripts.run_backtest import run_backtest
 dates = pd.date_range('2023-01-01', periods=200)
 prices = [100 + 5*math.sin(i/10) for i in range(200)]
 close = pd.DataFrame({'WAVE': prices}, index=dates)
-factors = calc_factors(close, close*0+1e6, close*1e6)
+factors = calc_factors_panel(close, close*0+1e6, close*1e6)
 score = composite_score_equal(factors)
 m, nav, trades = run_backtest(close, score, top_n=1, rebalance_freq=5)
 assert m['total_cost'] > 0, '有交易时应有成本'
@@ -157,16 +163,17 @@ data/backtest_results/YYYYMMDD_HHMMSS/
 
 ## 与 core/ 的关系
 
-`run_backtest.py` 使用 `core/` 中的模块如下：
+`run_backtest.py` 完全委托 `core/`：
 
 | 调用 | 来自 core |
 |------|----------|
+| `calc_factors_panel(close, volume, amount)` | `factors.py` — 29 因子面板计算 |
+| `composite_score(factors)` | `scoring.py` — FACTOR_WEIGHTS 加权评分 |
+| `composite_score_equal(factors)` | `scoring.py` — 等权评分 |
 | `PortfolioState()` | `account.py` — 账户状态 |
-| `buy(state, code, price, date)` | `account.py` — 买入 |
-| `sell(state, code, price, date, reason)` | `account.py` — 卖出 |
-| `check_stop_loss(state, date, prices)` | `account.py` — 止损 |
-| `portfolio_value(state, date, prices)` | `account.py` — 净值 |
-| `config.factor_weights` | `config.py` — 因子权重 |
-| `config.costs.commission_rate` | `config.py` — 佣金率 |
+| `buy/sell/check_stop_loss(state, ...)` | `account.py` — 纯函数式交易 |
+| `portfolio_value(state, ...)` | `account.py` — 净值计算 |
+| `config.factor_weights` | `config.py` — 29 因子权重 |
+| `config.costs` / `config.risk` | `config.py` — 成本/风控参数 |
 
-**交易逻辑零自行实现** — buy/sell 的所有细节（滑点、佣金、100股限、加权平均成本、现金检查）全部由 `core/account.py` 处理。
+**零本地重复逻辑** — 所有交易细节（滑点、佣金、100股整数倍、加权平均成本、现金检查）全部由 `core/account.py` 处理。

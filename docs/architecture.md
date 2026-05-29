@@ -74,89 +74,97 @@ config = load_config()  # 自动搜索 config.yaml
 
 **优先级**：CLI 参数 > config.yaml > 内置默认值
 
-### 2.2 `factors.py` — 因子计算
+### 2.2 `factors.py` — 因子注册表（Strategy Pattern）
 
-支持两种 I/O 模式，数学逻辑完全一致：
+每个因子是一个独立类，新增因子 = 一个类 + 一行注册，零侵入。
 
 ```python
-# 模式1: 信号模式（模拟盘用）
-def calc_factors_single(df: DataFrame) -> Dict[str, float]:
-    """输入: 单只股票的 OHLCV DataFrame → 输出: {mom_20: 0.05, rsi_14: 65.2, ...}"""
+# 因子基类
+class Factor(ABC):
+    name: str
+    param: int
+    @abstractmethod
+    def compute_single(self, df) -> float: ...
+    @abstractmethod
+    def compute_panel(self, close, volume, amount) -> DataFrame: ...
 
-# 模式2: 面板模式（回测用，向量化加速 100x）
-def calc_factors_panel(close_panel, volume_panel, amount_panel) -> Dict[str, DataFrame]:
-    """输入: (N天 × M股) DataFrame → 输出: {mom_20: DataFrame(N×M), ...}"""
+# 具体因子（部分示例）
+class MomentumFactor(Factor):
+    def compute_single(self, df):
+        return df['close'].iloc[-1] / df['close'].iloc[-self.param] - 1
+
+class RSIFactor(Factor):
+    def compute_single(self, df):
+        ... # RSI 计算
+
+# 注册表
+ALL_FACTORS: Dict[str, Factor] = {}
+register(MomentumFactor(5))   # mom_5
+register(MomentumFactor(10))  # mom_10
+...
+register(RelStrengthFactor(60))
+# 共 29 个因子
+
+# 统一计算接口
+compute_factors_single(df, enabled=['mom_20', 'rsi_14'])  # 按需选择
+compute_factors_panel(close, volume, amount)                # 全量
 ```
 
-**31 个因子全景**：
+向后兼容：`calc_factors_single()` / `calc_factors_panel()` 是 `compute_*` 的别名。
 
-| 类别 | 因子 | 计算逻辑 |
-|------|------|----------|
-| 动量 (5) | mom_5/10/20/60/120 | `close[-1]/close[-N] - 1` |
-| 反转 (3) | rev_3/5/10 | `-(mom_N)` |
-| 波动率 (4) | vol_10/20/60, vol_change | `returns[-N:].std()` + 短/长波比 |
-| 成交量 (3) | vol_ratio_5/20, amount_ratio | `vol[-1] / vol[-N:].mean()` |
-| RSI (3) | rsi_6/14/28 | `100 - 100/(1 + avg_gain/avg_loss)` |
-| 趋势 (5) | macd_12_26, macd_5_35, boll_pos_10/20, boll_width_20 | EMA 差 + 布林带位置/宽度 |
-| 统计 (4) | skew_20, kurt_20, atr_14, vwap_mom | 偏度、峰度、ATR、VWAP 动量 |
-| 相对强度 (2) | rel_strength_20/60 | `mom_N - cross_sectional_mean_mom_N` |
+### 2.3 `account.py` — Position 模型 + 参数注入 + 浅拷贝
 
-### 2.3 `account.py` — 交易状态与操作
+**Position 领域模型**（`position.py`）：
 
-**PortfolioState 数据类**（不可变风格，每笔交易返回新副本）：
+```python
+@dataclass
+class Position:
+    code: str; shares: int; cost_price: float; entry_date: str
+    def add_shares(self, new_shares, price) -> 'Position':  # 加权平均成本
+    def pnl(self, price) -> float:
+    def market_value(self, price) -> float:
+    def to_dict(self) -> dict:          # 序列化兼容旧格式
+    @staticmethod
+    def from_dict(code, d) -> 'Position':  # 反序列化
+```
+
+**PortfolioState — 浅拷贝优化**：
 
 ```python
 @dataclass
 class PortfolioState:
     cash: float
     initial_capital: float
-    holdings: Dict[str, dict]   # {code: {shares, cost_price, entry_date}}
-    trade_log: List[dict]       # 完整审计日志
-    nav_history: List[dict]     # 净值历史
+    holdings: Dict[str, Position]  # ← 非裸 dict
+    trade_log: List[dict]          # 只追加 → 共享引用
+    nav_history: List[dict]        # 只追加 → 共享引用
 
-    def copy(self) -> 'PortfolioState'
+    def copy(self):
+        # 仅 holdings 深拷贝；日志共享引用（性能关键优化）
+        return PortfolioState(..., holdings=copy_holdings(self.holdings), ...)
 ```
 
-**纯函数式交易 API**：
+**纯函数式交易 API + 参数注入**：
 
 ```python
-state = buy(state, code, price, date, shares=None)    # → 新 state
-state = sell(state, code, price, date, reason='SELL') # → 新 state
-state = check_stop_loss(state, date, price_data)       # → 新 state
-value = portfolio_value(state, date, price_data)      # → float
+state = buy(state, code, price, date, cfg: Config = None)   # cfg 可选
+state = sell(state, code, price, date, cfg: Config = None)
+state = check_stop_loss(state, date, prices, cfg: Config = None)
+value = portfolio_value(state, prices)
+
+# 测试时注入自定义配置
+high_cost = Config(costs=TradingCosts(commission_rate=0.003))
+state = buy(state, code, price, date, cfg=high_cost)
 ```
 
-**为什么用函数式而非 OOP？**
-- 便于回测引擎的无副作用循环
-- 方便并行回测（每个线程独立的 state 副本）
-- 避免隐式状态修改导致的 debug 困难
-
-**买入逻辑的工程设计**：
-
-```
-第1步: 等权分配 → target_value = cash / n_stocks
-第2步: 单只上限 → min(target_value, cash × 12%)
-第3步: 加入滑点 → adj_price = price × 1.001
-第4步: A股规则 → 100股整数倍 (1手)
-第5步: 钱不够 → 砍仓位重试
-第6步: 加仓 → 加权平均成本
-```
-
-**卖出逻辑的关键细节**：
-- 普通卖出：佣金 + 印花税（买卖都交）
-- 止损卖出：仅佣金（模拟中印花税豁免 — A 股实际也收，这是个可修正的差异点）
+**买入 6 层细节**：等权分配 → 单只上限 12% → 滑点 → 100股整数倍 → 钱不够砍仓 → 加权平均成本（委托 `Position.add_shares()`）。
 
 ### 2.4 `scoring.py` — 评分合成
 
 ```python
-def standardize(df: DataFrame) -> DataFrame:
-    """横截面 Z-Score: z = (val - mean) / std"""
-
-def composite_score(factors: dict, weights: dict) -> DataFrame:
-    """加权合成: Σ weight × z_score(factor)"""
-
-def composite_score_equal(factors: dict) -> DataFrame:
-    """等权合成: 每个因子 1/N 权重"""
+def standardize(df):          # 横截面 Z-Score
+def composite_score(factors, weights):   # 加权合成
+def composite_score_equal(factors):      # 等权合成（v3 baseline）
 ```
 
 ---
@@ -264,8 +272,13 @@ python run_backtest.py --config my.yaml      # 自定义配置
 | P2 🟡 | 参数配置抽离 (config.yaml) | ✅ 完成 | 2026-05-30 |
 | P3 🟢 | 统一回测工具 + 测试套件 | ✅ 完成 | 2026-05-30 |
 | ⭐ | **core/ 解耦（回测=模拟盘交易逻辑）** | ✅ 完成 | 2026-05-30 |
-| P3 🟢 | 单元测试（持续扩充） | 🔧 进行中 | - |
+| ⭐ | **Position 领域模型（替代裸 dict）** | ✅ 完成 | 2026-05-30 |
+| ⭐ | **Factor Registry（Strategy pattern）** | ✅ 完成 | 2026-05-30 |
+| ⭐ | **参数注入（Config 解耦全局单例）** | ✅ 完成 | 2026-05-30 |
+| ⭐ | **浅拷贝优化（trade_log 共享引用）** | ✅ 完成 | 2026-05-30 |
+| ⭐ | **dev/release 分支策略** | ✅ 完成 | 2026-05-30 |
 | P4 🔵 | 日志系统（print → logging） | 📋 待开始 | - |
+| P4 🔵 | sim_daily_v6 God Object → Pipeline | 📋 待开始 | - |
 
 ---
 

@@ -210,6 +210,18 @@ date,open,high,low,close,volume,amount,outstanding_share,turnover
 - `costs:` — 佣金、印花税、滑点率
 - `strategies:` — 添加/修改策略预设
 
+## 分支策略
+
+```
+dev/default      开发分支 — 日常开发、测试、代码审查在这里进行
+release/default  发布分支 — 稳定版本，每日 cron job 从这里拉取脚本执行
+main             已退役（改名为 dev/default）
+
+开功能:  dev/default → git checkout -b feature/xxx → 开发完后 merge 进 dev/default
+发版:    dev/default git push origin release/default  （测试 OK 后同步）
+回退:    直接 reset release/default 到上一个稳定 commit
+```
+
 ## 每日报告示例
 
 ```

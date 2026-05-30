@@ -725,6 +725,8 @@ def main():
                         help="输出 Markdown 报告到 stdout")
     parser.add_argument("--ic-analysis", action="store_true",
                         help="运行 IC 因子分析")
+    parser.add_argument("--log", action="store_true",
+                        help="自动追加结果到 docs/RESULTS_LOG.md")
     args = parser.parse_args()
 
     # Load stock names for industry classification
@@ -795,75 +797,70 @@ def main():
     strategies = args.strategy
     run_all = "all" in strategies
 
+    # 从 core.config 加载预定义策略 profiles
+    from core.config import STRATEGY_PROFILES
+
     metrics_list = []
     nav_dict = {}
     trades_dict = {}
 
-    # 解析通用参数覆盖
+    # 解析命令行通用参数覆盖
     top_n = args.top_n
     rebal_freq = args.rebalance_freq
     sl = args.stop_loss
 
+    score_equal = composite_score(factors)  # FACTOR_WEIGHTS 加权
+    score_ic_none = None
+
     configs = []
 
-    if run_all or "v3_baseline" in strategies:
-        configs.append({
-            'label': 'v3_baseline',
-            'score': composite_score(factors),  # 使用 core/config.py FACTOR_WEIGHTS 加权
-            'kwargs': dict(top_n=top_n or 20, rebalance_freq=rebal_freq or 5,
-                           stop_loss=sl or 0.15,
-                           max_industry_weight=0.25, max_daily_turnover=0.30,
-                           stock_names=stock_names),
-        })
-    if run_all or "v3_optimized" in strategies:
-        configs.append({
-            'label': 'v3_optimized',
-            'score': composite_score(factors),
-            'kwargs': dict(top_n=top_n or 12, rebalance_freq=rebal_freq or 20,
-                           stop_loss=sl or 0.20, use_vol_scaling=True,
-                           max_industry_weight=0.25, max_daily_turnover=0,
-                           stock_names=stock_names),
-        })
-    if (run_all or "ic_ir_weighted" in strategies) and ic_results:
-        configs.append({
-            'label': 'ic_ir_all',
-            'score': composite_score(
-                factors,
-                {name: abs(s['ic_ir']) / sum(abs(st['ic_ir']) for st in ic_results.values())
-                 for name, s in ic_results.items()}),
-            'kwargs': dict(top_n=top_n or 10, rebalance_freq=rebal_freq or 20,
-                           stop_loss=sl or 0.20),
-        })
-    if (run_all or "ic_selected" in strategies) and score_ic is not None:
-        configs.append({
-            'label': 'ic_ir_selected',
-            'score': score_ic,
-            'kwargs': dict(top_n=top_n or 10, rebalance_freq=rebal_freq or 20,
-                           stop_loss=sl or 0.20),
-        })
-    if run_all or "markowitz" in strategies:
-        configs.append({
-            'label': 'markowitz',
-            'score': score_equal,
-            'kwargs': dict(top_n=top_n or 10, rebalance_freq=rebal_freq or 20,
-                           stop_loss=sl or 0.20, weight_method='markowitz',
-                           max_industry_weight=0.25, max_daily_turnover=0.30,
-                           stock_names=stock_names),
-        })
+    def _build_cfg(profile, score, extra_kwargs=None):
+        """从 StrategyProfile 构建运行 config，支持命令行参数覆盖"""
+        kw = dict(
+            top_n=top_n or profile.top_n,
+            rebalance_freq=rebal_freq or profile.rebalance_freq,
+            stop_loss=sl or profile.stop_loss,
+            max_industry_weight=profile.max_industry_weight,
+            max_daily_turnover=profile.max_daily_turnover,
+            weight_method=profile.weight_method,
+            stock_names=stock_names,
+            use_take_profit=profile.use_take_profit,
+            tp_tiers=profile.tp_tiers,
+            use_holding_decay=profile.use_holding_decay,
+        )
+        if extra_kwargs:
+            kw.update(extra_kwargs)
+        return {'label': profile.label, 'score': score, 'kwargs': kw}
 
+    if run_all or "v3_baseline" in strategies:
+        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal,
+                                  extra_kwargs=dict(top_n=top_n or 20, rebalance_freq=rebal_freq or 5,
+                                                     stop_loss=sl or 0.15, max_industry_weight=0.25,
+                                                     max_daily_turnover=0.30)))
+    if run_all or "v3_optimized" in strategies:
+        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal))
+    if run_all or "v4_industry_cap" in strategies:
+        configs.append(_build_cfg(STRATEGY_PROFILES["v4_industry_cap"], score_equal))
+    if run_all or "v5_tp_decay" in strategies:
+        configs.append(_build_cfg(STRATEGY_PROFILES["v5_tp_decay"], score_equal))
+    if (run_all or "ic_ir_weighted" in strategies) and ic_results:
+        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal,
+                                  extra_kwargs=dict(top_n=top_n or 10)))
+    if (run_all or "ic_selected" in strategies) and score_ic is not None:
+        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_ic,
+                                  extra_kwargs=dict(top_n=top_n or 10)))
+    if (run_all or "markowitz" in strategies):
+        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal,
+                                  extra_kwargs=dict(weight_method='markowitz')))
+
+    # 如果没匹配到任何已知策略，默认跑 v4_baseline
     if not configs:
-        # 没有 IC 分析结果时，ic 策略不可用，用等权替代
-        print("  ⚠️ 未启用 --ic-analysis，IC 相关策略不可用，用 v3_baseline + markowitz")
-        configs = [
-            {'label': 'v3_baseline', 'score': composite_score(factors),
-             'kwargs': dict(top_n=20, rebalance_freq=5, stop_loss=0.15,
-                            max_industry_weight=0.25, max_daily_turnover=0.30,
-                            stock_names=stock_names)},
-            {'label': 'markowitz', 'score': score_equal,
-             'kwargs': dict(top_n=10, rebalance_freq=20, stop_loss=0.20, weight_method='markowitz',
-                            max_industry_weight=0.25, max_daily_turnover=0.30,
-                            stock_names=stock_names)},
-        ]
+        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal))
+
+    # IC 策略降级处理
+    if not ic_results and not any(c['label'] in ('v3_baseline', 'v4_baseline', 'v4_industry_cap', 'v5_tp_decay') for c in configs):
+        print("  ⚠️ 未启用 --ic-analysis，IC 相关策略不可用，用 v4_baseline 替代")
+        configs = [_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal)]
 
     for cfg in configs:
         print(f"\n  ▶ {cfg['label']}: top_n={cfg['kwargs'].get('top_n')}, "
@@ -939,6 +936,31 @@ def main():
         pass
 
     print(f"\n结果已保存: {saved}/")
+
+    # 自动记录到 RESULTS_LOG
+    if getattr(args, 'log', False):
+        try:
+            parts = [f"top{args.top_n or 12}", f"rf{args.rebalance_freq or 20}",
+                     f"sl{args.stop_loss or 0.20}"]
+            if args.max_industry_weight and args.max_industry_weight > 0:
+                parts.append(f"ind{int(args.max_industry_weight*100)}%")
+            params_str = ",".join(parts)
+            from scripts.log_backtest_result import append_row
+            for m in metrics_list:
+                append_row(
+                    label=m['label'],
+                    params=params_str,
+                    metrics={
+                        'return': m.get('annual_return', 0),
+                        'sharpe': m.get('sharpe_ratio', 0),
+                        'maxdd': m.get('max_drawdown', 0),
+                        'calmar': m.get('calmar_ratio', 0),
+                        'trades': m.get('total_trades', 0),
+                    },
+                    notes="auto-logged by --log"
+                )
+        except Exception as e:
+            print(f"  ⚠️ RESULTS_LOG 记录失败: {e}")
 
     if args.report_markdown:
         report = generate_report(metrics_list, scan_results)

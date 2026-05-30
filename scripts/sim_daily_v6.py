@@ -24,7 +24,7 @@ sys.path.insert(0, "/root")
 sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Core engine (shared with run_backtest.py) ─────────────────────
-from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
+from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value, check_take_profit, apply_holding_decay
 from core.config import config as core_config, STRATEGY_PROFILES
 
 # ── Auxiliary modules ──────────────────────────────────────────────
@@ -45,7 +45,7 @@ SIGNAL_DIR = os.path.join(DATA_DIR, "signals")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 # Strategy params — from STRATEGY_PROFILES (single source of truth)
-_PROFILE = "v4_industry_cap"  # ← 切换策略：v4_baseline | v4_industry_cap | v5_tp_decay
+_PROFILE = "v5_tp_decay"  # ← 切换策略：v4_baseline | v4_industry_cap | v5_tp_decay
 _strategy_profile = STRATEGY_PROFILES[_PROFILE]
 
 REBAL_FREQ = _strategy_profile.rebalance_freq
@@ -151,6 +151,35 @@ def step_check_stop_loss(state, date, price_data, names):
         for code in stopped:
             logger.warning(f"  {code} {names.get(code, code)} 已止损卖出")
     return state, stopped
+
+
+def step_check_take_profit(state, date, price_data, names):
+    """Step 3b: 分级止盈（v5 策略）"""
+    from core.account import check_take_profit
+    tp_tiers = _strategy_profile.tp_tiers or [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
+    prev_holdings = {code: h['shares'] for code, h in state.holdings.items()}
+    state = check_take_profit(state, date, price_data, tiers=tp_tiers)
+    # 记录触发情况
+    for code in prev_holdings:
+        if code in state.holdings:
+            if state.holdings[code]['shares'] < prev_holdings[code]:
+                sold = prev_holdings[code] - state.holdings[code]['shares']
+                logger.info(f"  🎯 {code} {names.get(code, code)} 分级止盈: 卖出 {sold} 股")
+        elif code not in state.holdings:
+            logger.info(f"  🎯 {code} {names.get(code, code)} 分级止盈: 全部清仓")
+    return state
+
+
+def step_holding_decay(state, date, price_data, names):
+    """Step 3c: 持有期 decay（v5 策略）"""
+    from core.account import apply_holding_decay
+    prev_shares = {code: h['shares'] for code, h in state.holdings.items()}
+    state = apply_holding_decay(state, date, price_data, rebalance_freq=REBAL_FREQ)
+    for code in prev_shares:
+        if code in state.holdings and state.holdings[code]['shares'] < prev_shares[code]:
+            reduced = prev_shares[code] - state.holdings[code]['shares']
+            logger.info(f"  📉 {code} {names.get(code, code)} 持有期decay: 减持 {reduced} 股")
+    return state
 
 
 def step_data_quality(files, date):
@@ -492,6 +521,14 @@ def daily_operation():
 
     # Step 3: 止损检查
     state, stopped = step_check_stop_loss(state, latest_date, price_data, names)
+
+    # Step 3b: 分级止盈（v5 策略）
+    if _strategy_profile.use_take_profit:
+        state = step_check_take_profit(state, latest_date, price_data, names)
+
+    # Step 3c: 持有期 decay（v5 策略）
+    if _strategy_profile.use_holding_decay:
+        state = step_holding_decay(state, latest_date, price_data, names)
 
     # Step 4: 数据质量门禁
     quality_blocked = step_data_quality(files, latest_date)

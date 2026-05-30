@@ -58,6 +58,12 @@ class StrategyConfig:
     max_daily_turnover: float = 0
     risk_aversion: float = 1.0
     factor_weights: Optional[Dict[str, float]] = None
+    # New sell-side controls
+    use_take_profit: bool = False
+    tp_tiers: Optional[list] = None       # e.g. [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
+    use_holding_decay: bool = False
+    use_atr_stop: bool = False
+    atr_k: float = 6.0
 
 
 @dataclass
@@ -130,6 +136,11 @@ def load_config(path: Optional[str] = None) -> Config:
             max_daily_turnover=s.get("max_daily_turnover", 0),
             risk_aversion=s.get("risk_aversion", 1.0),
             factor_weights=factor_weights if s.get("weight_method") != "markowitz" else None,
+            use_take_profit=s.get("use_take_profit", False),
+            tp_tiers=s.get("tp_tiers", None),
+            use_holding_decay=s.get("use_holding_decay", False),
+            use_atr_stop=s.get("use_atr_stop", False),
+            atr_k=s.get("atr_k", 6.0),
         )
 
     return Config(

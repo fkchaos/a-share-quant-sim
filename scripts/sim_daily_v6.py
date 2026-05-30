@@ -223,14 +223,32 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
                     if sold:
                         logger.info(f"  ❌ {code} {names.get(code, code)} 已卖出")
 
+    # ── 权重分配（委托 core.account.allocate_weights）──
+    from core.account import allocate_weights
+    # 计算每只股票的 20 日波动率用于 vol_inverse 加权
+    _vol_series = pd.Series(dtype=float)
+    for _f in files:
+        _code = _f.replace(".csv", "")
+        _df = pd.read_csv(os.path.join(DAILY_DIR, _f), index_col='date', parse_dates=True)
+        if len(_df) >= 21:
+            _ret = _df['close'].pct_change().tail(20)
+            _vol_series[_code] = _ret.std()
+
+    _weight_method = 'vol_inverse' if core_config.risk.top_n > 0 else 'equal'
+    # 先算初始权重（equal 或 vol_inverse）
+    # 注意：max_position 约束在 cap_daily_turnover 之前应用
+    target_weights = allocate_weights(
+        top_stocks, price_data,
+        method=_weight_method,
+        vol_series=_vol_series,
+        max_position=MAX_DAILY_TURNOVER,  # 单只极限权重
+    )
+    # target_weights 已经归一化，sum ≈ 1.0
+    weight_per_stock = 1.0 / TOP_N  # 等权重参考值（用于后续补仓比较）
+
     # P0-3/P1-1: 换手率控制 + 行业仓位上限
     current_pv = portfolio_value(state, date, price_data)
     price_dict = price_data.to_dict()
-    target_weights = {}
-    weight_per_stock = 1.0 / TOP_N
-    for code in top_stocks:
-        if code in state.holdings or code not in sell_blocked_codes:
-            target_weights[code] = weight_per_stock
 
     turnover_info = None
     industry_info = None

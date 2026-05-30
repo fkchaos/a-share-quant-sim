@@ -210,10 +210,11 @@ def markowitz_optimize(expected_returns, cov_matrix, max_weight=0.15):
 # ============================================================
 def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20,
                  max_position=0.10, use_vol_scaling=True, vol_target=0.20,
-                 weight_method='weighted', label='default',
+                 weight_method='equal', label='default',
                  initial_capital=None,
                  max_industry_weight=0.25, max_daily_turnover=0,
-                 stock_names=None):
+                 stock_names=None,
+                 use_atr_stop=False, atr_k=2.0):
     """
     完整回测引擎。
 
@@ -236,6 +237,14 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
     nav_list = []
     rebal_count = 0
 
+    # ── 预计算 ATR 面板（用于 ATR 自适应止损）──
+    # 使用 close-to-close range 近似 ATR（与 core/factors.py 一致）
+    atr_panel = None
+    if use_atr_stop:
+        ct = close_panel.rolling(2).max() - close_panel.rolling(2).min()
+        atr_norm = ct.rolling(14).mean() / (close_panel + 1e-10)
+        atr_panel = atr_norm * close_panel  # absolute ATR value
+
     for i, date in enumerate(dates):
         if i < 120:
             nav_list.append(icap)
@@ -247,7 +256,10 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
         price_data = close_panel.loc[date]
 
         # ── 1. 止损（委托 core.account.check_stop_loss）──
-        state = check_stop_loss(state, date, price_data)
+        atr_day = None
+        if atr_panel is not None and date in atr_panel.index:
+            atr_day = atr_panel.loc[date]
+        state = check_stop_loss(state, date, price_data, atr_data=atr_day)
 
         # ── 2. 调仓 ──────────────────────────────────────────
         if (i - 120) % rebalance_freq == 0 and date in score.index:
@@ -284,9 +296,16 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                     if cov is not None and not cov.empty:
                         weights = markowitz_optimize(expected_ret, cov, max_weight=max_position)
                     else:
-                        weights = {c: 1.0 / len(top_stocks) for c in top_stocks}
+                        from core.account import allocate_weights
+                        weights = allocate_weights(top_stocks, price_data, method='equal',
+                                                   close_panel=close_panel, max_position=max_position)
                 else:
-                    weights = {c: 1.0 / len(top_stocks) for c in top_stocks}
+                    # Delegate to core.account.allocate_weights (equal / vol_inverse / markowitz)
+                    from core.account import allocate_weights
+                    _method_map = {'weighted': 'equal', 'equal': 'equal', 'vol_inverse': 'vol_inverse'}
+                    _method = _method_map.get(weight_method, 'equal')
+                    weights = allocate_weights(top_stocks, price_data, method=_method,
+                                               close_panel=close_panel, max_position=max_position)
 
                 # ── 2a. 行业仓位上限 ──────────────────────────────────
                 if max_industry_weight and max_industry_weight > 0 and stock_names:

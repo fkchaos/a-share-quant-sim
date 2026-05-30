@@ -36,6 +36,7 @@ class TradingCosts:
 @dataclass
 class RiskLimits:
     stop_loss: float = 0.20
+    stop_loss_atr_k: float = 6.0        # K for ATR-based dynamic stop-loss (close-to-close ATR typically ~3-5%)
     top_n: int = 12
     rebalance_freq: int = 20
     max_single_weight: float = 0.15

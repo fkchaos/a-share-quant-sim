@@ -343,6 +343,10 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
     max_dd = ((nav.cummax() - nav) / nav.cummax()).max()
     calmar = ann_ret / max_dd if max_dd > 0 else 0
     win_rate = (rets > 0).sum() / len(rets) if len(rets) > 0 else 0
+    # Sortino ratio: 只计下行波动
+    downside = rets[rets < 0]
+    downside_vol = downside.std() * np.sqrt(252) if len(downside) > 1 else 0
+    sortino = ann_ret / downside_vol if downside_vol > 0 else 0
 
     trades_df = pd.DataFrame(state.trade_log)
     sl_count = len(trades_df[trades_df['action'] == 'STOP_LOSS']) if len(trades_df) > 0 else 0
@@ -356,6 +360,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
         'sharpe_ratio': round(float(sharpe), 4),
         'max_drawdown': round(float(max_dd), 6),
         'calmar_ratio': round(float(calmar), 4),
+        'sortino_ratio': round(float(sortino), 4),
         'win_rate': round(float(win_rate), 6),
         'total_trades': len(trades_df),
         'stop_loss_trades': int(sl_count),
@@ -410,9 +415,82 @@ def param_scan(close_panel, score, param_grid=None):
 
 
 # ============================================================
+# Walk-Forward 分析
+# ============================================================
+def walk_forward(close_panel, train_days=252, test_days=63,
+                 step_days=63, top_n=12, rebalance_freq=20,
+                 stop_loss=0.20, **kwargs):
+    """Walk-Forward 过拟合检测。
+
+    将时间轴上滑动窗口：训练期(约1年) → 测试期(约1季度)
+    每一轮回测独立进行，最终拼接样本外净值曲线。
+    """
+    dates = close_panel.index
+    n = len(dates)
+    fold_results = []
+    fold_navs = []
+    fold = 0
+
+    train_end = train_days
+    while train_end + test_days <= n:
+        fold += 1
+        train_start = max(0, train_end - train_days)
+        test_start = train_end
+        test_end = min(n, train_end + test_days)
+
+        # 重新计算该窗口内的因子和评分
+        sub_close = close_panel.loc[dates[train_start:test_end]]
+        from core.factors import calc_factors_panel
+        from core.config import config as cfg
+        sub_factors = calc_factors_panel(sub_close)
+        sub_score = composite_score(sub_factors)
+
+        # 截取测试期评分
+        test_dates = dates[test_start:test_end]
+        sub_score_test = sub_score.loc[test_dates]
+        sub_close_test = sub_close.loc[test_dates]
+
+        m, nav, _ = run_backtest(
+            sub_close_test, sub_score_test,
+            top_n=top_n, rebalance_freq=rebalance_freq,
+            stop_loss=stop_loss, label=f'wf_fold{fold}',
+        )
+
+        fold_results.append({
+            'fold': fold,
+            'train': f"{dates[train_start].date()}~{dates[test_start-1].date()}",
+            'test': f"{dates[test_start].date()}~{dates[test_end-1].date()}",
+            'ann_return': m['annual_return'],
+            'sharpe': m['sharpe_ratio'],
+            'max_dd': m['max_drawdown'],
+            'sortino': m['sortino_ratio'],
+            'trades': m['total_trades'],
+        })
+        fold_navs.append(nav)
+
+        print(f"  WF Fold {fold}: {fold_results[-1]['test']} | "
+              f"Ret={m['annual_return']:.1%} Sharpe={m['sharpe_ratio']:.2f} "
+              f"DD={m['max_dd']:.1%}")
+
+        train_end += step_days
+
+    # 拼接样本外净值
+    if fold_navs:
+        # 归一化每个 fold 的起始净值为1，然后连乘
+        combined_nav = fold_navs[0] / fold_navs[0].iloc[0]
+        for fnav in fold_navs[1:]:
+            combined_nav = combined_nav * (fnav / fnav.iloc[0])
+    else:
+        combined_nav = None
+
+    return fold_results, combined_nav
+
+
+# ============================================================
 # 结果保存
 # ============================================================
-def save_results(output_dir, metrics_list, nav_dict, trades_dict, scan_results=None):
+def save_results(output_dir, metrics_list, nav_dict, trades_dict,
+                 scan_results=None, wf_results=None):
     """保存回测结果到目录。"""
     os.makedirs(output_dir, exist_ok=True)
 
@@ -431,6 +509,7 @@ def save_results(output_dir, metrics_list, nav_dict, trades_dict, scan_results=N
             'sharpe': m['sharpe_ratio'],
             'max_dd': f"{m['max_drawdown']:.2%}",
             'calmar': m['calmar_ratio'],
+            'sortino': m['sortino_ratio'],
             'win_rate': f"{m['win_rate']:.2%}",
             'trades': m['total_trades'],
             'stop_loss': m['stop_loss_trades'],
@@ -442,6 +521,27 @@ def save_results(output_dir, metrics_list, nav_dict, trades_dict, scan_results=N
     # 各策略净值 + 交易记录
     for label, nav in nav_dict.items():
         nav.to_csv(os.path.join(output_dir, f"nav_{label}.csv"))
+        # 月度收益表
+        monthly = nav.resample('ME').last().pct_change().dropna()
+        monthly_df = pd.DataFrame({
+            'month': monthly.index.strftime('%Y-%m'),
+            'monthly_return': monthly.values.round(6),
+            'cumulative_return': (nav.iloc[-1] / nav.iloc[0] - 1) if len(nav) > 0 else 0,
+        })
+        # 月度收益透视表（按年×月）
+        monthly_returns = nav.pct_change().resample('ME').sum()
+        years = sorted(set(monthly_returns.index.year))
+        months = list(range(1, 13))
+        pivot_data = {}
+        for y in years:
+            pivot_data[y] = []
+            for m in months:
+                mask = (monthly_returns.index.year == y) & (monthly_returns.index.month == m)
+                val = monthly_returns[mask].values[0] if mask.any() else np.nan
+                pivot_data[y].append(round(float(val), 4) if not np.isnan(val) else '-')
+        pivot_df = pd.DataFrame(pivot_data, index=[f'{m}月' for m in months])
+        pivot_df.to_csv(os.path.join(output_dir, f"monthly_returns_{label}.csv"))
+
     for label, trades in trades_dict.items():
         if len(trades) > 0:
             trades.to_csv(os.path.join(output_dir, f"trades_{label}.csv"), index=False)
@@ -465,26 +565,34 @@ def save_results(output_dir, metrics_list, nav_dict, trades_dict, scan_results=N
         pd.DataFrame(scan_summary[:20]).to_csv(
             os.path.join(output_dir, "param_scan.csv"), index=False)
 
+    # Walk-Forward 结果
+    if wf_results:
+        wf_df = pd.DataFrame(wf_results)
+        wf_df.to_csv(os.path.join(output_dir, "walk_forward.csv"), index=False)
+        with open(os.path.join(output_dir, "walk_forward.json"), "w") as f:
+            json.dump(wf_results, f, indent=2, ensure_ascii=False)
+
     # Markdown 报告
-    report_md = generate_report(metrics_list, scan_results)
+    report_md = generate_report(metrics_list, scan_results, wf_results)
     with open(os.path.join(output_dir, "report.md"), "w") as f:
         f.write(report_md)
 
     return output_dir
 
 
-def generate_report(metrics_list, scan_results=None):
+def generate_report(metrics_list, scan_results=None, wf_results=None):
     """生成 Markdown 回测报告。"""
     lines = ["# 回测报告\n"]
     lines.append(f"> 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
     # 策略对比表
     lines.append("## 策略对比\n")
-    lines.append("| 策略 | 年化收益 | 夏普 | 最大回撤 | Calmar | 胜率 | 交易次数 | 止损次数 |")
-    lines.append("|------|---------|------|---------|--------|------|---------|---------|")
+    lines.append("| 策略 | 年化收益 | 夏普 | Sortino | 最大回撤 | Calmar | 胜率 | 交易次数 | 止损次数 |")
+    lines.append("|------|---------|------|---------|---------|--------|------|---------|---------|")
     for m in metrics_list:
         lines.append(
             f"| {m['label']} | {m['annual_return']:.2%} | {m['sharpe_ratio']:.2f} | "
+            f"{m['sortino_ratio']:.2f} | "
             f"{m['max_drawdown']:.2%} | {m['calmar_ratio']:.2f} | "
             f"{m['win_rate']:.2%} | {m['total_trades']} | {m['stop_loss_trades']} |"
         )
@@ -501,6 +609,22 @@ def generate_report(metrics_list, scan_results=None):
                 f"{r.get('sharpe', '-')} | {r.get('annual_return', '-')} | "
                 f"{r.get('max_dd', '-')} |"
             )
+
+    if wf_results:
+        lines.append("\n## Walk-Forward 分析\n")
+        lines.append("| Fold | 训练期 | 测试期 | 年化收益 | 夏普 | Sortino | 最大回撤 | 交易次数 |")
+        lines.append("|------|--------|--------|---------|------|---------|---------|---------|")
+        for r in wf_results:
+            lines.append(
+                f"| {r['fold']} | {r['train']} | {r['test']} | "
+                f"{r['ann_return']:.1%} | {r['sharpe']:.2f} | {r['sortino']:.2f} | "
+                f"{r['max_dd']:.1%} | {r['trades']} |"
+            )
+        avg_sharpe = np.mean([r['sharpe'] for r in wf_results])
+        avg_ret = np.mean([r['ann_return'] for r in wf_results])
+        pos = sum(1 for r in wf_results if r['ann_return'] > 0)
+        lines.append(f"\n**汇总**: {len(wf_results)} folds | 平均年化 {avg_ret:.1%} | "
+                      f"平均夏普 {avg_sharpe:.2f} | 正收益 {pos}/{len(wf_results)}")
 
     return "\n".join(lines) + "\n"
 
@@ -520,6 +644,7 @@ def main():
     parser.add_argument("--stop-loss", type=float, default=None, help="止损比例 (如 0.15)")
     parser.add_argument("--max-position", type=float, default=0.10, help="单只最大仓位")
     parser.add_argument("--scan", action="store_true", help="启用参数网格扫描")
+    parser.add_argument("--walk-forward", action="store_true", help="启用 Walk-Forward 过拟合检测")
     parser.add_argument("--output-dir", default=None, help="结果输出目录")
     parser.add_argument("--report-markdown", action="store_true",
                         help="输出 Markdown 报告到 stdout")
@@ -588,6 +713,18 @@ def main():
         score_ic = composite_score(factors, selected_weights)
     else:
         score_ic = None
+
+    # 4b. 因子相关性分析（检测冗余因子）
+    if ic_results:
+        from core.scoring import factor_correlation
+        corr_matrix, redundant = factor_correlation(factors)
+        if redundant:
+            print(f"\n  ⚠️ 高相关因子对 (|ρ| > 0.8): {len(redundant)} 对")
+            for fa, fb, c in redundant[:10]:
+                print(f"    {fa} ↔ {fb}: {c:+.4f}")
+            print("  → 建议：考虑删除其中一个或合并")
+        else:
+            print(f"\n  ✅ 因子间无严重冗余 (所有 |ρ| ≤ 0.8)")
 
     # 5. 回测（委托 core.account）
     print(f"\n[4/5] 运行回测...")
@@ -684,6 +821,25 @@ def main():
         print(f"\n[5/5] 参数扫描...")
         scan_results = param_scan(close_panel, score_equal)
 
+    # 6b. Walk-Forward 分析（可选）
+    wf_results = None
+    if args.walk_forward:
+        print(f"\n[5/5] Walk-Forward 分析...")
+        top_n = args.top_n or 12
+        rebal_freq = args.rebalance_freq or 20
+        sl = args.stop_loss or 0.20
+        wf_results, wf_nav = walk_forward(
+            close_panel,
+            top_n=top_n, rebalance_freq=rebal_freq, stop_loss=sl,
+        )
+        if wf_results:
+            print(f"\n  Walk-Forward 汇总 ({len(wf_results)} folds):")
+            avg_sharpe = np.mean([r['sharpe'] for r in wf_results])
+            avg_ret = np.mean([r['ann_return'] for r in wf_results])
+            print(f"    平均年化: {avg_ret:.1%} | 平均夏普: {avg_sharpe:.2f}")
+            positive_folds = sum(1 for r in wf_results if r['ann_return'] > 0)
+            print(f"    正收益fold: {positive_folds}/{len(wf_results)}")
+
     # 7. 输出
     elapsed = time.time() - t0
     print(f"\n{'=' * 60}")
@@ -693,11 +849,12 @@ def main():
     # 打印对比表
     print(f"\n{'策略对比汇总':^60}")
     print(f"{'─' * 60}")
-    print(f"{'策略':<20} {'年化收益':>10} {'夏普':>7} {'最大回撤':>10} {'Calmar':>7} {'交易':>5}")
+    print(f"{'策略':<20} {'年化收益':>10} {'夏普':>7} {'Sortino':>8} {'最大回撤':>10} {'Calmar':>7} {'交易':>5}")
     print(f"{'─' * 60}")
     for m in metrics_list:
         print(f"{m['label']:<20} {m['annual_return']:>9.2%} "
-              f"{m['sharpe_ratio']:>7.2f} {m['max_drawdown']:>9.2%} "
+              f"{m['sharpe_ratio']:>7.2f} {m['sortino_ratio']:>7.2f} "
+              f"{m['max_drawdown']:>9.2%} "
               f"{m['calmar_ratio']:>7.2f} {m['total_trades']:>5}")
 
     # 保存
@@ -707,7 +864,7 @@ def main():
         out_dir = os.path.join(REPORT_DIR,
                                datetime.now().strftime("%Y%m%d_%H%M%S"))
 
-    saved = save_results(out_dir, metrics_list, nav_dict, trades_dict, scan_results)
+    saved = save_results(out_dir, metrics_list, nav_dict, trades_dict, scan_results, wf_results)
 
     # 保存 config 副本供复现
     try:

@@ -112,3 +112,40 @@ def rel_strength_adjust(all_factors: dict, stocks: list) -> dict:
                     if mom_key in all_factors.get(code, {}):
                         all_factors[code][name] = all_factors[code][mom_key] - mean_val
     return all_factors
+
+
+def factor_correlation(factors: dict, date=None):
+    """计算因子面板的相关系数矩阵，用于因子去冗。
+
+    factors: {factor_name: DataFrame (dates × stocks)}
+    date:    指定日期（取该日截面）；None 则取最后一日
+
+    返回: (corr_matrix, redundant_pairs)
+      - corr_matrix: DataFrame (factor × factor)
+      - redundant_pairs: [(factor_a, factor_b, corr), ...] 高相关对 (|ρ| > 0.8)
+    """
+    # 取截面数据
+    snapshot = {}
+    for fname, fdf in factors.items():
+        if date is not None and date in fdf.index:
+            snapshot[fname] = fdf.loc[date]
+        elif len(fdf) > 0:
+            snapshot[fname] = fdf.iloc[-1]
+
+    if not snapshot:
+        return pd.DataFrame(), []
+
+    snap_df = pd.DataFrame(snapshot).dropna(axis=1, how='all')
+    corr = snap_df.corr()
+
+    # 找高相关对
+    redundant = []
+    names = corr.columns.tolist()
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            c = corr.iloc[i, j]
+            if abs(c) > 0.8:
+                redundant.append((names[i], names[j], round(float(c), 4)))
+
+    redundant.sort(key=lambda x: abs(x[2]), reverse=True)
+    return corr, redundant

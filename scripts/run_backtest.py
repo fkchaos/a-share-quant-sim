@@ -240,6 +240,14 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
     nav_list = []
     rebal_count = 0
 
+    # ── Diagnostic: print key config to detect silent misconfiguration ──
+    if label == 'default' or os.environ.get('BACKTEST_DEBUG'):
+        _industry_enabled = bool(stock_names) and max_industry_weight and max_industry_weight > 0
+        print(f"  📋 backtest[{label}]: top_n={top_n} rf={rebal_freq} sl={stop_loss} "
+              f"vol_scale={use_vol_scaling} vt={vol_target} "
+              f"industry_cap={max_industry_weight if _industry_enabled else 'OFF'} "
+              f"tp={use_take_profit} decay={use_holding_decay} atr={use_atr_stop}")
+
     # ── 预计算 ATR 面板（用于 ATR 自适应止损）──
     # 使用 close-to-close range 近似 ATR（与 core/factors.py 一致）
     atr_panel = None
@@ -660,6 +668,30 @@ def generate_report(metrics_list, scan_results=None, wf_results=None):
     return "\n".join(lines) + "\n"
 
 
+def _load_stock_names() -> dict:
+    """Load stock name mapping from HS300 constituents CSV.
+
+    Returns {code: name} dict, or empty dict if file not found.
+    When empty, industry classification is silently skipped.
+    """
+    import pandas as pd
+    hs300_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "hs300_constituents.csv"
+    )
+    if not os.path.exists(hs300_path):
+        hs300_path = "/root/hs300_constituents.csv"
+    try:
+        hs300 = pd.read_csv(hs300_path)
+        return dict(zip(
+            hs300['品种代码'].astype(str).str.zfill(6),
+            hs300['品种名称']
+        ))
+    except Exception as e:
+        print(f"  ⚠️  Could not load stock names: {e}")
+        return {}
+
+
 # ============================================================
 # 主流程
 # ============================================================
@@ -684,18 +716,7 @@ def main():
     args = parser.parse_args()
 
     # Load stock names for industry classification
-    stock_names = {}
-    hs300_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hs300_constituents.csv")
-    if not os.path.exists(hs300_path):
-        hs300_path = "/root/hs300_constituents.csv"
-    try:
-        hs300 = pd.read_csv(hs300_path)
-        stock_names = dict(zip(
-            hs300['品种代码'].astype(str).str.zfill(6),
-            hs300['品种名称']
-        ))
-    except Exception:
-        pass
+    stock_names = _load_stock_names()
 
     print("=" * 60)
     print("A股量化回测系统  |  core/engine: factors+scoring+account")

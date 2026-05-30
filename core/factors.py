@@ -141,14 +141,25 @@ def calc_factors_panel(
     """Calculate factor matrices for ALL stocks at ALL dates.
 
     Input:  close_panel  — DataFrame (dates × stocks), adjusted close prices
-            volume_panel — DataFrame (dates × stocks), optional
-            amount_panel — DataFrame (dates × stocks), optional
+            volume_panel — DataFrame (dates × stocks), REQUIRED for vol_ratio factors
+            amount_panel — DataFrame (dates × stocks), REQUIRED for amount_ratio factor
     Output: {factor_name: DataFrame (dates × stocks)}
+
+    ⚠️  volume_panel and amount_panel are technically optional (for API compat)
+    but STRONGLY REQUIRED — without them vol_ratio_5/20 and amount_ratio factors
+    will be silently zero, causing score distortion and incorrect backtest results.
     """
-    if volume_panel is None:
+    if volume_panel is None or amount_panel is None:
+        import warnings
+        warnings.warn(
+            "⚠️  calc_factors_panel: volume_panel/amount_panel not provided. "
+            "vol_ratio and amount_ratio factors will be ZERO — backtest results will be INCORRECT. "
+            "Always pass volume_panel and amount_panel from load_and_build_panel().",
+            stacklevel=2,
+        )
         volume_panel = pd.DataFrame(1.0, index=close_panel.index, columns=close_panel.columns)
-    if amount_panel is None:
         amount_panel = close_panel * volume_panel
+    # Note: removed the two separate if-blocks above; they're now merged
 
     returns = close_panel.pct_change()
     eps = 1e-10

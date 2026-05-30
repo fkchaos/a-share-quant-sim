@@ -36,7 +36,7 @@ class TradingCosts:
 @dataclass
 class RiskLimits:
     stop_loss: float = 0.20
-    top_n: int = 10
+    top_n: int = 12
     rebalance_freq: int = 20
     max_single_weight: float = 0.15
     max_daily_turnover: float = 0.30

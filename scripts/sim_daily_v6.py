@@ -26,6 +26,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 # ── Core engine (shared with run_backtest.py) ─────────────────────
 from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value, check_take_profit, apply_holding_decay
 from core.config import config as core_config, STRATEGY_PROFILES
+from core.scoring import score_all_stocks
+from core.factors import calc_factors_single
 
 # ── Auxiliary modules ──────────────────────────────────────────────
 from constraints import build_trade_context
@@ -60,10 +62,10 @@ SLIPPAGE_RATE = core_config.costs.slippage_rate
 COMMISSION_RATE = core_config.costs.commission_rate
 INITIAL_CAPITAL = core_config.costs.initial_capital
 
+logger = get_logger("sim_daily")
+
 logger.debug(f"策略 profile: {_PROFILE}, top_n={TOP_N}, freq={REBAL_FREQ}, sl={STOP_LOSS}, "
              f"ind_cap={MAX_INDUSTRY_WEIGHT}, turnover_cap={MAX_DAILY_TURNOVER}")
-
-logger = get_logger("sim_daily")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -102,6 +104,9 @@ def step_load_account():
         state.nav_history = data.get('nav_history', [])
         for code in state.holdings:
             state.holdings[code]['shares'] = int(state.holdings[code]['shares'])
+            # 确保 tp_taken 字段存在（兼容旧持久化数据）
+            if 'tp_taken' not in state.holdings[code]:
+                state.holdings[code]['tp_taken'] = []
         for entry in state.nav_history:
             if 'nav' not in entry and 'portfolio_value' in entry:
                 entry['nav'] = entry['portfolio_value']
@@ -155,7 +160,6 @@ def step_check_stop_loss(state, date, price_data, names):
 
 def step_check_take_profit(state, date, price_data, names):
     """Step 3b: 分级止盈（v5 策略）"""
-    from core.account import check_take_profit
     tp_tiers = _strategy_profile.tp_tiers or [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
     prev_holdings = {code: h['shares'] for code, h in state.holdings.items()}
     state = check_take_profit(state, date, price_data, tiers=tp_tiers)
@@ -172,7 +176,6 @@ def step_check_take_profit(state, date, price_data, names):
 
 def step_holding_decay(state, date, price_data, names):
     """Step 3c: 持有期 decay（v5 策略）"""
-    from core.account import apply_holding_decay
     prev_shares = {code: h['shares'] for code, h in state.holdings.items()}
     state = apply_holding_decay(state, date, price_data, rebalance_freq=REBAL_FREQ)
     for code in prev_shares:
@@ -207,8 +210,6 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
     logger.info("🔄 调仓日")
 
     # 生成评分
-    from core.scoring import score_all_stocks
-    from core.factors import calc_factors_single
     all_factors = {}
     for f in files:
         code = f.replace(".csv", "")
@@ -260,7 +261,6 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
                         logger.info(f"  ❌ {code} {names.get(code, code)} 已卖出")
 
     # ── 权重分配（委托 core.account.allocate_weights）──
-    from core.account import allocate_weights
     # 计算每只股票的 20 日波动率用于 vol_inverse 加权
     _vol_series = pd.Series(dtype=float)
     for _f in files:
@@ -304,6 +304,11 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
             violated = industry_info.get("violated_industries", {})
             logger.info(f"行业仓位上限触发: {', '.join(f'{k}({v:.1%})' for k,v in violated.items())}")
 
+    # 补仓阈值：当前权重低于目标的80%时触发补仓
+    REBALANCE_THRESHOLD = 0.8
+    # 最小补仓金额（低于此值不操作，避免碎片交易）
+    MIN_ADD_AMOUNT = 10000
+
     # 补仓到目标权重
     for code in top_stocks:
         if code in state.holdings and code in price_data.index:
@@ -314,10 +319,10 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
             current_mv = info['shares'] * p
             current_w = current_mv / current_pv if current_pv > 0 else 0
             target_w = target_weights.get(code, weight_per_stock)
-            if current_w < target_w * 0.8:
+            if current_w < target_w * REBALANCE_THRESHOLD:
                 target_mv = current_pv * target_w
                 add_mv = target_mv - current_mv
-                if add_mv > 10000:
+                if add_mv > MIN_ADD_AMOUNT:
                     adj_p = p * (1 + SLIPPAGE_RATE)
                     add_shares = int(add_mv / adj_p / 100) * 100
                     if add_shares > 0:
@@ -343,7 +348,7 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
                 else:
                     logger.info(f"  ⏭️  {code} {names.get(code, code)} 资金不足跳过")
 
-    return state, 0, turnover_info, industry_info
+    return state, trade_count, turnover_info, industry_info
 
 
 def step_save_state(state, trade_count):

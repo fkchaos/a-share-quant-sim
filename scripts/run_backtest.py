@@ -810,7 +810,6 @@ def main():
     sl = args.stop_loss
 
     score_equal = composite_score(factors)  # FACTOR_WEIGHTS 加权
-    score_ic_none = None
 
     configs = []
 

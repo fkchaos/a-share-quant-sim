@@ -47,12 +47,14 @@ class RiskLimits:
 class StrategyConfig:
     label: str = "default"
     weight_method: str = "equal"          # equal | ic_ir | markowitz
-    top_n: int = 10
+    top_n: int = 12
     rebalance_freq: int = 20
     stop_loss: float = 0.20
     max_position: float = 0.10
-    use_vol_scaling: bool = False
+    use_vol_scaling: bool = True
     vol_target: float = 0.20
+    max_industry_weight: float = 0.25
+    max_daily_turnover: float = 0
     risk_aversion: float = 1.0
     factor_weights: Optional[Dict[str, float]] = None
 
@@ -121,8 +123,10 @@ def load_config(path: Optional[str] = None) -> Config:
             rebalance_freq=s.get("rebalance_freq", risk.rebalance_freq),
             stop_loss=s.get("stop_loss", risk.stop_loss),
             max_position=s.get("max_position", 0.10),
-            use_vol_scaling=s.get("use_vol_scaling", False),
+            use_vol_scaling=s.get("use_vol_scaling", True),
             vol_target=s.get("vol_target", 0.20),
+            max_industry_weight=s.get("max_industry_weight", 0.25),
+            max_daily_turnover=s.get("max_daily_turnover", 0),
             risk_aversion=s.get("risk_aversion", 1.0),
             factor_weights=factor_weights if s.get("weight_method") != "markowitz" else None,
         )

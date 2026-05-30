@@ -70,10 +70,10 @@ factor_weights:
 
 # ── 策略预设 ──────────────────────────────────────────────
 strategies:
-  v3_baseline:
-    label: "v3_baseline"
-    description: "v3 基线：加权29因子, top12, 20日调仓, 20%止损, 行业上限25%, 波动率缩放"
-    weight_method: "weighted"                # weighted = 使用 factor_weights 加权合成
+  v4:
+    label: "v4"
+    description: "v4 最优：29因子加权, top12, 20日调仓, 20%止损, vol_target=0.20, 行业上限25%"
+    weight_method: "weighted"
     top_n: 12
     rebalance_freq: 20
     stop_loss: 0.20
@@ -81,20 +81,20 @@ strategies:
     use_vol_scaling: true
     vol_target: 0.20
     max_industry_weight: 0.25
-    max_daily_turnover: 0                   # 0 = 不限制（换手率限制会显著降低收益）
+    max_daily_turnover: 0
 
-  v3_optimized:
-    label: "v3_optimized"
-    description: "v3 风控优化：基线 + 波动率目标化 + 行业上限 + 换手率控制"
+  v3_baseline:
+    label: "v3_baseline"
+    description: "v3 基线：加权29因子, top12, 20日调仓, 20%止损"
     weight_method: "weighted"
-    max_industry_weight: 0.25
-    max_daily_turnover: 0.30
-    top_n: 20
-    rebalance_freq: 5
-    stop_loss: 0.15
+    top_n: 12
+    rebalance_freq: 20
+    stop_loss: 0.20
     max_position: 0.10
     use_vol_scaling: true
     vol_target: 0.20
+    max_industry_weight: 0.25
+    max_daily_turnover: 0
 
   ic_ir_weighted:
     label: "ic_ir_all"

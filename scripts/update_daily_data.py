@@ -308,18 +308,41 @@ def update_all_stocks(target_date=None):
     if fail_list:
         print(f"  失败列表: {fail_list[:20]}{'...' if len(fail_list) > 20 else ''}")
     
-    # 验证
+    # 验证 + 时效校验
     final_dates = {}
     for code in stocks:
         d = get_local_latest_date(code)
         if d is not None:
             final_dates[code] = d
-    
+
     if final_dates:
         newest_final = max(final_dates.values())
+        oldest_final = min(final_dates.values())
+        today = datetime.now().date()
+        days_behind = (today - newest_final.date()).days
+
         print(f"\n  最新数据日期: {newest_final.date()}")
+        print(f"  最旧数据日期: {oldest_final.date()}")
+
+        # 时效警告
+        if days_behind > 3:
+            print(f"\n  ⚠️ ⚠️ ⚠️ 数据严重滞后！最新数据距今 {days_behind} 天")
+            print(f"     数据停留在 {newest_final.date()}，请检查腾讯接口或网络")
+        elif days_behind > 1:
+            print(f"\n  ⚠️ 数据轻微滞后：最新数据距今 {days_behind} 天（{newest_final.date()}）")
+        else:
+            print(f"\n  ✅ 数据时效正常（最新: {newest_final.date()}）")
+
+        # 检查有没有股票日期严重不一致
+        stale_threshold = newest_final - timedelta(days=5)
+        stale_stocks = [c for c, d in final_dates.items() if d < stale_threshold]
+        if stale_stocks:
+            print(f"\n  ⚠️ {len(stale_stocks)} 只股票数据滞后 >5 天:")
+            for c in stale_stocks[:10]:
+                print(f"       {c}: {final_dates[c].date()}")
+
         print("=" * 60)
-    
+
     return fail == 0
 
 def check_status():
@@ -348,6 +371,13 @@ def check_status():
     print(f"  最旧日期: {oldest.date()}")
     print(f"  已是最新(T或T-1): {up_to_date}/{len(latest_dates)}")
     print(f"  缓存今天是: {today}")
+
+    # 时效警告
+    days_behind = (today - newest.date()).days
+    if days_behind > 3:
+        print(f"\n  ⚠️ ⚠️ ⚠️ 数据严重滞后！最新数据距今 {days_behind} 天")
+    elif days_behind > 1:
+        print(f"\n  ⚠️ 数据轻微滞后：最新数据距今 {days_behind} 天")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='A股日频数据更新')

@@ -391,6 +391,18 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
     sl_count = len(trades_df[trades_df['action'] == 'STOP_LOSS']) if len(trades_df) > 0 else 0
     total_cost = float(trades_df['cost'].sum()) if len(trades_df) > 0 else 0
 
+    # ── Self-check: warn if result looks suspicious ──
+    _warnings = []
+    if ann_ret < 0 and total_ret > -0.3:
+        _warnings.append(f"⚠️  Negative annual return ({ann_ret:.1%}) — check score/volume data")
+    if max_dd > 0.50:
+        _warnings.append(f"⚠️  Extreme max drawdown ({max_dd:.1%}) — possible data/configuration issue")
+    if sl_count == 0 and stop_loss > 0:
+        _warnings.append(f"⚠️  Zero stop-loss triggers despite sl={stop_loss} — check price data quality")
+    if _warnings:
+        for _w in _warnings:
+            print(f"  {_w}")
+
     metrics = {
         'label': label,
         'total_return': round(float(total_ret), 6),

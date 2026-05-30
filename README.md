@@ -137,7 +137,8 @@ a-share-quant-sim/
 │   ├── account.py                  # PortfolioState + buy/sell/check_stop_loss
 │   └── scoring.py                  # Z-score 标准化 + 复合评分
 ├── scripts/
-│   ├── sim_daily_v6.py             # ⭐ 每日模拟盘 (v6, core-based)
+│   ├── sim_daily_v6.py             # ⭐ 每日模拟盘 (v6, core-based, Pipeline)
+│   ├── sim_logging.py              # 日志配置 (控制台+文件双输出)
 │   ├── run_backtest.py             # 统一回测引擎 (delegates to core/)
 │   ├── update_daily_data.py        # 数据更新: 腾讯 API → 本地 CSV
 │   ├── constraints.py              # P0-1: A股交易约束

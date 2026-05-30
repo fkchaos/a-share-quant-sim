@@ -20,7 +20,7 @@ v6 变更：
 import sys, os, pandas as pd, numpy as np, json, time, logging
 from datetime import datetime
 
-sys.path.insert(0, "/root")
+sys.path.insert(0, "/root/a-share-quant-sim")
 sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Core engine (shared with run_backtest.py) ─────────────────────
@@ -40,7 +40,9 @@ from indices import get_index_trends, IndexBenchmarkService
 from sim_logging import get_logger
 
 # ── Config ─────────────────────────────────────────────────────────
-DATA_DIR = "data"
+# ── 用环境变量覆盖数据路径（测试用）──
+_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", "data")
+DATA_DIR = _sim_data_dir
 PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 SIGNAL_DIR = os.path.join(DATA_DIR, "signals")

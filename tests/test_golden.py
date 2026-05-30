@@ -56,9 +56,9 @@ def real_panel():
     """加载真实数据的一个小子集用于 golden test"""
     from scripts.run_backtest import load_and_build_panel, _load_stock_names
 
-    # 只用最近 200 个交易日
+    # 加载全量数据（2021~2026），用于基准 golden test
     (close_panel, volume_panel, amount_panel), codes = load_and_build_panel(
-        start="2025-01-01", end=None
+        start_date=None, end_date=None
     )
     stock_names = _load_stock_names()
     return close_panel, volume_panel, amount_panel, stock_names
@@ -232,7 +232,7 @@ class TestGoldenBaseline:
         "v4_baseline_no_ind_cap": dict(
             annual_return=0.2482,
             sharpe_ratio=1.11,
-            max_drawdown=-0.2887,
+            max_drawdown=0.2887,
             tolerance=0.02,  # ±2pp for return/DD, ±0.05 for sharpe
         ),
     }

@@ -17,7 +17,7 @@ DEFAULT_FACTOR_WEIGHTS = {
     'vol_ratio_5': 0.05, 'vol_ratio_20': 0.05, 'amount_ratio': 0.05,
     'rsi_6': 0.03, 'rsi_14': 0.05, 'rsi_28': 0.02,
     'macd_12_26': 0.08, 'macd_5_35': 0.04,
-    'boll_pos_10': 0.03, 'boll_pos_20': 0.03, 'boll_width_20': -0.02,
+    'boll_pos_10': 0.03, 'boll_pos_20': 0.03, 'boll_width_20': 0.03,
     'atr_14': -0.03,
     'skew_20': 0.02, 'kurt_20': -0.02,
     'vwap_mom': 0.03,
@@ -64,6 +64,61 @@ class StrategyConfig:
     use_holding_decay: bool = False
     use_atr_stop: bool = False
     atr_k: float = 6.0
+
+
+# ============================================================
+# Pre-defined Strategy Profiles
+# ============================================================
+# 所有策略参数集中在此处定义，run_backtest 和 sim_daily 都从这里读。
+# 新增策略：在此添加一个常量，同时在 STRATEGY_PROFILES dict 里注册。
+
+PROFILE_V4_BASELINE = StrategyConfig(
+    label="v4_baseline",
+    weight_method="equal",
+    top_n=12,
+    rebalance_freq=20,
+    stop_loss=0.20,
+    max_position=0.10,
+    use_vol_scaling=True,
+    vol_target=0.20,
+    max_industry_weight=0,       # 无行业限制
+    max_daily_turnover=0,         # 无换手率限制
+)
+
+PROFILE_V4_WITH_INDUSTRY_CAP = StrategyConfig(
+    label="v4_industry_cap",
+    weight_method="equal",
+    top_n=12,
+    rebalance_freq=20,
+    stop_loss=0.20,
+    max_position=0.10,
+    use_vol_scaling=True,
+    vol_target=0.20,
+    max_industry_weight=0.25,    # 行业限制25%
+    max_daily_turnover=0,
+)
+
+PROFILE_V5_TP_DECAY = StrategyConfig(
+    label="v5_tp_decay",
+    weight_method="equal",
+    top_n=12,
+    rebalance_freq=20,
+    stop_loss=0.20,
+    max_position=0.10,
+    use_vol_scaling=True,
+    vol_target=0.20,
+    max_industry_weight=0.25,
+    max_daily_turnover=0,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+)
+
+STRATEGY_PROFILES = {
+    "v4_baseline": PROFILE_V4_BASELINE,
+    "v4_industry_cap": PROFILE_V4_WITH_INDUSTRY_CAP,
+    "v5_tp_decay": PROFILE_V5_TP_DECAY,
+}
 
 
 @dataclass

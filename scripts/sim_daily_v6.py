@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Core engine (shared with run_backtest.py) ─────────────────────
 from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
-from core.config import config as core_config
+from core.config import config as core_config, STRATEGY_PROFILES
 
 # ── Auxiliary modules ──────────────────────────────────────────────
 from constraints import build_trade_context
@@ -44,17 +44,24 @@ DAILY_DIR = os.path.join(DATA_DIR, "daily")
 SIGNAL_DIR = os.path.join(DATA_DIR, "signals")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
-# Strategy params (from core config)
-REBAL_FREQ = core_config.risk.rebalance_freq
-STOP_LOSS = core_config.risk.stop_loss
-TOP_N = core_config.risk.top_n
+# Strategy params — from STRATEGY_PROFILES (single source of truth)
+_PROFILE = "v4_industry_cap"  # ← 切换策略：v4_baseline | v4_industry_cap | v5_tp_decay
+_strategy_profile = STRATEGY_PROFILES[_PROFILE]
+
+REBAL_FREQ = _strategy_profile.rebalance_freq
+STOP_LOSS = _strategy_profile.stop_loss
+TOP_N = _strategy_profile.top_n
+MAX_INDUSTRY_WEIGHT = _strategy_profile.max_industry_weight
+MAX_DAILY_TURNOVER = _strategy_profile.max_daily_turnover
+MAX_SINGLE_WEIGHT = _strategy_profile.max_position  # 单只最大仓位（与回测一致）
+
+# Trading costs
 SLIPPAGE_RATE = core_config.costs.slippage_rate
 COMMISSION_RATE = core_config.costs.commission_rate
 INITIAL_CAPITAL = core_config.costs.initial_capital
 
-# P0-3 / P1-1
-MAX_DAILY_TURNOVER = 0.30
-MAX_INDUSTRY_WEIGHT = 0.25
+logger.debug(f"策略 profile: {_PROFILE}, top_n={TOP_N}, freq={REBAL_FREQ}, sl={STOP_LOSS}, "
+             f"ind_cap={MAX_INDUSTRY_WEIGHT}, turnover_cap={MAX_DAILY_TURNOVER}")
 
 logger = get_logger("sim_daily")
 
@@ -241,7 +248,7 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
         top_stocks, price_data,
         method=_weight_method,
         vol_series=_vol_series,
-        max_position=MAX_DAILY_TURNOVER,  # 单只极限权重
+        max_position=MAX_SINGLE_WEIGHT,  # 单只极限权重
     )
     # target_weights 已经归一化，sum ≈ 1.0
     weight_per_stock = 1.0 / TOP_N  # 等权重参考值（用于后续补仓比较）

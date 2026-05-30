@@ -214,7 +214,9 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                  initial_capital=None,
                  max_industry_weight=0.25, max_daily_turnover=0,
                  stock_names=None,
-                 use_atr_stop=False, atr_k=2.0):
+                 use_atr_stop=False, atr_k=2.0,
+                 use_take_profit=False, tp_tiers=None,
+                 use_holding_decay=False):
     """
     完整回测引擎。
 
@@ -224,6 +226,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
     weight_method: 'equal' | 'markowitz'
     """
     from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
+    from core.account import check_take_profit, apply_holding_decay
     from core.config import config
 
     icap = initial_capital or config.costs.initial_capital
@@ -260,6 +263,15 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
         if atr_panel is not None and date in atr_panel.index:
             atr_day = atr_panel.loc[date]
         state = check_stop_loss(state, date, price_data, atr_data=atr_day)
+
+        # ── 1b. 分级止盈（委托 core.account.check_take_profit）──
+        if use_take_profit:
+            state = check_take_profit(state, date, price_data, tiers=tp_tiers)
+
+        # ── 1c. 持有期 decay（委托 core.account.apply_holding_decay）──
+        if use_holding_decay:
+            state = apply_holding_decay(state, date, price_data,
+                                        rebalance_freq=rebalance_freq)
 
         # ── 2. 调仓 ──────────────────────────────────────────
         if (i - 120) % rebalance_freq == 0 and date in score.index:

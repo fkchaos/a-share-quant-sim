@@ -45,6 +45,20 @@ W_V6B = {
     'rev_10': 0.08, 'boll_pos_20': 0.08,
 }
 
+# v8: 18 因子 IC_IR 加权（去冗余）
+W_V8 = {
+    'illiquidity': +0.1806, 'boll_width_20': +0.1113, 'amplitude': +0.0749,
+    'turnover_skew': -0.0715, 'mom_120': -0.0666, 'vol_20': +0.0647,
+    'turnover_change': +0.0575, 'vol_ratio_20': +0.0536, 'rev_3': -0.0522,
+    'boll_pos_20': +0.0459, 'amount_ratio': +0.0395, 'price_impact': +0.0384,
+    'macd_12_26': -0.0294, 'mom_20': +0.0290, 'pv_corr': -0.0259,
+    'chip_kurt': -0.0205, 'obv_slope': -0.0199, 'kurt_20': -0.0184,
+}
+
+# v9: v8 + log_mv（市值因子，IC_IR=+0.301）
+# 先不加 log_mv，因为需要外部数据
+# v9 在 config.py 的 STRATEGY_PROFILES 中配置
+
 # ── 数据加载 ──────────────────────────────────────────────────────
 def load_panel():
     files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
@@ -191,10 +205,13 @@ if __name__ == "__main__":
     score_v6a = composite_score(factors_v6a, W_V6A)
     factors_v6b = {k: v for k, v in factors_all.items() if k in W_V6B}
     score_v6b = composite_score(factors_v6b, W_V6B)
+    factors_v8 = {k: v for k, v in factors_all.items() if k in W_V8}
+    score_v8 = composite_score(factors_v8, W_V8)
     
     print(f"  v5:  {len(W_V5)} 因子等权")
     print(f"  v6a: {len(W_V6A)} 因子 |IC_IR| 加权")
     print(f"  v6b: {len(W_V6B)} 因子正IC等权")
+    print(f"  v8:  {len(W_V8)} 因子 IC_IR加权")
     
     # 统一参数
     common = dict(
@@ -216,8 +233,11 @@ if __name__ == "__main__":
     print("  v6b (8f_正IC)...")
     results['v6b_8f'] = run_bt(close_panel, score_v6b, '8f_pos_ic', **common)
     
+    print("  v8 (18f_IC_IR)...")
+    results['v8_18f'] = run_bt(close_panel, score_v8, '18f_icir', **common)
+    
     # 对比
-    labels = ['v5_29f', 'v6a_12f', 'v6b_8f']
+    labels = ['v5_29f', 'v6a_12f', 'v6b_8f', 'v8_18f']
     print(f"\n{'='*75}")
     print(f"{'策略对比（统一：行业25% + TP + Decay）':^75}")
     print(f"{'='*75}")

@@ -227,4 +227,41 @@ def calc_factors_panel(
     cross_mean_60 = close_panel.mean(axis=1).pct_change(60)
     factors['rel_strength_60'] = close_panel.pct_change(60).sub(cross_mean_60, axis=0)
 
+    # ── v8 新增因子（去冗余后保留）──────────────────────────────────
+
+    # Amplitude: 日内振幅 (high-low)/close，用 close 近似
+    high_approx = close_panel.rolling(2).max()
+    low_approx = close_panel.rolling(2).min()
+    factors['amplitude'] = (high_approx - low_approx) / (close_panel + eps)
+
+    # Illiquidity (Amihud): |return| / amount，非流动性越高值越大
+    abs_returns = returns.abs()
+    factors['illiquidity'] = abs_returns / (amount_panel + eps)
+
+    # Turnover skew: 换手率偏度（20日）
+    turnover = volume_panel / (volume_panel.rolling(20).mean() + eps)
+    factors['turnover_skew'] = turnover.rolling(20).skew()
+
+    # Turnover change: 5日换手率 vs 20日换手率
+    turnover_5 = volume_panel / (volume_panel.rolling(5).mean() + eps)
+    turnover_20 = volume_panel / (volume_panel.rolling(20).mean() + eps)
+    factors['turnover_change'] = turnover_5 / (turnover_20 + eps)
+
+    # Price impact: 收益率 / 成交额变化，衡量价格冲击
+    amount_change = amount_panel.pct_change(5)
+    factors['price_impact'] = returns.rolling(5).sum() / (amount_change.abs() + eps)
+
+    # PV correlation: 价格与成交量的 10日滚动相关系数
+    factors['pv_corr'] = close_panel.rolling(10).corr(volume_panel)
+
+    # Chip kurtosis: 成本的峰度（用收益率峰度近似筹码分布）
+    factors['chip_kurt'] = returns.rolling(20).kurt()
+
+    # OBV slope: OBV 的线性回归斜率
+    obv = (returns.apply(lambda x: (x > 0).astype(int) - (x <= 0).astype(int)) * volume_panel).cumsum()
+    obv_slope = obv.rolling(10).apply(
+        lambda s: np.polyfit(np.arange(len(s)), s, 1)[0] if len(s) > 1 else 0, raw=True
+    )
+    factors['obv_slope'] = obv_slope
+
     return factors

@@ -708,117 +708,83 @@ def _load_stock_names() -> dict:
 # 主流程
 # ============================================================
 def main():
-    parser = argparse.ArgumentParser(description="A股量化回测系统")
+    # 动态生成策略帮助文本
+    from core.config import STRATEGY_PROFILES
+    available = " | ".join(sorted(STRATEGY_PROFILES.keys()))
+
+    parser = argparse.ArgumentParser(
+        description="A股量化回测系统",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"可用策略（来自 core.config.STRATEGY_PROFILES）：\n  {available}\n"
+               f"指定多个：--strategy v5_tp_decay v6a_12f_icir v7c_8f_no_ind\n"
+               f"全部运行：--strategy all")
     parser.add_argument("--strategy", nargs="+", default=["all"],
-                        help="策略列表: v3_baseline | v3_optimized | ic_ir_weighted | "
-                             "ic_selected | markowitz | all")
+                        help=f"策略名称列表，或 all（全部）。可用：{available}")
     parser.add_argument("--start", default=None, help="回测起始日期 (YYYY-MM-DD)")
     parser.add_argument("--end", default=None, help="回测结束日期 (YYYY-MM-DD)")
-    parser.add_argument("--top-n", type=int, default=None, help="持仓数量")
-    parser.add_argument("--rebalance-freq", type=int, default=None, help="调仓频率(日)")
-    parser.add_argument("--stop-loss", type=float, default=None, help="止损比例 (如 0.15)")
-    parser.add_argument("--max-position", type=float, default=0.10, help="单只最大仓位")
+    parser.add_argument("--top-n", type=int, default=None, help="覆盖：持仓数量")
+    parser.add_argument("--rebalance-freq", type=int, default=None, help="覆盖：调仓频率(日)")
+    parser.add_argument("--stop-loss", type=float, default=None, help="覆盖：止损比例")
+    parser.add_argument("--max-position", type=float, default=None, help="覆盖：单只最大仓位")
     parser.add_argument("--scan", action="store_true", help="启用参数网格扫描")
     parser.add_argument("--walk-forward", action="store_true", help="启用 Walk-Forward 过拟合检测")
     parser.add_argument("--output-dir", default=None, help="结果输出目录")
-    parser.add_argument("--report-markdown", action="store_true",
-                        help="输出 Markdown 报告到 stdout")
-    parser.add_argument("--ic-analysis", action="store_true",
-                        help="运行 IC 因子分析")
-    parser.add_argument("--log", action="store_true",
-                        help="自动追加结果到 docs/RESULTS_LOG.md")
+    parser.add_argument("--report-markdown", action="store_true", help="输出 Markdown 报告到 stdout")
+    parser.add_argument("--ic-analysis", action="store_true", help="运行 IC 因子分析")
+    parser.add_argument("--log", action="store_true", help="自动追加结果到 docs/RESULTS_LOG.md")
     args = parser.parse_args()
 
     # Load stock names for industry classification
     stock_names = _load_stock_names()
 
     print("=" * 60)
-    print("A股量化回测系统  |  core/engine: factors+scoring+account")
+    print("A股量化回测系统  |  策略参数来源：core.config.STRATEGY_PROFILES")
     print("=" * 60)
     t0 = time.time()
 
-    # 1. 加载数据
+    # ── 1. 加载数据 ────────────────────────────────────────────
     print(f"\n[1/5] 加载数据...")
     (close_panel, volume_panel, amount_panel), codes = load_and_build_panel(
         args.start, args.end)
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只股票")
     print(f"  区间: {close_panel.index[0].date()} ~ {close_panel.index[-1].date()}")
 
-    # 2. 因子计算（委托 core.factors.calc_factors_panel）
+    # ── 2. 因子计算 ────────────────────────────────────────────
     print(f"\n[2/5] 计算因子...")
     factors = calc_factors_panel(close_panel, volume_panel, amount_panel)
     print(f"  共 {len(factors)} 个因子")
 
-    # 3. IC 分析（可选）
+    # ── 3. IC 分析（可选） ────────────────────────────────────
     ic_results = None
     if args.ic_analysis:
         print(f"\n[3/5] IC 分析...")
         ic_results = run_ic_analysis(factors, close_panel)
 
-    # 4. 构建评分（委托 core.scoring）
+    # ── 4. 评分构建 ────────────────────────────────────────────
     print(f"\n[3/5] 构建评分矩阵...")
-    score_equal = composite_score_equal(factors)
-    if ic_results:
-        # IC 分析输出
-        selected, discarded = select_factors_ic(ic_results)
-        print(f"  有效因子: {len(selected)} / {len(factors)}")
-        if discarded:
-            print(f"  淘汰因子: {discarded}")
-        ic_table = pd.DataFrame({
-            name: {k: round(v, 4) for k, v in stats.items()}
-            for name, stats in sorted(ic_results.items(), key=lambda x: abs(x[1]['ic_ir']), reverse=True)
-        }).T
-        print(f"\n  IC 统计（按 |IC_IR| 降序）:\n{ic_table.to_string()}")
+    score_equal = composite_score(factors)  # 默认 29 因子等权
 
-        selected_weights = {name: abs(stats['ic_ir'])
-                            for name, stats in ic_results.items()
-                            if abs(stats['ic_ir']) >= 0.03 and stats['ic_positive_rate'] >= 0.50}
-        total_w = sum(selected_weights.values())
-        if total_w > 0:
-            selected_weights = {k: v / total_w for k, v in selected_weights.items()}
-        score_ic = composite_score(factors, selected_weights)
-    else:
-        score_ic = None
-
-    # 4b. 因子相关性分析（检测冗余因子）
-    if ic_results:
-        from core.scoring import factor_correlation
-        corr_matrix, redundant = factor_correlation(factors)
-        if redundant:
-            print(f"\n  ⚠️ 高相关因子对 (|ρ| > 0.8): {len(redundant)} 对")
-            for fa, fb, c in redundant[:10]:
-                print(f"    {fa} ↔ {fb}: {c:+.4f}")
-            print("  → 建议：考虑删除其中一个或合并")
-        else:
-            print(f"\n  ✅ 因子间无严重冗余 (所有 |ρ| ≤ 0.8)")
-
-    # 5. 回测（委托 core.account）
+    # ── 5. 策略选择：自动从 STRATEGY_PROFILES 读取 ─────────────
     print(f"\n[4/5] 运行回测...")
-    strategies = args.strategy
-    run_all = "all" in strategies
 
-    # 从 core.config 加载预定义策略 profiles
-    from core.config import STRATEGY_PROFILES
-
-    metrics_list = []
-    nav_dict = {}
-    trades_dict = {}
+    requested = args.strategy
+    run_all = "all" in requested
 
     # 解析命令行通用参数覆盖
-    top_n = args.top_n
-    rebal_freq = args.rebalance_freq
-    sl = args.stop_loss
-
-    score_equal = composite_score(factors)  # FACTOR_WEIGHTS 加权
+    cli_top_n = args.top_n
+    cli_rebal = args.rebalance_freq
+    cli_sl = args.stop_loss
+    cli_max_pos = args.max_position
 
     configs = []
 
-    def _build_cfg(profile, score, extra_kwargs=None):
+    def _build_cfg(profile, score):
         """从 StrategyProfile 构建运行 config，支持命令行参数覆盖"""
         kw = dict(
-            top_n=top_n or profile.top_n,
-            rebalance_freq=rebal_freq or profile.rebalance_freq,
-            stop_loss=sl or profile.stop_loss,
+            top_n=cli_top_n if cli_top_n is not None else profile.top_n,
+            rebalance_freq=cli_rebal if cli_rebal is not None else profile.rebalance_freq,
+            stop_loss=cli_sl if cli_sl is not None else profile.stop_loss,
+            max_position=cli_max_pos if cli_max_pos is not None else profile.max_position,
             max_industry_weight=profile.max_industry_weight,
             max_daily_turnover=profile.max_daily_turnover,
             weight_method=profile.weight_method,
@@ -827,39 +793,38 @@ def main():
             tp_tiers=profile.tp_tiers,
             use_holding_decay=profile.use_holding_decay,
         )
-        if extra_kwargs:
-            kw.update(extra_kwargs)
         return {'label': profile.label, 'score': score, 'kwargs': kw}
 
-    if run_all or "v3_baseline" in strategies:
-        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal,
-                                  extra_kwargs=dict(top_n=top_n or 20, rebalance_freq=rebal_freq or 5,
-                                                     stop_loss=sl or 0.15, max_industry_weight=0.25,
-                                                     max_daily_turnover=0.30)))
-    if run_all or "v3_optimized" in strategies:
-        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal))
-    if run_all or "v4_industry_cap" in strategies:
-        configs.append(_build_cfg(STRATEGY_PROFILES["v4_industry_cap"], score_equal))
-    if run_all or "v5_tp_decay" in strategies:
-        configs.append(_build_cfg(STRATEGY_PROFILES["v5_tp_decay"], score_equal))
-    if (run_all or "ic_ir_weighted" in strategies) and ic_results:
-        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal,
-                                  extra_kwargs=dict(top_n=top_n or 10)))
-    if (run_all or "ic_selected" in strategies) and score_ic is not None:
-        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_ic,
-                                  extra_kwargs=dict(top_n=top_n or 10)))
-    if (run_all or "markowitz" in strategies):
-        configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal,
-                                  extra_kwargs=dict(weight_method='markowitz')))
+    if run_all:
+        # 跑所有已注册策略
+        for name, profile in sorted(STRATEGY_PROFILES.items()):
+            score = score_equal if profile.factor_weights is None else composite_score(
+                {k: v for k, v in factors.items() if k in profile.factor_weights},
+                profile.factor_weights
+            )
+            configs.append(_build_cfg(profile, score))
+    else:
+        for name in requested:
+            if name not in STRATEGY_PROFILES:
+                print(f"  ⚠️ 未知策略 '{name}'，跳过。可用：{list(STRATEGY_PROFILES.keys())}")
+                continue
+            profile = STRATEGY_PROFILES[name]
+            if profile.factor_weights:
+                score = composite_score(
+                    {k: v for k, v in factors.items() if k in profile.factor_weights},
+                    profile.factor_weights
+                )
+            else:
+                score = score_equal
+            configs.append(_build_cfg(profile, score))
 
-    # 如果没匹配到任何已知策略，默认跑 v4_baseline
     if not configs:
+        print("  ⚠️ 未匹配到任何策略，使用 v4_baseline")
         configs.append(_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal))
 
-    # IC 策略降级处理
-    if not ic_results and not any(c['label'] in ('v3_baseline', 'v4_baseline', 'v4_industry_cap', 'v5_tp_decay') for c in configs):
-        print("  ⚠️ 未启用 --ic-analysis，IC 相关策略不可用，用 v4_baseline 替代")
-        configs = [_build_cfg(STRATEGY_PROFILES["v4_baseline"], score_equal)]
+    metrics_list = []
+    nav_dict = {}
+    trades_dict = {}
 
     for cfg in configs:
         print(f"\n  ▶ {cfg['label']}: top_n={cfg['kwargs'].get('top_n')}, "

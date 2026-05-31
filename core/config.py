@@ -27,7 +27,7 @@ DEFAULT_FACTOR_WEIGHTS = {
 
 @dataclass
 class TradingCosts:
-    initial_capital: float = 1_000_000
+    initial_capital: float = 200_000
     commission_rate: float = 0.0003
     stamp_tax_rate: float = 0.001
     slippage_rate: float = 0.001
@@ -46,78 +46,174 @@ class RiskLimits:
 
 @dataclass
 class StrategyConfig:
+    """策略参数 — 所有策略的唯一参数来源。run_backtest 和 sim_daily 都从这里读。"""
     label: str = "default"
+
+    # ── 选股参数 ──────────────────────────────────────────────
     weight_method: str = "equal"          # equal | ic_ir | markowitz
     top_n: int = 12
     rebalance_freq: int = 20
+    factor_weights: Optional[Dict[str, float]] = None  # None = 用 config.factor_weights
+
+    # ── 风控参数 ──────────────────────────────────────────────
     stop_loss: float = 0.20
-    max_position: float = 0.10
+    max_position: float = 0.10             # 单只最大仓位占比
+    max_industry_weight: float = 0.0       # 0 = 不限制
+    max_daily_turnover: float = 0          # 0 = 不限制
+
+    # ── 波动率缩放 ────────────────────────────────────────────
     use_vol_scaling: bool = True
     vol_target: float = 0.20
-    max_industry_weight: float = 0.25
-    max_daily_turnover: float = 0
-    risk_aversion: float = 1.0
-    factor_weights: Optional[Dict[str, float]] = None
-    # New sell-side controls
+
+    # ── 止盈 ──────────────────────────────────────────────────
     use_take_profit: bool = False
-    tp_tiers: Optional[list] = None       # e.g. [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
+    tp_tiers: Optional[list] = None        # e.g. [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
+
+    # ── 持有期衰减 ────────────────────────────────────────────
     use_holding_decay: bool = False
+
+    # ── ATR 止损 ──────────────────────────────────────────────
     use_atr_stop: bool = False
     atr_k: float = 6.0
 
+    # ── 优化用 ────────────────────────────────────────────────
+    risk_aversion: float = 1.0
+
 
 # ============================================================
-# Pre-defined Strategy Profiles
+# 预定义策略 Profiles
 # ============================================================
-# 所有策略参数集中在此处定义，run_backtest 和 sim_daily 都从这里读。
-# 新增策略：在此添加一个常量，同时在 STRATEGY_PROFILES dict 里注册。
+# 新增策略：在此添加常量 + 在 STRATEGY_PROFILES dict 里注册
 
 PROFILE_V4_BASELINE = StrategyConfig(
     label="v4_baseline",
     weight_method="equal",
-    top_n=12,
-    rebalance_freq=20,
-    stop_loss=0.20,
-    max_position=0.10,
-    use_vol_scaling=True,
-    vol_target=0.20,
-    max_industry_weight=0,       # 无行业限制
-    max_daily_turnover=0,         # 无换手率限制
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0,
 )
 
-PROFILE_V4_WITH_INDUSTRY_CAP = StrategyConfig(
+PROFILE_V4_INDUSTRY_CAP = StrategyConfig(
     label="v4_industry_cap",
     weight_method="equal",
-    top_n=12,
-    rebalance_freq=20,
-    stop_loss=0.20,
-    max_position=0.10,
-    use_vol_scaling=True,
-    vol_target=0.20,
-    max_industry_weight=0.25,    # 行业限制25%
-    max_daily_turnover=0,
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
 )
 
 PROFILE_V5_TP_DECAY = StrategyConfig(
     label="v5_tp_decay",
     weight_method="equal",
-    top_n=12,
-    rebalance_freq=20,
-    stop_loss=0.20,
-    max_position=0.10,
-    use_vol_scaling=True,
-    vol_target=0.20,
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
-    max_daily_turnover=0,
     use_take_profit=True,
     tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
     use_holding_decay=True,
 )
 
+# ── v6 系列：因子优化 ──────────────────────────────────────────
+
+PROFILE_V6A_12F_ICIR = StrategyConfig(
+    label="v6a_12f_icir",
+    weight_method="ic_ir",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'mom_60': 0.2236, 'macd_12_26': 0.1979, 'mom_120': 0.1902,
+        'rsi_28': 0.1510, 'vol_10': 0.1426, 'atr_14': 0.1392,
+        'vol_20': 0.1375, 'vol_60': 0.1321, 'mom_20': 0.0985,
+        'vol_ratio_20': 0.0957, 'skew_20': 0.0945, 'boll_width_20': 0.0897,
+    },
+)
+
+PROFILE_V6B_8F_POS_IC = StrategyConfig(
+    label="v6b_8f_pos_ic",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
+        'vol_ratio_5': 0.12, 'boll_pos_10': 0.12, 'mom_5': 0.10,
+        'rev_10': 0.08, 'boll_pos_20': 0.08,
+    },
+)
+
+# ── v7 系列：放开行业限制 ──────────────────────────────────────
+
+PROFILE_V7A_8F_IND40 = StrategyConfig(
+    label="v7a_8f_ind40",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.40,             # 放开到 40%
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
+        'vol_ratio_5': 0.12, 'boll_pos_10': 0.12, 'mom_5': 0.10,
+        'rev_10': 0.08, 'boll_pos_20': 0.08,
+    },
+)
+
+PROFILE_V7B_8F_IND50 = StrategyConfig(
+    label="v7b_8f_ind50",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.50,             # 放开到 50%
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
+        'vol_ratio_5': 0.12, 'boll_pos_10': 0.12, 'mom_5': 0.10,
+        'rev_10': 0.08, 'boll_pos_20': 0.08,
+    },
+)
+
+PROFILE_V7C_8F_NO_IND = StrategyConfig(
+    label="v7c_8f_no_ind",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0,                # 完全不限制
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
+        'vol_ratio_5': 0.12, 'boll_pos_10': 0.12, 'mom_5': 0.10,
+        'rev_10': 0.08, 'boll_pos_20': 0.08,
+    },
+)
+
 STRATEGY_PROFILES = {
     "v4_baseline": PROFILE_V4_BASELINE,
-    "v4_industry_cap": PROFILE_V4_WITH_INDUSTRY_CAP,
+    "v4_industry_cap": PROFILE_V4_INDUSTRY_CAP,
     "v5_tp_decay": PROFILE_V5_TP_DECAY,
+    "v6a_12f_icir": PROFILE_V6A_12F_ICIR,
+    "v6b_8f_pos_ic": PROFILE_V6B_8F_POS_IC,
+    "v7a_8f_ind40": PROFILE_V7A_8F_IND40,
+    "v7b_8f_ind50": PROFILE_V7B_8F_IND50,
+    "v7c_8f_no_ind": PROFILE_V7C_8F_NO_IND,
 }
 
 

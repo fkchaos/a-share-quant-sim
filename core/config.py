@@ -216,6 +216,53 @@ STRATEGY_PROFILES = {
     "v7c_8f_no_ind": PROFILE_V7C_8F_NO_IND,
 }
 
+# ── v8 系列：去冗余 + IC_IR 加权（新默认）──────────────────────────
+
+PROFILE_V8_ALL_ICIR = StrategyConfig(
+    label="v8_all_icir",
+    weight_method="ic_ir",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        # 去冗余后的 18 个因子，按 |IC_IR| 归一化，负 IC 因子取负权重
+        'illiquidity':    +0.1806,
+        'boll_width_20':  +0.1113,
+        'amplitude':      +0.0749,
+        'turnover_skew':  -0.0715,
+        'mom_120':        -0.0666,
+        'vol_20':         +0.0647,
+        'turnover_change':+0.0575,
+        'vol_ratio_20':   +0.0536,
+        'rev_3':          -0.0522,
+        'boll_pos_20':    +0.0459,
+        'amount_ratio':   +0.0395,
+        'price_impact':   +0.0384,
+        'macd_12_26':     -0.0294,
+        'mom_20':         +0.0290,
+        'pv_corr':        -0.0259,
+        'chip_kurt':      -0.0205,
+        'obv_slope':      -0.0199,
+        'kurt_20':        -0.0184,
+    },
+)
+
+STRATEGY_PROFILES = {
+    "v4_baseline": PROFILE_V4_BASELINE,
+    "v4_industry_cap": PROFILE_V4_INDUSTRY_CAP,
+    "v5_tp_decay": PROFILE_V5_TP_DECAY,
+    "v6a_12f_icir": PROFILE_V6A_12F_ICIR,
+    "v6b_8f_pos_ic": PROFILE_V6B_8F_POS_IC,
+    "v7a_8f_ind40": PROFILE_V7A_8F_IND40,
+    "v7b_8f_ind50": PROFILE_V7B_8F_IND50,
+    "v7c_8f_no_ind": PROFILE_V7C_8F_NO_IND,
+    "v8_all_icir": PROFILE_V8_ALL_ICIR,
+}
+
 
 @dataclass
 class Config:

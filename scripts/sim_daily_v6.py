@@ -49,7 +49,7 @@ SIGNAL_DIR = os.path.join(DATA_DIR, "signals")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 # Strategy params — from STRATEGY_PROFILES (single source of truth)
-_PROFILE = "v6b_8f_pos_ic"  # ← 切换策略：v4_baseline | v4_industry_cap | v5_tp_decay | v6b_8f_pos_ic
+_PROFILE = "v6b_8f_pos_ic"  # ← 切换策略：v4_baseline | v4_industry_cap | v5_tp_decay | v6b_8f_pos_ic | v8_all_icir
 _strategy_profile = STRATEGY_PROFILES[_PROFILE]
 
 REBAL_FREQ = _strategy_profile.rebalance_freq

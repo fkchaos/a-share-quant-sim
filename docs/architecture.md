@@ -274,9 +274,9 @@ python scripts/run_backtest.py --strategy v5_tp_decay --log
 ```
 
 **数据路径**：
-- 本地：`/root/data/` (data/daily/*.csv)
-- 回测：需设置 `BACKTEST_DATA_DIR=/root/data`
-数据保存到 `BACKTEST_DATA_DIR/{code}.csv`（默认 `/root/data/daily/`）
+- 默认：`data/daily/`（工程内，相对于项目根目录）
+- 覆盖：设 `BACKTEST_DATA_DIR=/path/to/data` 环境变量
+- 所有脚本（sim_daily_v7 / run_backtest / update_daily_data）均支持
 
 ---
 

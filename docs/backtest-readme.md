@@ -41,7 +41,7 @@
 # 安装
 pip install -r requirements.txt
 
-# 首次运行需下载数据（或设 BACKTEST_DATA_DIR=/root/data）
+# 首次运行需下载数据
 python scripts/update_daily_data.py
 
 # Golden Tests (< 1s)

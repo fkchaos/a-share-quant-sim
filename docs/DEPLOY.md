@@ -88,13 +88,15 @@ crontab -e
 
 ### 环境变量
 
-如果数据目录不在项目下，设 `BACKTEST_DATA_DIR`：
+如果数据目录不在工程内，设 `BACKTEST_DATA_DIR`：
 
 ```bash
 export BACKTEST_DATA_DIR=/path/to/data
 # 或在 crontab 里：
 35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_signal
 ```
+
+> 默认数据目录为工程内 `data/daily/`，无需额外配置。
 
 ## 数据目录结构
 

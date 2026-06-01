@@ -42,7 +42,7 @@ from indices import get_index_trends, IndexBenchmarkService
 from sim_logging import get_logger
 
 # ── Config ─────────────────────────────────────────────────────────
-_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", "data")
+_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
 DATA_DIR = _sim_data_dir
 PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
@@ -147,12 +147,20 @@ def fetch_tencent_spot_batch(codes, timeout=15):
 # ═══════════════════════════════════════════════════════════════════
 
 def step_update_data():
-    """Step 0: 更新行情数据"""
+    """Step 0: 更新行情数据 (复用项目目录的 update_daily_data.py)"""
     logger.info("📥 更新行情数据...")
     import subprocess
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    update_script = os.path.join(script_dir, "update_daily_data.py")
+    env = os.environ.copy()
+    # 确保子进程也使用相同的数据目录
+    if "BACKTEST_DATA_DIR" in os.environ:
+        env["BACKTEST_DATA_DIR"] = os.environ["BACKTEST_DATA_DIR"]
     result = subprocess.run(
-        [sys.executable, os.path.join(os.path.expanduser("~"), "update_daily_data.py")],
-        capture_output=True, text=True, timeout=300
+        [sys.executable, update_script],
+        capture_output=True, text=True, timeout=300,
+        cwd=os.path.dirname(script_dir),  # 在项目根目录运行
+        env=env
     )
     for line in result.stdout.split('\n'):
         if any(k in line for k in ['📋', '📅', '✅', '🔄', '📊', '最新', '失败', '新增', '⚠️']):
@@ -1061,10 +1069,7 @@ def run_day_end():
     # Step 7: 收盘报告
     report = step_report(state, latest_date, price_data, names, mode="day_end")
 
-    # Step 8: 明日计划
-    step_tomorrow_plan(state, latest_date, price_data, names)
-
-    # 再次保存 (含 nav_history)
+    # Step 8: 保存 (含 nav_history)
     step_save_state(state, trade_count_final)
 
     logger.info("=" * 70)
@@ -1092,7 +1097,21 @@ if __name__ == "__main__":
             report = run_day_end()
 
         if report:
-            logger.info(f"\n📊 运行完成, 净值: ¥{report.get('nav', 'N/A'):,.0f}")
+            nav = report.get('nav', None)
+            if nav:
+                try:
+                    nav_str = f"¥{float(nav):,.0f}"
+                except (ValueError, TypeError):
+                    nav_str = f"¥{nav}"
+                logger.info(f"\n📊 运行完成, 净值: {nav_str}")
+            elif 'sell_plan' in report or 'buy_plan' in report:
+                sell_n = len(report.get('sell_plan', []))
+                buy_n = len(report.get('buy_plan', []))
+                logger.info(f"\n📊 运行完成, 信号: 卖 {sell_n} 只 / 买 {buy_n} 只")
+            elif report.get('mode') == 'no_rebalance':
+                logger.info(f"\n📊 运行完成, 非调仓日 (距下次调仓 {report.get('trade_count', '?')})")
+            else:
+                logger.info(f"\n📊 运行完成")
     except Exception as e:
         logger.error(f"❌ 错误: {e}", exc_info=True)
         import traceback

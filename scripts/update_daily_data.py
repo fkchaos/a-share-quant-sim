@@ -15,7 +15,8 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-DATA_DIR = "data"
+import os
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 
 HEADERS = {

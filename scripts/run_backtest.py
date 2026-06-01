@@ -79,8 +79,11 @@ FACTOR_WEIGHTS = core_config.factor_weights  # 权威权重，来自 core/config
 # ============================================================
 # 数据加载
 # ============================================================
-def load_and_build_panel(start_date=None, end_date=None):
-    """加载日 K 线数据并构建 panel。"""
+def load_and_build_panel(start_date=None, end_date=None, need_open=False):
+    """加载日 K 线数据并构建 panel。
+
+    need_open=True 时额外返回 open_panel（用于 exec_timing='open' 回测）
+    """
     sd = start_date or START_DATE
     ed = end_date or END_DATE
 
@@ -108,14 +111,21 @@ def load_and_build_panel(start_date=None, end_date=None):
     volume_panel = pd.DataFrame({c: d['volume'] for c, d in valid.items()})
     amount_panel = pd.DataFrame({c: d['amount'] for c, d in valid.items()})
 
+    open_panel = None
+    if need_open:
+        open_panel = pd.DataFrame({c: d['open'] for c, d in valid.items() if 'open' in d.columns})
+
     common_dates = close_panel.dropna(how='all').index
     common_dates = common_dates[(common_dates >= sd) & (common_dates <= ed)]
 
-    return (
+    result = (
         close_panel.loc[common_dates].sort_index(),
         volume_panel.loc[common_dates].sort_index(),
-        amount_panel.loc[common_dates].sort_index()
-    ), list(valid.keys())
+        amount_panel.loc[common_dates].sort_index(),
+    )
+    if need_open and open_panel is not None:
+        result += (open_panel.loc[common_dates].sort_index(),)
+    return result, list(valid.keys())
 
 
 # ============================================================
@@ -216,7 +226,9 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                  stock_names=None,
                  use_atr_stop=False, atr_k=2.0,
                  use_take_profit=False, tp_tiers=None,
-                 use_holding_decay=False):
+                 use_holding_decay=False,
+                 exec_timing='close',
+                 open_panel=None):
     """
     完整回测引擎。
 
@@ -224,6 +236,10 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
     与 sim_daily.py 使用同一套代码，保证一致性。
 
     weight_method: 'equal' | 'markowitz'
+    exec_timing:   'close' — 用收盘价执行（默认, T日收盘后操作）
+                   'open'  — 用开盘价执行（T日上午出信号、下午开盘操作）
+                   区别: 卖出/买入成交价从 close → open
+                         portfolio_value 仍用 close 做 mark-to-market
     """
     from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
     from core.account import check_take_profit, apply_holding_decay
@@ -231,6 +247,15 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
 
     icap = initial_capital or config.costs.initial_capital
     dates = close_panel.index
+
+    # ── 执行时序 ──
+    if exec_timing not in ('close', 'open'):
+        print(f"  ⚠️  exec_timing='{exec_timing}' 不合法, 回退到 'close'")
+        exec_timing = 'close'
+    if exec_timing == 'open' and open_panel is None:
+        print(f"  ⚠️  exec_timing='open' 但未提供 open_panel, 回退到 'close'")
+        exec_timing = 'close'
+    _exec_price_desc = 'close价(收盘后)' if exec_timing == 'close' else 'open价(开盘执行)'
 
     # 初始化 core.account 状态
     state = PortfolioState(
@@ -245,6 +270,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
         _industry_enabled = bool(stock_names) and max_industry_weight and max_industry_weight > 0
         print(f"  📋 backtest[{label}]: top_n={top_n} rf={rebal_freq} sl={stop_loss} "
               f"vol_scale={use_vol_scaling} vt={vol_target} "
+              f"exec={_exec_price_desc} "
               f"industry_cap={max_industry_weight if _industry_enabled else 'OFF'} "
               f"tp={use_take_profit} decay={use_holding_decay} atr={use_atr_stop}")
 
@@ -266,7 +292,21 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
 
         price_data = close_panel.loc[date]
 
+        # ── 执行价: open 模式下用开盘价做买卖成交价 ──
+        _exec_price_series = None
+        if exec_timing == 'open' and open_panel is not None and date in open_panel.index:
+            _exec_price_series = open_panel.loc[date]
+
+        def _exec_price(code):
+            """获取某股票的执行价：open 模式用开盘价, 否则用收盘价"""
+            if _exec_price_series is not None and code in _exec_price_series.index:
+                ep = _exec_price_series[code]
+                if not pd.isna(ep) and ep > 0:
+                    return ep
+            return price_data.get(code, np.nan)
+
         # ── 1. 止损（委托 core.account.check_stop_loss）──
+        # 止损/止盈/decay 始终用 close 做盈亏判定（mark-to-market 用 close）
         atr_day = None
         if atr_panel is not None and date in atr_panel.index:
             atr_day = atr_panel.loc[date]
@@ -282,15 +322,23 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                                         rebalance_freq=rebalance_freq)
 
         # ── 2. 调仓 ──────────────────────────────────────────
-        if (i - 120) % rebalance_freq == 0 and date in score.index:
+        # open 模式: 评分滞后 1 天（T 日上午用 T-1 日收盘数据算的信号，T 日开盘执行）
+        # close 模式: 当日评分当日执行（T 日收盘价执行）
+        sig_date = date
+        if exec_timing == 'open' and i > 120:
+            sig_date = dates[i - 1]  # T-1 日的评分
+
+        if (i - 120) % rebalance_freq == 0 and sig_date in score.index:
             rebal_count += 1
-            day_score = score.loc[date].dropna()
+            day_score = score.loc[sig_date].dropna()
             valid_idx = day_score.index.isin(price_data.dropna().index)
             day_score = day_score[valid_idx]
 
             if use_vol_scaling:
                 returns = close_panel.pct_change()
-                stock_vol = returns.rolling(20).std().loc[date]
+                # vol 也滞后 1 天（跟信号一致）
+                vol_date = sig_date if sig_date in returns.index else date
+                stock_vol = returns.rolling(20).std().loc[vol_date]
                 vol_scale = vol_target / (stock_vol * np.sqrt(252))
                 vol_scale = vol_scale.clip(0.1, 3.0)
                 day_score = day_score * vol_scale.reindex(day_score.index).fillna(1)
@@ -300,12 +348,12 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
             if top_stocks:
                 current_pv = portfolio_value(state, date, price_data)
 
-                # 卖出不在目标中的（对每只股票逐个 sell）
+                # 卖出不在目标中的（用执行价）
                 for c in list(state.holdings.keys()):
                     if c not in top_stocks and c in price_data.index:
-                        p = price_data[c]
-                        if not pd.isna(p) and p > 0:
-                            state = sell(state, c, p, date, reason='SELL')
+                        ep = _exec_price(c)
+                        if not pd.isna(ep) and ep > 0:
+                            state = sell(state, c, ep, date, reason='SELL')
 
                 # 权重分配
                 if weight_method == 'markowitz':
@@ -352,20 +400,18 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                         current_state=state,
                     )
 
-                # 对目标持仓买入（对每只股票调用 core.account.buy）
+                # 对目标持仓买入（用执行价）
                 for c in top_stocks:
                     if c not in state.holdings and c in price_data.index and not pd.isna(price_data[c]):
-                        p = price_data[c]
-                        if p > 0:
+                        ep = _exec_price(c)
+                        if ep > 0:
                             w = weights.get(c, 1.0 / len(top_stocks))
                             target_val = min(current_pv * w, current_pv * max_position)
-                            # 计算股数 (委托 buy 自动计算)
-                            # 但 buy 是"尽可能买"模式，需要传入 shares
                             from core.account import compute_buy_shares
-                            adj_p = p * (1 + config.costs.slippage_rate)
+                            adj_p = ep * (1 + config.costs.slippage_rate)
                             shares = int(target_val / adj_p / 100) * 100
                             if shares > 0:
-                                state = buy(state, c, p, date, shares=shares)
+                                state = buy(state, c, ep, date, shares=shares)
 
         # ── 记录净值 ──
         dv = portfolio_value(state, date, price_data)
@@ -731,6 +777,8 @@ def main():
     parser.add_argument("--output-dir", default=None, help="结果输出目录")
     parser.add_argument("--report-markdown", action="store_true", help="输出 Markdown 报告到 stdout")
     parser.add_argument("--ic-analysis", action="store_true", help="运行 IC 因子分析")
+    parser.add_argument("--exec-timing", choices=["close", "open"], default="close",
+                        help="执行时序: close=收盘价执行(默认), open=开盘价执行(盘中模式)")
     parser.add_argument("--log", action="store_true", help="自动追加结果到 docs/RESULTS_LOG.md")
     args = parser.parse_args()
 
@@ -743,11 +791,17 @@ def main():
     t0 = time.time()
 
     # ── 1. 加载数据 ────────────────────────────────────────────
-    print(f"\n[1/5] 加载数据...")
-    (close_panel, volume_panel, amount_panel), codes = load_and_build_panel(
-        args.start, args.end)
+    need_open = (args.exec_timing == "open")
+    print(f"\n[1/5] 加载数据... (exec_timing={args.exec_timing})")
+    loaded, codes = load_and_build_panel(args.start, args.end, need_open=need_open)
+    close_panel = loaded[0]
+    volume_panel = loaded[1]
+    amount_panel = loaded[2]
+    open_panel = loaded[3] if len(loaded) > 3 else None
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只股票")
     print(f"  区间: {close_panel.index[0].date()} ~ {close_panel.index[-1].date()}")
+    if need_open and open_panel is not None:
+        print(f"  Open panel: {open_panel.shape[0]} 天 × {open_panel.shape[1]} 只股票")
 
     # ── 2. 因子计算 ────────────────────────────────────────────
     print(f"\n[2/5] 计算因子...")
@@ -792,7 +846,10 @@ def main():
             use_take_profit=profile.use_take_profit,
             tp_tiers=profile.tp_tiers,
             use_holding_decay=profile.use_holding_decay,
+            exec_timing=args.exec_timing,
         )
+        if args.exec_timing == 'open':
+            kw['open_panel'] = open_panel
         return {'label': profile.label, 'score': score, 'kwargs': kw}
 
     if run_all:

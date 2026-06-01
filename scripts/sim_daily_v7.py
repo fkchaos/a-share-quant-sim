@@ -346,7 +346,9 @@ def step_holding_decay(state, date, price_data, names):
 def step_data_quality(files, date):
     """Step 4: 数据质量门禁"""
     code_list = [f.replace(".csv", "") for f in files]
-    auditor = DataQualityAuditor(code_list, daily_dir=DAILY_DIR, as_of=date)
+    # Strip _AM/_PM suffix for intraday modes (pd.to_datetime can't parse those)
+    clean_date = date.split("_")[0] if "_" in date else date
+    auditor = DataQualityAuditor(code_list, daily_dir=DAILY_DIR, as_of=clean_date)
     quality_result = auditor.audit()
     print_quality_report(quality_result)
     return not quality_result.approved

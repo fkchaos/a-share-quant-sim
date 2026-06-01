@@ -85,7 +85,10 @@ def buy(
     adj_price = price * (1 + costs.slippage_rate)
 
     if shares is not None:
-        # Explicit share count
+        # Explicit share count — 强制 100 股整数倍（A股最小交易单位）
+        shares = int(shares / 100) * 100
+        if shares <= 0:
+            return new_state  # no-op
         cost = shares * adj_price
         commission = cost * costs.commission_rate
         if new_state.cash < cost + commission:

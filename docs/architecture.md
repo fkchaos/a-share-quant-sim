@@ -2,7 +2,7 @@
 
 > 面向开发者的实现逻辑与框架说明
 >
-> 最后更新：2026-06-02（v5 策略上线 + 参数解耦后）
+> 最后更新：2026-06-01（三阶段模拟盘 + 8 策略 Profile 体系）
 
 ## 一、整体架构：共享引擎 + 策略 Profile 模式
 
@@ -27,23 +27,22 @@
              │                              │
              ▼                              ▼
   ┌──────────────────────┐   ┌─────────────────────────────┐
-  │  sim_daily_v6.py     │   │  run_backtest.py            │
-  │  (模拟盘 Pipeline)    │   │  (历史回测引擎)               │
+  │  sim_daily_v7.py    │   │  run_backtest.py            │
+  │  (三阶段模拟盘)      │   │  (历史回测引擎)               │
   │                      │   │                             │
   │  策略来源:            │   │  策略来源:                    │
   │  STRATEGY_PROFILES   │   │  STRATEGY_PROFILES           │
   │  [_PROFILE]          │   │  + _build_cfg() helper       │
   │                      │   │                             │
-  │  Pipeline (每日):     │   │  流程:                       │
-  │  ① 更新数据           │   │  1. 加载 CSV 面板             │
-  │  ② 加载账户+tp_taken │   │  2. calc_factors_panel()     │
-  │  ③ 加载价格           │   │  3. IC 分析(可选)             │
-  │  ④ 止损              │   │  4. composite_score()        │
-  │  ⑤ 分级止盈(◉v5)     │   │  5. 回测循环→buy/sell        │
-  │  ⑥ 持有期decay(◉v5)  │   │  6. 绩效指标+自检             │
-  │  ⑦ 数据质量           │   │                             │
-  │  ⑧ 调仓              │   │                             │
-  │  ⑨ 保存+报告          │   │                             │
+  │ **模拟盘 Pipeline (三阶段)**: │  │  流程:                       │
+  │  ① 更新数据 (AM)       │  │  1. 加载 CSV 面板             │
+  │  ② 加载账户            │  │  2. calc_factors_panel()     │
+  │  ③ 止损/止盈/decay     │  │  3. IC 分析(可选)             │
+  │  ④ 数据质量            │  │  4. composite_score()        │
+  │  ⑤ 调仓 → 信号文件(PM) │  │  5. 回测循环→buy/sell        │
+  │  ⑥ 执行信号→交易(PM)   │  │  6. 绩效指标+自检             │
+  │  ⑦ 保存+报告(收盘)     │  │                             │
+  │ 11:35 信号 → 13:00 执行 → 15:30 报告 │
   └──────────────────────┘   └─────────────────────────────┘
 
   ┌──────────────────────┐
@@ -85,15 +84,21 @@ class StrategyConfig:
 STRATEGY_PROFILES = {
     "v4_baseline":      PROFILE_V4_BASELINE,          # 无限制基准
     "v4_industry_cap":  PROFILE_V4_WITH_INDUSTRY_CAP, # +行业限制25%
-    "v5_tp_decay":      PROFILE_V5_TP_DECAY,          # +分级止盈+持有期decay
+    "v6b_8f_pos_ic":       PROFILE_V6B_8F_POS_IC,        # 8因子正IC等权（当前最优）
+    "v7a_8f_ind40":        PROFILE_V7A_8F_IND40,         # 8因子+行业≤40%
+    "v7b_8f_ind50":        PROFILE_V7B_8F_IND50,         # 8因子+行业≤50%
+    "v7c_8f_no_ind":       PROFILE_V7C_8F_NO_IND,        # 8因子+无行业限制
+    "v8_all_icir":         PROFILE_V8_ALL_ICIR,          # 18因子全量IC_IR加权
 }
 ```
 
-| Profile | 年化 | 夏普 | 回撤 | Calmar | 核心差异 |
-|---------|------|------|------|--------|---------|
-| v4_baseline | 24.82% | 1.11 | -28.87% | 0.86 | 无行业/换手率限制 |
-| v4_industry_cap | 20.72% | 0.97 | -27.01% | 0.77 | +行业≤25% |
-| **v5_tp_decay** ⚡ | **23.97%** | **1.37** | **-20.05%** | **1.20** | +分级止盈+持有期decay |
+| Profile | 年化(close) | 夏普(close) | 夏普(open) | 核心差异 |
+|---------|-----------|-----------|-----------|---------|
+| v4_baseline | 22.19% | 1.06 | 0.57 | 无行业/换手率限制 |
+| v4_industry_cap | 21.64% | 1.06 | 0.49 | +行业≤25% |
+| **v6b_8f_pos_ic** ⚡ | **23.81%** | **1.33** | **1.05** | **8因子正IC等权（最优）** |
+| v8_all_icir | 21.49% | 1.25 | 0.99 | 18因子IC_IR加权 |
+| v5_tp_decay | 18.55% | 1.14 | 0.79 | +分级止盈+持有期decay |
 
 ### 2.2 `factors.py` — 因子计算引擎
 
@@ -182,7 +187,22 @@ daily_operation():
   ⑨ step_save_state() + step_report() + step_tomorrow_plan()
 ```
 
-**策略切换**：修改 `_PROFILE = "v5_tp_decay"` 即可（v4_baseline | v4_industry_cap | v5_tp_decay）。
+## 三、调度层：sim_daily_v7.py
+
+### 三阶段 Pipeline
+
+```
+daily_operation(mode):
+  intraday_signal (11:35):
+    ① update_data → ② load_account → ③ stop loss → ④ data quality
+    → ⑤ rebalance(因子→评分→调仓) → 写 trade_plan.json
+
+  intraday_execute (13:00):
+    ⑥ load trade_plan → 开盘价买入/卖出 → 更新 account
+
+  day_end (15:30):
+    ⑦ save state → ⑧ report → ⑨ tomorrow plan
+```
 
 ### 辅助模块
 
@@ -201,8 +221,8 @@ daily_operation():
 ### 与模拟盘的一致性保证
 
 ```
-sim_daily_v6.py ──▶ core.account.buy / sell / check_stop_loss / check_take_profit / apply_holding_decay
-run_backtest.py  ──▶ core.account.buy / sell / check_stop_loss / check_take_profit / apply_holding_decay
+sim_daily_v7.py ──▶ core.account.buy / sell / check_stop_loss / check_take_profit
+run_backtest.py   ──▶ core.account.buy / sell / check_stop_loss / check_take_profit
                       ↑↑↑ 完全相同的函数 ↑↑↑
 ```
 
@@ -256,7 +276,7 @@ python scripts/run_backtest.py --strategy v5_tp_decay --log
 **数据路径**：
 - 本地：`/root/data/` (data/daily/*.csv)
 - 回测：需设置 `BACKTEST_DATA_DIR=/root/data`
-- 模拟盘脚本：用 `data/` 目录（相对于 repo 根目录）
+数据保存到 `BACKTEST_DATA_DIR/{code}.csv`（默认 `/root/data/daily/`）
 
 ---
 
@@ -279,7 +299,7 @@ tests/test_golden.py — 12 个快速测试（< 1s）
 
 | 常量 | 值 | 位置 |
 |------|-----|------|
-| 初始资金 | 1,000,000 | `core.config.risk.initial_capital` |
+| 初始资金 | 200,000 | `config.yaml costs.initial_capital` |
 | 佣金率 | 0.03% | `core.config.costs.commission_rate` |
 | 印花税 | 0.1% | `core.config.costs.stamp_tax_rate` |
 | 滑点 | 0.1% | `core.config.costs.slippage_rate` |

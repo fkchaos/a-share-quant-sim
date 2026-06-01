@@ -1,0 +1,2 @@
+strategy,annual_return,sharpe,max_dd,calmar,sortino,win_rate,trades,stop_loss,cost,final_value
+v6b_8f_pos_ic,0.00%,0.0,0.00%,0.0,0.0,0.00%,0,0,0,200000.0

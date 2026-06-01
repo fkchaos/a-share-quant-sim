@@ -67,7 +67,6 @@ from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_v
 # ============================================================
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(_BASE_DIR, "data"))
-DAILY_DIR = os.path.join(DATA_DIR, "daily")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
 # Module-level constants (override via config.yaml or CLI)
@@ -77,56 +76,7 @@ END_DATE = datetime.now().strftime("%Y-%m-%d")
 FACTOR_WEIGHTS = core_config.factor_weights  # 权威权重，来自 core/config.py
 
 
-# ============================================================
-# 数据加载
-# ============================================================
-def load_and_build_panel(start_date=None, end_date=None, need_open=False):
-    """加载日 K 线数据并构建 panel。
-
-    need_open=True 时额外返回 open_panel（用于 exec_timing='open' 回测）
-    """
-    sd = start_date or START_DATE
-    ed = end_date or END_DATE
-
-    files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
-    if not files:
-        print(f"❌ {DAILY_DIR} 下没有 CSV 文件，请先运行 update_daily_data.py")
-        sys.exit(1)
-
-    all_data = {}
-    for f in files:
-        code = f.replace(".csv", "")
-        df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
-        df = df[(df.index >= sd) & (df.index <= ed)]
-        if len(df) > 0:
-            all_data[code] = df
-
-    # 过滤覆盖度不足的股票
-    valid = {}
-    for code, df in all_data.items():
-        if df.index.min() <= pd.Timestamp(sd) + pd.Timedelta(days=30) and \
-           df.index.max() >= pd.Timestamp(ed) - pd.Timedelta(days=30):
-            valid[code] = df
-
-    close_panel = pd.DataFrame({c: d['close'] for c, d in valid.items()})
-    volume_panel = pd.DataFrame({c: d['volume'] for c, d in valid.items()})
-    amount_panel = pd.DataFrame({c: d['amount'] for c, d in valid.items()})
-
-    open_panel = None
-    if need_open:
-        open_panel = pd.DataFrame({c: d['open'] for c, d in valid.items() if 'open' in d.columns})
-
-    common_dates = close_panel.dropna(how='all').index
-    common_dates = common_dates[(common_dates >= sd) & (common_dates <= ed)]
-
-    result = (
-        close_panel.loc[common_dates].sort_index(),
-        volume_panel.loc[common_dates].sort_index(),
-        amount_panel.loc[common_dates].sort_index(),
-    )
-    if need_open and open_panel is not None:
-        result += (open_panel.loc[common_dates].sort_index(),)
-    return result, list(valid.keys())
+from core.data import load_and_build_panel
 
 
 # ============================================================
@@ -791,22 +741,30 @@ def main():
     print("=" * 60)
     t0 = time.time()
 
-    # ── 1. 加载数据 ────────────────────────────────────────────
+    # ── 1. 加载数据（need_hl 始终加载，短线因子所有策略都用）──
     need_open = (args.exec_timing == "open")
+    need_hl = True  # 短线因子在面板模式下始终需要
     print(f"\n[1/5] 加载数据... (exec_timing={args.exec_timing})")
-    loaded, codes = load_and_build_panel(args.start, args.end, need_open=need_open)
-    close_panel = loaded[0]
+    loaded, codes = load_and_build_panel(args.start, args.end, need_open=need_open, need_hl=need_hl)
+    close_panel  = loaded[0]
     volume_panel = loaded[1]
     amount_panel = loaded[2]
-    open_panel = loaded[3] if len(loaded) > 3 else None
+    open_panel   = loaded[3] if len(loaded) > 3 else None
+    high_panel   = loaded[4] if len(loaded) > 4 else None
+    low_panel    = loaded[5] if len(loaded) > 5 else None
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只股票")
     print(f"  区间: {close_panel.index[0].date()} ~ {close_panel.index[-1].date()}")
     if need_open and open_panel is not None:
         print(f"  Open panel: {open_panel.shape[0]} 天 × {open_panel.shape[1]} 只股票")
+    if high_panel is not None and low_panel is not None:
+        print(f"  H/L panel: {high_panel.shape[0]} 天 × {high_panel.shape[1]} 只股票")
 
     # ── 2. 因子计算 ────────────────────────────────────────────
     print(f"\n[2/5] 计算因子...")
-    factors = calc_factors_panel(close_panel, volume_panel, amount_panel)
+    factors = calc_factors_panel(
+        close_panel, volume_panel, amount_panel,
+        open_panel=open_panel, high_panel=high_panel, low_panel=low_panel,
+    )
     print(f"  共 {len(factors)} 个因子")
 
     # ── 3. IC 分析（可选） ────────────────────────────────────

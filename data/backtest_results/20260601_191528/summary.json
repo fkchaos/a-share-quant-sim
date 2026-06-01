@@ -1,0 +1,25 @@
+{
+  "v6b_8f_pos_ic": {
+    "label": "v6b_8f_pos_ic",
+    "total_return": 2.030366,
+    "annual_return": 0.238127,
+    "annual_volatility": 0.178607,
+    "sharpe_ratio": 1.3332,
+    "max_drawdown": 0.211755,
+    "calmar_ratio": 1.1245,
+    "sortino_ratio": 1.5655,
+    "win_rate": 0.452181,
+    "total_trades": 5046,
+    "stop_loss_trades": 4,
+    "total_cost": 32526.69,
+    "rebalance_count": 60,
+    "final_value": 606073.26,
+    "params": {
+      "top_n": 12,
+      "rebalance_freq": 20,
+      "stop_loss": 0.2,
+      "max_position": 0.1,
+      "use_vol_scaling": true
+    }
+  }
+}

@@ -128,6 +128,28 @@ def calc_factors_single(df: pd.DataFrame) -> dict:
     factors['rel_strength_20'] = factors.get('mom_20', np.nan)
     factors['rel_strength_60'] = factors.get('mom_60', np.nan)
 
+    # ── 短线因子（单股模式）────────────────────────────────────────────
+    eps = 1e-10
+
+    # gap_ratio: 跳空比
+    if 'open' in df.columns and len(close) >= 2:
+        factors['gap_ratio'] = (df['open'].iloc[-1] - close.iloc[-2]) / (close.iloc[-2] + eps)
+    else:
+        factors['gap_ratio'] = np.nan
+
+    # high_low_range + intraday_drift
+    if 'high' in df.columns and 'low' in df.columns and len(df) >= 1:
+        h = df['high'].iloc[-1]
+        l = df['low'].iloc[-1]
+        factors['high_low_range'] = (h - l) / (close.iloc[-1] + eps)
+        if 'open' in df.columns:
+            factors['intraday_drift'] = (close.iloc[-1] - df['open'].iloc[-1]) / (h - l + eps)
+        else:
+            factors['intraday_drift'] = np.nan
+    else:
+        factors['high_low_range'] = np.nan
+        factors['intraday_drift'] = np.nan
+
     return factors
 
 
@@ -137,6 +159,9 @@ def calc_factors_panel(
     close_panel: pd.DataFrame,
     volume_panel: pd.DataFrame = None,
     amount_panel: pd.DataFrame = None,
+    open_panel: pd.DataFrame = None,
+    high_panel: pd.DataFrame = None,
+    low_panel: pd.DataFrame = None,
 ) -> dict:
     """Calculate factor matrices for ALL stocks at ALL dates.
 
@@ -263,5 +288,28 @@ def calc_factors_panel(
         lambda s: np.polyfit(np.arange(len(s)), s, 1)[0] if len(s) > 1 else 0, raw=True
     )
     factors['obv_slope'] = obv_slope
+
+    # ── 短线因子：gap / intraday / range ──────────────────────────────
+    # 需要 open/high/low 面板；缺少时用 close 近似（不报 warning，静默降级）
+
+    if open_panel is not None:
+        # gap_ratio: 跳空比 = (open - prev_close) / prev_close
+        factors['gap_ratio'] = (open_panel - close_panel.shift(1)) / (close_panel.shift(1) + eps)
+    else:
+        factors['gap_ratio'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
+
+    if high_panel is not None and low_panel is not None:
+        # high_low_range: 日内振幅 = (high - low) / close
+        factors['high_low_range'] = (high_panel - low_panel) / (close_panel + eps)
+
+        if open_panel is not None:
+            # intraday_drift: 日内漂移 = (close - open) / (high - low)
+            # 衡量当天方向性，值域约 [-1, 1]，正值 = 收盘在开盘上方
+            factors['intraday_drift'] = (close_panel - open_panel) / (high_panel - low_panel + eps)
+        else:
+            factors['intraday_drift'] = pd.Series(0.0, index=close_panel.index)
+    else:
+        factors['high_low_range'] = pd.Series(0.0, index=close_panel.index)
+        factors['intraday_drift'] = pd.Series(0.0, index=close_panel.index)
 
     return factors

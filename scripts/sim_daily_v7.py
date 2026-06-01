@@ -266,7 +266,7 @@ def step_load_prices_pm(trade_plan):
     Step 2b: 下午开盘时加载价格
     用实时快照获取开盘价和当前价, 优先用开盘价执行
 
-    返回: (date_str, price_data)
+    返回: (datetime, price_data)
     """
     files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
     codes = [f.replace(".csv", "") for f in files]
@@ -300,9 +300,8 @@ def step_load_prices_pm(trade_plan):
             price_data[code] = exec_price
 
     now = datetime.now()
-    date_str = f"{now.strftime('%Y-%m-%d')}_PM"
 
-    return date_str, price_data
+    return now, price_data
 
 
 def step_check_stop_loss(state, date, price_data, names):
@@ -545,7 +544,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
 
 # ── 下午模式：加载计划，执行交易 ──
 
-def step_execute_plan(state, date, price_data, names):
+def step_execute_plan(state, date, price_data, names, code_dataframes=None):
     """
     Step 5 (PM): 下午开盘 → 加载上午生成的计划 → 按计划执行交易
     """
@@ -861,7 +860,7 @@ def run_intraday_execute():
             pass
 
     # Step 5: 执行计划
-    state, plan = step_execute_plan(state, date, price_data, names)
+    state, plan = step_execute_plan(state, date, price_data, names, code_dataframes)
 
     # Step 6: 保存状态
     trade_count = plan.get('trade_count', 0) + 1 if plan else 0

@@ -37,9 +37,14 @@ def composite_score(
     score = pd.DataFrame(0.0, index=template.index, columns=template.columns)
 
     for name, w in weights.items():
-        if name in factors:
-            std_df = standardize(factors[name])
-            score = score.add(w * std_df, fill_value=0)
+        if name not in factors:
+            continue
+        factor_data = factors[name]
+        # Skip non-DataFrame factors (e.g. degraded constant Series)
+        if not isinstance(factor_data, pd.DataFrame):
+            continue
+        std_df = standardize(factor_data)
+        score = score.add(w * std_df, fill_value=0)
 
     return score
 

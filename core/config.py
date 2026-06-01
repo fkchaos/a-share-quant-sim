@@ -251,6 +251,19 @@ PROFILE_V8_ALL_ICIR = StrategyConfig(
     },
 )
 
+# ── v9 系列：短线策略（RETIRED — 回测验证失败）─────────────────────
+# 5 天调仓频率下交易成本过高，全历史回测年化 -7.68%，Sharpe -0.34
+# 失败原因：freq=5 调仓太频繁，A股 T+1+摩擦成本吃掉短线 alpha
+# 保留因子计算代码（high_low_range 仍有价值），但不作为独立策略
+
+# PROFILE_V9_SHORT_TERM = StrategyConfig(
+#     label="v9_short_term",
+#     weight_method="equal",
+#     top_n=12, rebalance_freq=5,
+#     stop_loss=0.15, max_position=0.15,
+#     ...
+# )
+
 STRATEGY_PROFILES = {
     "v4_baseline": PROFILE_V4_BASELINE,
     "v4_industry_cap": PROFILE_V4_INDUSTRY_CAP,
@@ -261,6 +274,7 @@ STRATEGY_PROFILES = {
     "v7b_8f_ind50": PROFILE_V7B_8F_IND50,
     "v7c_8f_no_ind": PROFILE_V7C_8F_NO_IND,
     "v8_all_icir": PROFILE_V8_ALL_ICIR,
+    # v9_short_term: RETIRED (freq=5 too costly for A-shares)
 }
 
 

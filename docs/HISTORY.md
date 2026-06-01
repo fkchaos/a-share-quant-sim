@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-06-01: v9 短线策略验证失败
+
+### 尝试
+- 加入 3 个短线因子：gap_ratio(IC=+0.01)、high_low_range(IC=+0.02~0.06)、intraday_drift(IC≈0)
+- 建 v9_short_term Profile: 8 因子（rev_3/rev_5/vol_ratio_5/high_low_range/mom_5/rsi_6/gap_ratio/vol_change），freq=5 天
+- 全历史回测（2021-01 ~ 2026-06）
+
+### 结果
+| 指标 | v9_short_term | v6b 基准 |
+|------|-------------|---------|
+| 年化 | **-7.68%** | +23.81% |
+| 夏普 | **-0.34** | +1.33 |
+| 最大回撤 | **49.12%** | 21.18% |
+| 交易次数 | 5179 | 5046（60 调仓） |
+
+### 结论
+- **RETIRED**: A 股 T+1 + 交易成本下，freq=5 天调仓频率不可行
+- 只有 high_low_range 因子有正向 IC，但不足以覆盖摩擦成本
+- 因子计算代码保留在 core/factors.py，但 v9 Profile 已注释
+
+---
+
 ## 2026-06-01: v6b_8f_pos_ic 确定为最优策略
 
 ### 过程

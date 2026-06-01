@@ -84,12 +84,23 @@ from core.data import load_and_build_panel
 # ============================================================
 def calc_ic_series(factor_df, forward_returns):
     """计算因子 IC 序列。"""
+    # Skip non-DataFrame inputs (e.g. constant Series from degraded factors)
+    if not isinstance(factor_df, pd.DataFrame):
+        return pd.Series(dtype=float)
+
     common_idx = factor_df.index.intersection(forward_returns.index)
     ic_values = pd.Series(index=common_idx, dtype=float)
 
     for date in common_idx:
         f_vals = factor_df.loc[date]
         r_vals = forward_returns.loc[date]
+
+        # Defensive: ensure both are Series
+        if not isinstance(f_vals, pd.Series) or not isinstance(r_vals, pd.Series):
+            continue
+        if f_vals.dropna().empty or r_vals.dropna().empty:
+            continue
+
         valid = f_vals.dropna().index.intersection(r_vals.dropna().index)
         if len(valid) < 10:
             continue

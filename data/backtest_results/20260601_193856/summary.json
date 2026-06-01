@@ -1,0 +1,25 @@
+{
+  "v9_short_term": {
+    "label": "v9_short_term",
+    "total_return": -0.339648,
+    "annual_return": -0.076838,
+    "annual_volatility": 0.226442,
+    "sharpe_ratio": -0.3393,
+    "max_drawdown": 0.491158,
+    "calmar_ratio": -0.1564,
+    "sortino_ratio": -0.4189,
+    "win_rate": 0.441469,
+    "total_trades": 5179,
+    "stop_loss_trades": 3,
+    "total_cost": 49392.6,
+    "rebalance_count": 238,
+    "final_value": 132070.35,
+    "params": {
+      "top_n": 12,
+      "rebalance_freq": 5,
+      "stop_loss": 0.15,
+      "max_position": 0.15,
+      "use_vol_scaling": true
+    }
+  }
+}

@@ -42,7 +42,7 @@ from indices import get_index_trends, IndexBenchmarkService
 from sim_logging import get_logger
 
 # ── Config ─────────────────────────────────────────────────────────
-_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 DATA_DIR = _sim_data_dir
 PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")

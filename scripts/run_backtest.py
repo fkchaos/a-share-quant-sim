@@ -65,7 +65,8 @@ from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_v
 # ============================================================
 # 配置
 # ============================================================
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "data")
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(_BASE_DIR, "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 

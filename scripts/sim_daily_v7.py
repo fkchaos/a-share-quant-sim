@@ -51,7 +51,7 @@ os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 os.makedirs(SIGNAL_DIR, exist_ok=True)
 
 # Strategy params — from STRATEGY_PROFILES
-_PROFILE = "v6b_8f_pos_ic"
+_PROFILE = "v6b_hlr"
 _strategy_profile = STRATEGY_PROFILES[_PROFILE]
 
 REBAL_FREQ = _strategy_profile.rebalance_freq

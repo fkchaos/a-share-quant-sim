@@ -1,7 +1,7 @@
 # A股量化模拟交易系统
 
-> 基于多因子评分的A股量化模拟交易系统，使用腾讯行情接口获取数据。
-> 回测引擎与模拟盘共享同一套交易逻辑（`core/`），策略更改一处生效，杜绝回测/实盘不一致。
+> 基于多因子评分的 A 股量化模拟交易系统，使用腾讯行情接口获取数据。
+> 回测引擎与模拟盘共享同一套交易逻辑（`core/`），策略参数集中在 `config.yaml`。
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -10,18 +10,19 @@
 
 ```
 ┌──────────────────┐          ┌──────────────────┐
-│  sim_daily_v6.py │          │  run_backtest.py │
-│  (模拟盘调度)     │          │  (回测引擎)       │
+│  sim_daily_v7.py │          │  run_backtest.py │
+│  (盘中双阶段)     │          │  (回测引擎)       │
+│ 11:35信号13:00执行│          │ --exec-timing    │
 └────────┬─────────┘          └────────┬─────────┘
          │ 调用                         │ 调用
          ▼                             ▼
 ┌─────────────────────────────────────────────┐
 │                  core/ (共享引擎)             │
-│  config.py  ← 加载 config.yaml (typed)       │
-│  factors.py ← calc_factors_single / _panel   │
-│  account.py ← PortfolioState + buy/sell/     │
-│               check_stop_loss / portfolio_value│
-│  scoring.py ← Z-score + 加权评分              │
+│  config.py  ← 加载 config.yaml + STRATEGY_PROFILES │
+│  factors.py ← calc_factors_single / _panel  │
+│  account.py ← PortfolioState + buy/sell/    │
+│               check_stop_loss / portfolio_value │
+│  scoring.py ← Z-score + IC_IR 加权评分       │
 └─────────────────────────────────────────────┘
          ▲                             ▲
          │ 数据                         │ 数据
@@ -34,242 +35,137 @@
 
 ## 特性
 
-- **多因子策略**: 29个技术因子（动量、反转、成交量、波动率、RSI、MACD、布林带、偏度、峰度、ATR、VWAP、相对强度等），权重在 `config.yaml` 中配置
-- **共享交易逻辑**: `sim_daily_v6.py`（模拟盘）和 `run_backtest.py`（回测）共用 `core/account.py` 的 `buy()` / `sell()` / `check_stop_loss()` — 修一处 bug 两边同时生效
-- **风控机制**: 单只止损 -20%，每20个交易日调仓，单一行业 ≤25%，日换手率 ≤30%
-- **完整交易模拟**: 佣金(0.03%)、印花税(0.1%)、滑点(0.1%)，100股整数倍，加权平均成本
-- **数据质量门禁**: 数据过期/空值/异常涨跌/复权跳变四维检查
-- **A股交易约束**: 涨跌停检查、T+1 检查、停牌检查
-- **自动报告**: 每日生成持仓报告 + 明日操作计划 + 行业分布 + 指数趋势
-- **统一回测工具**: `run_backtest.py` — 多策略对比、IC 因子分析、Markowitz 优化、参数网格扫描
-- **定时执行**: 每工作日 18:00 自动运行
+- **盘中双阶段模式**: 11:35 上午出信号 → 13:00 下午开盘执行 → 15:30 收盘报告
+- **多因子策略**: 29 个技术因子，支持等权 / IC_IR 加权 / Markowitz 优化
+- **8 个预置策略**: v4_baseline / v5_tp_decay / v6a_12f_icir / v6b_8f_pos_ic（默认）/ v7a/b/c / v8_all_icir
+- **共享交易逻辑**: 模拟盘和回测共用 `core/account.py`，杜绝回测 / 实盘不一致
+- **回测执行时序**: `--exec-timing close`（收盘价，理想情况）/ `--exec-timing open`（开盘价，接近实盘）
+- **风控**: 止损 -20% / 分级止盈(10%/20%/30%) / 持有期衰减 / 行业 ≤25% / 换手率 ≤30%
+- **交易成本**: 佣金 0.03% / 印花税 0.1%(卖出) / 滑点 0.1% / 100 股整数倍
+- **数据质量**: 过期 / 空值 / 异常涨跌 / 复权跳变四维检查
 
-## 策略表现（沪深300成分股回测 2021-01 ~ 2026-05）
+## 当前最优策略
 
-> 基于 core/ 统一引擎（29因子 + FACTOR_WEIGHTS 加权）
+**v6b_8f_pos_ic** — 8 个正 IC 因子等权
 
-| 指标 | v3_optimized | v3_baseline | markowitz |
-|------|-------------|-------------|-----------|
-| 年化收益率 | 20.72% | 4.19% | 5.20% |
-| 夏普比率 | 0.97 | 0.58 | 0.50 |
-| 最大回撤 | -27.01% | -12.74% | -20.13% |
-| 持仓数 | 12只 | 20只 | 10只 |
-| 调仓频率 | 20天 | 5天 | 20天 |
-| 波动率缩放 | ✅ | ❌ | ❌ |
+| 指标 | close 执行（理想） | open 执行（接近实盘） |
+|------|-------------------|---------------------|
+| 年化收益 | 23.49% | 16.25% |
+| 夏普比率 | 1.15 | 0.94 |
+| 最大回撤 | -18.87% | -26.54% |
+| Calmar | 1.25 | 0.61 |
 
-最优参数: `top_n=12, rebalance_freq=20, stop_loss=0.20, vol_scaling=True, industry_cap=25%, turnover_limit=0`
+> 数据：沪深 300 成分股，2021-01 ~ 2026-05，255~280 只股票
 
 ## 快速开始
 
-### 安装依赖
+详见 [docs/DEPLOY.md](docs/DEPLOY.md) 部署文档。
 
 ```bash
+# 1. 安装依赖
 pip install -r requirements.txt
-# 需要: pandas, numpy, pyyaml, scipy
-```
 
-### 初始化并运行
-
-```bash
-# 1. 首次运行：初始化日K线数据（需要网络访问 gtimg.cn）
+# 2. 初始化日K线数据（首次运行，需要网络）
 python scripts/update_daily_data.py
 
-# 2. 运行模拟盘（使用 v6 core-based 版本）
-python scripts/sim_daily_v6.py
+# 3. 验证：回测最优策略
+python scripts/run_backtest.py --strategy v6b_8f_pos_ic
 
-# 3. 运行回测
-python scripts/run_backtest.py --ic-analysis
+# 4. 模拟盘（盘中双阶段需要配置 cron）
+python scripts/sim_daily_v7.py intraday_signal   # 上午信号
+python scripts/sim_daily_v7.py intraday_execute  # 下午执行
+python scripts/sim_daily_v7.py day_end           # 收盘报告
 ```
 
-### 配置驱动使用
-
-**策略参数** — 编辑 `config.yaml`：
-
-```yaml
-# 因子权重（正 = 正向期望，负 = 反向）
-factor_weights:
-  mom_20: 0.10     # 可调
-  vol_20: -0.05    # 可调
-
-# 风控参数 (也可以在 scripts 中通过命令行覆盖)
-risk:
-  stop_loss: 0.20
-  top_n: 10
-  rebalance_freq: 20
-```
-
-优先级: `命令行参数 > config.yaml > 内置默认值`
-
-### 回测命令速查
+## 回测命令速查
 
 ```bash
-python scripts/run_backtest.py --ic-analysis           # 全策略 + IC 分析
-python scripts/run_backtest.py --strategy v3_baseline  # 仅指定策略
-python scripts/run_backtest.py --scan                  # 参数网格扫描
-python scripts/run_backtest.py --report-markdown > report.md  # Markdown 报告
-python scripts/run_backtest.py --config my_config.yaml # 自定义配置
-```
-
-### 测试
-
-```bash
-python scripts/tests/test_backtest_smoke.py       # 冒烟测试 (~20s)
-python scripts/tests/test_backtest_edge_cases.py  # 边界测试
-```
-
-### 配置定时任务
-
-```bash
-# 每工作日 18:00 自动执行
-crontab -e
-# 添加: 0 18 * * 1-5 cd /path/to/project && python scripts/sim_daily_v6.py
+python scripts/run_backtest.py                                    # 全策略回测（close执行）
+python scripts/run_backtest.py --strategy v6b_8f_pos_ic          # 指定策略
+python scripts/run_backtest.py --strategy v6b --exec-timing open # 开盘执行回测
+python scripts/run_backtest.py --scan                            # 参数网格扫描
+python scripts/run_backtest.py --walk-forward                    # Walk-Forward 过拟合检测
+python scripts/run_backtest.py --ic-analysis                     # IC 因子分析
+python scripts/run_backtest.py --report-markdown > report.md     # Markdown 报告
 ```
 
 ## 项目结构
 
 ```
 a-share-quant-sim/
-├── core/                           # ⭐ 共享引擎 (回测 + 模拟盘共用)
-│   ├── __init__.py                 # 统一导出
-│   ├── config.py                   # Config dataclass + config.yaml loader
-│   ├── position.py                 # Position 领域模型 (替代裸 dict)
-│   ├── factors.py                  # 因子计算 (单股模式 + 面板模式)
-│   ├── account.py                  # PortfolioState + buy/sell/check_stop_loss
-│   └── scoring.py                  # Z-score 标准化 + 复合评分
+├── core/                      # ⭐ 共享引擎 (回测 + 模拟盘共用)
+│   ├── config.py              # Config + STRATEGY_PROFILES + config.yaml loader
+│   ├── factors.py             # 因子计算 (单股 + 面板)
+│   ├── account.py             # PortfolioState + buy/sell/止损/止盈
+│   └── scoring.py             # Z-score + 加权评分
 ├── scripts/
-│   ├── sim_daily_v6.py             # ⭐ 每日模拟盘 (v6, core-based, Pipeline)
-│   ├── sim_logging.py              # 日志配置 (控制台+文件双输出)
-│   ├── run_backtest.py             # 统一回测引擎 (delegates to core/)
-│   ├── update_daily_data.py        # 数据更新: 腾讯 API → 本地 CSV
-│   ├── constraints.py              # P0-1: A股交易约束
-│   ├── data_quality.py             # P0-2: 数据质量门禁
-│   ├── portfolio_controls.py       # P0-3: 换手率上限
-│   ├── industry.py                 # P1-1: 行业分类 + 仓位上限
-│   ├── indices.py                  # P1-2: 指数趋势
-│   ├── hs300_constituents.csv      # 沪深300成分股
-│   ├── tests/                      # 回测测试套件
-│   │   ├── test_backtest_smoke.py
-│   │   └── test_backtest_edge_cases.py
-│   └── archive/                    # 废弃旧脚本（参考用）
-├── config.yaml                     # ⭐ 所有可调参数
+│   ├── sim_daily_v7.py        # ⭐ 每日模拟盘 (v7, 盘中双阶段)
+│   ├── run_backtest.py        # 统一回测引擎
+│   ├── update_daily_data.py   # 数据更新: 腾讯 API → CSV (支持 BACKTEST_DATA_DIR)
+│   ├── constraints.py         # A股交易约束 (涨跌停/T+1/停牌)
+│   ├── data_quality.py        # 数据质量门禁
+│   ├── portfolio_controls.py  # 换手率上限
+│   ├── industry.py            # 行业分类 + 仓位上限
+│   ├── indices.py             # 指数趋势
+│   └── sim_logging.py         # 日志配置
+├── config.yaml                # ⭐ 所有可调参数
 ├── data/
-│   ├── daily/                      # 日K线数据 (~280 CSV)
-│   │   ├── 000001.csv
-│   │   └── ...
-│   ├── portfolio/                  # 账户状态
-│   │   ├── account.json
-│   │   ├── trade_count.txt
-│   │   └── daily_YYYYMMDD.json     # 每日报告
-│   └── signals/                    # 因子信号缓存
+│   ├── daily/                 # 日K线 CSV (~280只)
+│   ├── portfolio/             # 账户状态 (account.json)
+│   └── signals/               # 信号缓存
 ├── docs/
-│   ├── architecture.md             # 架构详解
-│   ├── backtest-readme.md          # 回测文档
-│   └── research-report.md          # 调研报告
-├── references/
-│   └── api-notes.md                # API 接口笔记
-├── requirements.txt
-├── LICENSE
-└── README.md
+│   ├── architecture.md        # 架构详解
+│   ├── DEPLOY.md              # 部署文档
+│   ├── RESULTS_LOG.md         # 回测结果记录
+│   └── BACKLOG.md             # 待办事项
+└── requirements.txt
 ```
 
-## 数据格式
+## 策略对比（2021-01 ~ 2026-05）
 
-### 日K线 CSV (`data/daily/{code}.csv`)
+| 策略 | 年化 | 夏普 | 最大回撤 | 执行模式 |
+|------|------|------|---------|---------|
+| v6b_8f_pos_ic | 23.49% | 1.15 | -18.87% | close |
+| v4_baseline | 24.82% | 1.11 | -28.87% | close |
+| v5_tp_decay | 23.97% | 1.37 | -20.05% | close |
+| v8_all_icir | 22.07% | 1.04 | -27.66% | close |
+| v6b_8f_pos_ic | 16.25% | 0.94 | -26.54% | open |
 
-```csv
-date,open,high,low,close,volume,amount,outstanding_share,turnover
-2026-01-04,10.50,10.80,10.30,10.65,1234567,1.31e+09,,
+> open 模式 = T-1 日信号 → T 日开盘执行，更接近实盘
+
+## 配置
+
+所有参数在 `config.yaml` 中，优先级：`命令行 > config.yaml > 内置默认`。
+
+关键配置项：
+
+```yaml
+costs:
+  initial_capital: 200000    # 初始资金（模拟盘改这里）
+data:
+  daily_dir: "data/daily"   # 数据目录（也可设 BACKTEST_DATA_DIR 环境变量）
+strategies:
+  v6b_8f_pos_ic:            # 默认策略参数
+    top_n: 12
+    rebalance_freq: 20
+    stop_loss: 0.20
 ```
-
-### 账户状态 (`data/portfolio/account.json`)
-
-```json
-{
-  "cash": 487033.86,
-  "initial_capital": 1000000,
-  "holdings": {
-    "603986": {"shares": 100, "cost_price": 514.18, "entry_date": "2026-05-27"}
-  },
-  "trade_log": [],
-  "nav_history": []
-}
-```
-
-## 因子列表（29个，权重见 `config.yaml` → `factor_weights`）
-
-| 类别 | 因子 | 说明 |
-|------|------|------|
-| 动量 | mom_5, mom_10, mom_20, mom_60, mom_120 | 今价/N日前价的涨幅 |
-| 反转 | rev_3, rev_5, rev_10 | 动量的反义词（超跌反弹信号） |
-| 波动率 | vol_10, vol_20, vol_60, vol_change | 收益率标准差及变化率 |
-| 成交量 | vol_ratio_5, vol_ratio_20, amount_ratio | 今日量/均量 |
-| RSI | rsi_6, rsi_14, rsi_28 | 相对强弱指标 |
-| 趋势 | macd_12_26, macd_5_35, boll_pos_10, boll_pos_20, boll_width_20 | MACD + 布林带 |
-| 统计 | skew_20, kurt_20, atr_14, vwap_mom | 偏度、峰度、ATR、VWAP 动量 |
-| 相对强度 | rel_strength_20, rel_strength_60 | 相对横截面均值 |
-
-## 自定义
-
-**不需要修改代码**。编辑 `config.yaml` 中的：
-
-- `factor_weights:` — 调整因子权重
-- `risk:` — 止损、调仓频率、持仓数
-- `costs:` — 佣金、印花税、滑点率
-- `strategies:` — 添加/修改策略预设
 
 ## 分支策略
 
 ```
-dev/default      开发分支 — 日常开发、测试在这里进行
-release/default  发布分支 — 稳定版本，每日 cron job 从这里拉取脚本执行
+main             主分支 — 日常开发
+release/default  发布分支 — cron job 从这里拉取执行
 
-开功能:  dev/default → git checkout -b feature/xxx → 开发完后 merge 进 dev/default
-发版:    dev/default 测试通过后 → git push origin release/default
-回退:    直接 reset release/default 到上一个稳定 commit
-```
-
-## 每日报告示例
-
-```
-======================================================================
-v6 模拟交易 - 2026-05-28 18:00
-======================================================================
-
-📥 更新行情数据...
-  ✅ 数据更新完成
-
-  ============================账户状态============================
-  现金:       ¥   487,034
-  持仓市值:   ¥   510,740
-  总净值:     ¥   997,774
-  总收益率:       -0.22%
-  持仓数量:   7 只
-  已交易次数: 14
-  调仓计数:   19/20
-
-  ⚠️  止损风险预警:
-    ✅ 所有持仓安全，无止损风险
-
-  📊 收盘报告
-  日期:       2026-05-28
-  总净值:     ¥997,774
-  今日收益:   -0.16%
-  总收益率:   -0.22%
-  持仓数量:   7 只
-  现金占比:   48.8%
-
-  📋 行业分布
-  电子         35.2% ████████████████
-  半导体       28.1% █████████████
-======================================================================
+开功能:  git checkout -b feature/xxx → 开发 → merge main → merge release
 ```
 
 ## 注意事项
 
 - **仅供学习研究，不构成投资建议**
-- 模拟交易，不涉及真实资金
-- 数据源为腾讯行情接口，可能存在延迟
-- 因子策略基于历史数据回测，不代表未来收益
+- 数据源为腾讯行情接口，免费但可能有不稳定时段
+- 因子策略基于历史数据，不代表未来收益
+- open 模式回测更接近实盘，close 模式是理想上界
 
 ## License
 

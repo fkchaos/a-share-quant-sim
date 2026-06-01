@@ -21,7 +21,7 @@ backtest:
 
 # ── 交易成本 ──────────────────────────────────────────────
 costs:
-  initial_capital: 1000000                # 初始资金（元）
+  initial_capital: 200000                 # 初始资金（元）
   commission_rate: 0.0003                 # 佣金（万3）
   stamp_tax_rate: 0.001                   # 印花税（千1，卖出）
   slippage_rate: 0.001                    # 滑点（千1）
@@ -150,6 +150,37 @@ strategies:
     stop_loss: 0.20
     max_position: 0.15
     risk_aversion: 1.0
+
+  v6b_8f_pos_ic:
+    label: "v6b_8f_pos_ic"
+    description: "v6b 8因子正值IC-IR加权: top12, 20日调仓, 20%止损, 持仓上限10%, 行业上限25%, 分级止盈, 持有期decay"
+    weight_method: "ic_ir"
+    top_n: 12
+    rebalance_freq: 20
+    stop_loss: 0.20
+    max_position: 0.10
+    max_industry_weight: 0.25
+    filter_positive_ic: true
+    use_take_profit: true
+    tp_tiers: [[0.10, 0.30], [0.20, 0.30], [0.30, 1.00]]
+    use_holding_decay: true
+    use_atr_stop: true
+    atr_k: 6.0
+
+  v8_all_icir:
+    label: "v8_all_icir"
+    description: "v8 全因子IC-IR加权: top12, 20日调仓, 20%止损, 持仓上限10%, 行业上限25%, 分级止盈, 持有期decay, ATR止损"
+    weight_method: "ic_ir"
+    top_n: 12
+    rebalance_freq: 20
+    stop_loss: 0.20
+    max_position: 0.10
+    max_industry_weight: 0.25
+    use_take_profit: true
+    tp_tiers: [[0.10, 0.30], [0.20, 0.30], [0.30, 1.00]]
+    use_holding_decay: true
+    use_atr_stop: true
+    atr_k: 6.0
 
 # ── 参数扫描网格 ──────────────────────────────────────────
 param_scan:

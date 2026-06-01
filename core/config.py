@@ -152,6 +152,26 @@ PROFILE_V6B_8F_POS_IC = StrategyConfig(
     },
 )
 
+# ── v6b + high_low_range 变体 ──────────────────────────────────
+
+PROFILE_V6B_HLR = StrategyConfig(
+    label="v6b_hlr",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'vol_ratio_20': 0.18, 'amount_ratio': 0.14, 'rsi_6': 0.14,
+        'vol_ratio_5': 0.11, 'boll_pos_10': 0.11, 'mom_5': 0.09,
+        'rev_10': 0.07, 'boll_pos_20': 0.07,
+        'high_low_range': 0.09,  # 新增：日内振幅
+    },
+)
+
 # ── v7 系列：放开行业限制 ──────────────────────────────────────
 
 PROFILE_V7A_8F_IND40 = StrategyConfig(
@@ -274,6 +294,7 @@ STRATEGY_PROFILES = {
     "v7b_8f_ind50": PROFILE_V7B_8F_IND50,
     "v7c_8f_no_ind": PROFILE_V7C_8F_NO_IND,
     "v8_all_icir": PROFILE_V8_ALL_ICIR,
+    "v6b_hlr": PROFILE_V6B_HLR,
     # v9_short_term: RETIRED (freq=5 too costly for A-shares)
 }
 

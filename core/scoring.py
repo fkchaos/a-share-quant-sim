@@ -56,22 +56,30 @@ def composite_score_equal(factors: dict) -> pd.DataFrame:
     return composite_score(factors, weights)
 
 
-def score_all_stocks(all_factors: dict, weights: dict = None) -> dict:
+def score_all_stocks(all_factors: dict, weights: dict = None, dynamic_weights: dict = None) -> dict:
     """Score all stocks for live simulation (single-stock mode).
 
     all_factors: {code: {factor_name: float}}
     weights:     {factor_name: float} — missing = config.factor_weights
+    dynamic_weights: dict of (factor_name: callable) — 动态权重函数，每次选股时调用
+                     例：{'small_cap': lambda base_w, factors: adjusted_weight}
 
     Returns: {code: score_float}
 
     This is the single source of truth for live scoring.
-    It mirrors the cross-sectional standardization logic used by composite_score(panel).
     """
     if weights is None:
         weights = config.factor_weights
 
+    # 应用 dynamic_weights
+    effective_weights = dict(weights)
+    if dynamic_weights:
+        for fname, fn in dynamic_weights.items():
+            if fname in effective_weights:
+                effective_weights[fname] = fn(effective_weights[fname], all_factors)
+
     # Collect all factor names that have weights
-    factor_names = [n for n in weights if any(n in f for f in all_factors.values())]
+    factor_names = [n for n in effective_weights if any(n in f for f in all_factors.values())]
 
     if not factor_names:
         return {code: 0.0 for code in all_factors}
@@ -97,8 +105,8 @@ def score_all_stocks(all_factors: dict, weights: dict = None) -> dict:
     # Weighted sum
     scores = {}
     for code in all_factors:
-        score = sum(std_values[fname].get(code, 0.0) * w
-                    for fname, w in weights.items())
+        score = sum(std_values[fname].get(code, 0.0) * effective_weights.get(fname, 0.0)
+                    for fname in factor_names)
         scores[code] = score
 
     return scores

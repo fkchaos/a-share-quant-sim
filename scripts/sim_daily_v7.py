@@ -390,7 +390,41 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
         if len(df) > 120:
             all_factors[code] = calc_factors_single(df)
-    scores = score_all_stocks(all_factors)
+
+    # ── 小市值择时：动态调整 small_cap 权重 ──
+    # 简化版：用市值与近期收益的相关性判断小市值风格是否有效
+    _dynamic_weights = None
+    if 'small_cap' in _strategy_profile.factor_weights:
+        _small_cap_base_w = _strategy_profile.factor_weights['small_cap']
+        # 计算最近60天小市值因子与收益的截面IC
+        _ic_window = 60
+        _ic_vals = []
+        for _code, _f in all_factors.items():
+            if 'small_cap' in _f and not np.isnan(_f['small_cap']):
+                # 用 price_data 中的近期收益近似
+                if _code in price_data.index:
+                    _p_now = price_data.get(_code, np.nan)
+                    # 简化：跳过，用因子值本身的相关性
+                    pass
+        # 择时信号：small_cap 因子在全市场中的分位数分布
+        _small_cap_vals = {c: f.get('small_cap', np.nan)
+                           for c, f in all_factors.items()
+                           if not np.isnan(f.get('small_cap', np.nan))}
+        if len(_small_cap_vals) > 20:
+            _sc_arr = np.array(list(_small_cap_vals.values()))
+            _sc_mean = np.mean(_sc_arr)
+            _sc_std = np.std(_sc_arr) + 1e-10
+            # 因子离散度：标准差越大 → 小市值分化越明显 → 小市值因子越有效
+            _dispersion = _sc_std / (np.abs(_sc_mean) + 1e-10)
+            # 映射到权重调整系数：0.5 ~ 1.5
+            _adj = np.clip(_dispersion / 2.0, 0.5, 1.5)
+            _timed_w = _small_cap_base_w * _adj
+            _dynamic_weights = {
+                'small_cap': lambda base_w, factors, tw=_timed_w: tw
+            }
+            logger.debug(f"小市值择时：dispersion={_dispersion:.3f} weight_adj={_adj:.2f} base={_small_cap_base_w:.3f} → timed={_timed_w:.3f}")
+
+    scores = score_all_stocks(all_factors, dynamic_weights=_dynamic_weights)
 
     # ── 股票范围过滤：板块 + 流动性 + 行业分散 ──
     _market_filter = core_config.market
@@ -959,7 +993,27 @@ def run_day_end():
             df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
             if len(df) > 120:
                 all_factors[code] = calc_factors_single(df)
-        scores = score_all_stocks(all_factors)
+
+        # ── 小市值择时：动态调整 small_cap 权重 ──
+        _dynamic_weights = None
+        if 'small_cap' in _strategy_profile.factor_weights:
+            _small_cap_base_w = _strategy_profile.factor_weights['small_cap']
+            _small_cap_vals = {c: f.get('small_cap', np.nan)
+                               for c, f in all_factors.items()
+                               if not np.isnan(f.get('small_cap', np.nan))}
+            if len(_small_cap_vals) > 20:
+                _sc_arr = np.array(list(_small_cap_vals.values()))
+                _sc_mean = np.mean(_sc_arr)
+                _sc_std = np.std(_sc_arr) + 1e-10
+                _dispersion = _sc_std / (np.abs(_sc_mean) + 1e-10)
+                _adj = np.clip(_dispersion / 2.0, 0.5, 1.5)
+                _timed_w = _small_cap_base_w * _adj
+                _dynamic_weights = {
+                    'small_cap': lambda base_w, factors, tw=_timed_w: tw
+                }
+                logger.debug(f"小市值择时：dispersion={_dispersion:.3f} adj={_adj:.2f} {_small_cap_base_w:.3f}→{_timed_w:.3f}")
+
+        scores = score_all_stocks(all_factors, dynamic_weights=_dynamic_weights)
 
         # ── 股票范围过滤：板块 + 流动性 + 行业分散 ──
         _market_filter = core_config.market

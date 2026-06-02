@@ -11,6 +11,7 @@ import os
 import sys
 import numpy as np
 import pandas as pd
+from datetime import datetime, timedelta
 
 # Default data directory: project-root/data unless overridden
 _BASE_DIR = os.environ.get("BACKTEST_DATA_DIR", None)
@@ -20,22 +21,79 @@ if _BASE_DIR is None:
 DEFAULT_START = "2021-01-01"
 
 
+def filter_stocks(codes, market_filter=None, daily_dir=None, as_of_date=None):
+    """根据市场过滤规则筛选股票代码。
+
+    Parameters
+    ----------
+    codes       : list[str] — 原始股票代码列表
+    market_filter : MarketFilter — 市场过滤配置（None=不过滤）
+    daily_dir   : str — CSV 目录路径（退市检测需要读文件）
+    as_of_date  : datetime/date — 退市判断基准日期（默认今天）
+
+    Returns
+    -------
+    list[str] — 过滤后的股票代码
+    """
+    if market_filter is None:
+        return codes
+
+    filtered = list(codes)
+
+    # ── 1. 包含前缀白名单 ──
+    if market_filter.include_prefixes:
+        filtered = [c for c in filtered if any(c.startswith(p) for p in market_filter.include_prefixes)]
+
+    # ── 2. 排除前缀黑名单（优先级高于白名单）──
+    if market_filter.exclude_prefixes:
+        filtered = [c for c in filtered if not any(c.startswith(p) for p in market_filter.exclude_prefixes)]
+
+    # ── 3. 退市/长期停牌排除 ──
+    if market_filter.exclude_delisted and daily_dir:
+        if as_of_date is None:
+            as_of_date = datetime.now().date()
+        elif isinstance(as_of_date, str):
+            as_of_date = pd.Timestamp(as_of_date).date()
+
+        max_gap = market_filter.delist_max_gap
+        active = []
+        for code in filtered:
+            csv_path = os.path.join(daily_dir, f"{code}.csv")
+            if not os.path.exists(csv_path):
+                continue
+            try:
+                df = pd.read_csv(csv_path, index_col='date', parse_dates=True)
+                if len(df) == 0:
+                    continue
+                last_date = df.index[-1].date()
+                gap = (as_of_date - last_date).days
+                if gap <= max_gap:
+                    active.append(code)
+            except Exception:
+                active.append(code)  # 读文件失败时保守纳入
+        filtered = active
+
+    return filtered
+
+
 def load_and_build_panel(
     start_date=None,
     end_date=None,
     need_open=False,
     need_hl=False,
     daily_dir=None,
+    market_filter=None,
 ):
     """Load daily K-line CSVs and build aligned panels.
 
     Parameters
     ----------
-    start_date : str, optional — defaults to '2021-01-01'
-    end_date   : str, optional — defaults to today
-    need_open  : bool — include open_panel (for exec_timing='open')
-    need_hl    : bool — include high_panel + low_panel (for short-term factors)
-    daily_dir  : str, optional — override CSV directory
+    start_date   : str, optional — defaults to '2021-01-01'
+    end_date     : str, optional — defaults to today
+    need_open    : bool — include open_panel (for exec_timing='open')
+    need_hl      : bool — include high_panel + low_panel (for short-term factors)
+    daily_dir    : str, optional — override CSV directory
+    market_filter: MarketFilter, optional — stock market filter config
 
     Returns
     -------
@@ -52,6 +110,7 @@ def load_and_build_panel(
         print(f"❌ {ddir} 下没有 CSV 文件，请先运行 update_daily_data.py")
         sys.exit(1)
 
+    # ── 1. 读取所有 CSV ──
     all_data = {}
     for f in files:
         code = f.replace(".csv", "")
@@ -63,7 +122,20 @@ def load_and_build_panel(
         if len(df) > 0:
             all_data[code] = df
 
-    # Filter: require near-full coverage of the backtest period
+    # ── 2. 市场过滤（板块 + 退市）──
+    if market_filter is not None:
+        before_count = len(all_data)
+        codes = list(all_data.keys())
+        filtered_codes = filter_stocks(
+            codes, market_filter=market_filter, daily_dir=ddir, as_of_date=ed,
+        )
+        filtered_set = set(filtered_codes)
+        all_data = {c: d for c, d in all_data.items() if c in filtered_set}
+        after_count = len(all_data)
+        if after_count != before_count:
+            print(f"  市场过滤: {before_count} → {after_count} 只 (排除 {before_count - after_count} 只)")
+
+    # ── 3. 完整度过滤 ──
     valid = {}
     for code, df in all_data.items():
         if df.index.min() <= pd.Timestamp(sd) + pd.Timedelta(days=30) and \

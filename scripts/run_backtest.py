@@ -756,7 +756,10 @@ def main():
     need_open = (args.exec_timing == "open")
     need_hl = True  # 短线因子在面板模式下始终需要
     print(f"\n[1/5] 加载数据... (exec_timing={args.exec_timing})")
-    loaded, codes = load_and_build_panel(args.start, args.end, need_open=need_open, need_hl=need_hl)
+    loaded, codes = load_and_build_panel(
+        args.start, args.end, need_open=need_open, need_hl=need_hl,
+        market_filter=core_config.market,
+    )
     close_panel  = loaded[0]
     volume_panel = loaded[1]
     amount_panel = loaded[2]

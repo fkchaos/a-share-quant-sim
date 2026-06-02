@@ -34,6 +34,30 @@ class TradingCosts:
 
 
 @dataclass
+class MarketFilter:
+    """股票范围过滤配置。
+
+    include_prefixes : 允许的股票代码前缀列表
+        '6'  = 沪市主板 (600/601/603/605...)
+        '0'  = 深市主板 (000/001/002/003...)
+        '3'  = 创业板 (300/301...)
+        留空 []  = 不过滤（全部纳入）
+    exclude_prefixes : 强制排除的前缀（优先级高于 include）
+        '688' = 科创板
+        '8'   = 北交所
+        '4'   = 老三板
+        '2'   = B股
+    exclude_delisted : bool — 自动排除退市/长期停牌股
+        判断标准：最后交易日期距今超过 delist_max_gap 天
+    delist_max_gap   : int — 超过多少天无数据判定为退市/停牌（默认 30 天）
+    """
+    include_prefixes: tuple = ('6', '0', '3')
+    exclude_prefixes: tuple = ('688', '8', '4', '2')
+    exclude_delisted: bool = True
+    delist_max_gap: int = 30
+
+
+@dataclass
 class RiskLimits:
     stop_loss: float = 0.20
     stop_loss_atr_k: float = 6.0        # K for ATR-based dynamic stop-loss (close-to-close ATR typically ~3-5%)
@@ -313,6 +337,7 @@ class Config:
 
     costs: TradingCosts = field(default_factory=TradingCosts)
     risk: RiskLimits = field(default_factory=RiskLimits)
+    market: MarketFilter = field(default_factory=MarketFilter)
     factor_weights: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_FACTOR_WEIGHTS))
     strategies: Dict[str, StrategyConfig] = field(default_factory=dict)
 

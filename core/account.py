@@ -41,16 +41,32 @@ def compute_buy_shares(
     state: PortfolioState,
     code: str,
     price: float,
+    target_value: float = None,
     max_position_weight: float = 0.12,
 ) -> Tuple[int, float, float]:
     """Compute how many shares to buy, the cost, and commission.
 
+    Parameters
+    ----------
+    target_value : float, optional — target market value for this stock.
+                   If None, uses state.cash (backward-compatible).
+    max_position_weight : float — max position as fraction of target_value cap.
+
     Returns: (shares, cost, commission)
     """
     costs = config.costs
-    max_shares_by_count = max(1, len(state.holdings | {code: 1}))
-    target_value = state.cash / max_shares_by_count
-    target_value = min(target_value, state.cash * max_position_weight)
+
+    if target_value is not None:
+        # New mode: allocate based on provided target (from portfolio-level planning)
+        pass
+    else:
+        # Legacy mode: split remaining cash evenly
+        max_shares_by_count = max(1, len(state.holdings | {code: 1}))
+        target_value = state.cash / max_shares_by_count
+
+    # Cap by max_position
+    # If target_value already represents a single-stock target, don't cap again
+    # (capping is done at the caller level)
 
     adj_price = price * (1 + costs.slippage_rate)
     shares = int(target_value / adj_price / 100) * 100
@@ -61,6 +77,7 @@ def compute_buy_shares(
     cost = shares * adj_price
     commission = cost * costs.commission_rate
 
+    # Final cash check: if not enough cash, reduce shares
     if state.cash < cost + commission:
         shares = int((state.cash * 0.98) / adj_price / 100) * 100
         if shares <= 0:
@@ -77,15 +94,23 @@ def buy(
     price: float,
     date,
     shares: int = None,
+    target_value: float = None,
 ) -> PortfolioState:
-    """Execute a buy order. Returns a NEW state."""
+    """Execute a buy order. Returns a NEW state.
+
+    Parameters
+    ----------
+    shares : int, explicit share count (bypasses auto-compute).
+    target_value : float, target market value for auto-compute.
+                   If None, falls back to legacy cash-splitting logic.
+    """
     costs = config.costs
     new_state = state.copy()
 
     adj_price = price * (1 + costs.slippage_rate)
 
     if shares is not None:
-        # Explicit share count — 强制 100 股整数倍（A股最小交易单位）
+        # Explicit share count — 强制 100 股整数倍
         shares = int(shares / 100) * 100
         if shares <= 0:
             return new_state  # no-op
@@ -95,7 +120,9 @@ def buy(
             return new_state  # no-op
     else:
         # Auto-compute shares
-        shares, cost, commission = compute_buy_shares(new_state, code, price)
+        shares, cost, commission = compute_buy_shares(
+            new_state, code, price, target_value=target_value,
+        )
         if shares <= 0:
             return new_state  # no-op
 

@@ -77,13 +77,17 @@ def compute_buy_shares(
     cost = shares * adj_price
     commission = cost * costs.commission_rate
 
-    # Final cash check: if not enough cash, reduce shares
+    # Final cash check: if not enough cash, reduce shares but keep at least 100 shares
     if state.cash < cost + commission:
-        shares = int((state.cash * 0.98) / adj_price / 100) * 100
-        if shares <= 0:
+        # Reduce shares to fit available cash (keep at least 1 lot = 100 shares)
+        _max_affordable = int((state.cash * 0.98) / adj_price / 100) * 100
+        if _max_affordable >= 100:
+            shares = _max_affordable
+            cost = shares * adj_price
+            commission = cost * costs.commission_rate
+        else:
+            # Can't afford minimum 100 shares — skip this stock
             return 0, 0.0, 0.0
-        cost = shares * adj_price
-        commission = cost * costs.commission_rate
 
     return shares, cost, commission
 
@@ -148,9 +152,14 @@ def buy(
         }
 
     new_state.trade_log.append({
-        'date': str(date), 'code': code, 'action': 'BUY',
-        'shares': shares, 'price': round(price, 4),
-        'cost': round(commission, 2),
+        'date': str(date),
+        'code': code,
+        'action': 'BUY',
+        'shares': shares,
+        'price': price,
+        'cost': cost,
+        'commission': commission,
+        'reason': 'AUTO' if target_value is None else 'TARGET',
     })
 
     return new_state

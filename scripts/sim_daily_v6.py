@@ -24,7 +24,7 @@ sys.path.insert(0, "/root/a-share-quant-sim")
 sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Core engine (shared with run_backtest.py) ─────────────────────
-from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value, check_take_profit, apply_holding_decay
+from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value, check_take_profit, apply_holding_decay, allocate_weights
 from core.config import config as core_config, STRATEGY_PROFILES
 from core.scoring import score_all_stocks
 from core.factors import calc_factors_single
@@ -220,8 +220,37 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
             all_factors[code] = calc_factors_single(df)
     scores = score_all_stocks(all_factors)
 
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    top_stocks = [code for code, _ in sorted_scores[:TOP_N]]
+    # ── 股票范围过滤：板块 + 流动性 + 行业分散 ──
+    from core.config import config as _cfg
+    _market_filter = _cfg.market
+    _pv = portfolio_value(state, date, price_data)
+    _min_price_for_100shares = _pv * MAX_SINGLE_WEIGHT / 100  # 至少能买 100 股的单价上限
+    _filtered = []
+    _industry_counts = {}  # 行业已选数量
+    for code, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+        # 板块过滤
+        if _market_filter.include_prefixes and not any(code.startswith(p) for p in _market_filter.include_prefixes):
+            continue
+        if _market_filter.exclude_prefixes and any(code.startswith(p) for p in _market_filter.exclude_prefixes):
+            continue
+        # 流动性过滤
+        _p = price_data.get(code, 0)
+        if pd.isna(_p) or _p <= 0 or _p > _min_price_for_100shares:
+            continue
+        # 行业分散：单个行业不超过 max_industry_weight / (1/top_n) = max_industry_weight * top_n 只
+        _ind = get_industry(code, names.get(code, ""))
+        _ind_max_count = int(np.ceil(MAX_INDUSTRY_WEIGHT * TOP_N))  # 行业最大持股数
+        if _industry_counts.get(_ind, 0) >= _ind_max_count:
+            continue
+        _filtered.append(code)
+        _industry_counts[_ind] = _industry_counts.get(_ind, 0) + 1
+        if len(_filtered) >= TOP_N:
+            break
+
+    logger.info(f"选股过滤: {len(scores)} → {len(_filtered)} 只 "
+                f"(排除板块不符 + 单价>{_min_price_for_100shares:.0f}元 + 行业分散≤{_ind_max_count}只/行业)")
+    sorted_scores = [(c, scores[c]) for c in _filtered]
+    top_stocks = [code for code, _ in sorted_scores]
 
     logger.info(f"目标持仓 (Top {TOP_N}):")
     for i, code in enumerate(top_stocks):
@@ -272,7 +301,7 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
             _ret = _df['close'].pct_change().tail(20)
             _vol_series[_code] = _ret.std()
 
-    _weight_method = 'vol_inverse' if core_config.risk.top_n > 0 else 'equal'
+    _weight_method = _strategy_profile.weight_method  # 使用策略配置的权重方法
     # 先算初始权重（equal 或 vol_inverse）
     # 注意：max_position 约束在 cap_daily_turnover 之前应用
     target_weights = allocate_weights(
@@ -320,7 +349,8 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
             info = state.holdings[code]
             current_mv = info['shares'] * p
             current_w = current_mv / current_pv if current_pv > 0 else 0
-            target_w = target_weights.get(code, weight_per_stock)
+            # 补仓：用等权目标，不用 target_weights（可能被行业压缩）
+            target_w = weight_per_stock
             if current_w < target_w * REBALANCE_THRESHOLD:
                 target_mv = current_pv * target_w
                 add_mv = target_mv - current_mv
@@ -336,19 +366,27 @@ def step_rebalance(state, date, price_data, code_dataframes, files, loaded, name
     for code in new_targets:
         if code in price_data.index:
             p = price_data[code]
-            if not pd.isna(p) and p > 0:
-                ctx = trade_contexts.get(code)
-                if ctx:
-                    blocked, reason = ctx.is_buy_blocked()
-                    if blocked:
-                        logger.info(f"  ⏭️  {code} {names.get(code, code)} 【{reason}】无法买入")
-                        continue
-                old_holdings = set(state.holdings.keys())
-                state = buy(state, code, p, date)
-                if code in state.holdings and code not in old_holdings:
-                    logger.info(f"  ✅ {code} {names.get(code, code)} 买入 @ {p:.2f}")
-                else:
-                    logger.info(f"  ⏭️  {code} {names.get(code, code)} 资金不足跳过")
+            if pd.isna(p) or p <= 0:
+                continue
+            ctx = trade_contexts.get(code)
+            if ctx:
+                blocked, reason = ctx.is_buy_blocked()
+                if blocked:
+                    logger.info(f"  ⏭️  {code} {names.get(code, code)} 【{reason}】无法买入")
+                    continue
+            # 计算目标买入金额：直接用等权，不用 target_weights（可能被行业压缩）
+            target_mv = current_pv * weight_per_stock
+            # 最低目标：至少能买 100 股（含滑点）
+            _min_target = p * 100 * (1 + SLIPPAGE_RATE)
+            if target_mv < _min_target:
+                logger.info(f"  ⏭️  {code} {names.get(code, code)} 目标¥{target_mv:,.0f} < 最低¥{_min_target:,.0f}(100股)，跳过")
+                continue
+            old_holdings = set(state.holdings.keys())
+            state = buy(state, code, p, date, target_value=target_mv)
+            if code in state.holdings and code not in old_holdings:
+                logger.info(f"  ✅ {code} {names.get(code, code)} 买入 @ {p:.2f}")
+            else:
+                logger.info(f"  ⏭️  {code} {names.get(code, code)} 资金不足跳过")
 
     return state, trade_count, turnover_info, industry_info
 

@@ -51,7 +51,7 @@ os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 os.makedirs(SIGNAL_DIR, exist_ok=True)
 
 # Strategy params — from STRATEGY_PROFILES
-_PROFILE = "v6b_hlr"
+_PROFILE = "v6b_8f_pos_ic"
 _strategy_profile = STRATEGY_PROFILES[_PROFILE]
 
 REBAL_FREQ = _strategy_profile.rebalance_freq
@@ -392,8 +392,32 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             all_factors[code] = calc_factors_single(df)
     scores = score_all_stocks(all_factors)
 
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    top_stocks = [code for code, _ in sorted_scores[:TOP_N]]
+    # ── 股票范围过滤：板块 + 流动性 + 行业分散 ──
+    _market_filter = core_config.market
+    current_pv_signal = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
+    _min_price_for_100shares = current_pv_signal * MAX_SINGLE_WEIGHT / 100
+    _ind_max_count = int(np.ceil(MAX_INDUSTRY_WEIGHT * TOP_N))
+    _filtered = []
+    _industry_counts = {}
+    for code, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+        if _market_filter.include_prefixes and not any(code.startswith(p) for p in _market_filter.include_prefixes):
+            continue
+        if _market_filter.exclude_prefixes and any(code.startswith(p) for p in _market_filter.exclude_prefixes):
+            continue
+        _p = price_data.get(code, 0)
+        if pd.isna(_p) or _p <= 0 or _p > _min_price_for_100shares:
+            continue
+        _ind = get_industry(code, names.get(code, ""))
+        if _industry_counts.get(_ind, 0) >= _ind_max_count:
+            continue
+        _filtered.append(code)
+        _industry_counts[_ind] = _industry_counts.get(_ind, 0) + 1
+        if len(_filtered) >= TOP_N:
+            break
+
+    logger.info(f"选股过滤: {len(scores)} → {len(_filtered)} 只 "
+                f"(排除板块不符 + 单价>{_min_price_for_100shares:.0f}元 + 行业分散≤{_ind_max_count}只/行业)")
+    top_stocks = _filtered
 
     logger.info(f"目标持仓 (Top {TOP_N}):")
     for i, code in enumerate(top_stocks):
@@ -402,23 +426,9 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         p = price_data.get(code, 0)
         logger.info(f"  {i+1}. {code} {name:<10} 评分={s:.3f} 当前价={p:.2f}")
 
-    # ── 计算目标权重 ──
-    _vol_series = pd.Series(dtype=float)
-    for _f in files:
-        _code = _f.replace(".csv", "")
-        _df = pd.read_csv(os.path.join(DAILY_DIR, _f), index_col='date', parse_dates=True)
-        if len(_df) >= 21:
-            _ret = _df['close'].pct_change().tail(20)
-            _vol_series[_code] = _ret.std()
-
-    # 先算初始权重
-    from core.account import allocate_weights
-    target_weights = allocate_weights(
-        top_stocks, price_data,
-        method='vol_inverse',
-        vol_series=_vol_series,
-        max_position=MAX_SINGLE_WEIGHT,
-    )
+    # ── 计算目标权重（等权，不用 vol_inverse）──
+    weight_per_stock = 1.0 / TOP_N
+    target_weights = {c: weight_per_stock for c in top_stocks}
 
     # 换手率控制 / 行业上限
     current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
@@ -951,8 +961,35 @@ def run_day_end():
                 all_factors[code] = calc_factors_single(df)
         scores = score_all_stocks(all_factors)
 
-        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        top_stocks = [code for code, _ in sorted_scores[:TOP_N]]
+        # ── 股票范围过滤：板块 + 流动性 + 行业分散 ──
+        _market_filter = core_config.market
+        current_pv_check = portfolio_value(state, latest_date, price_data)
+        _min_price_for_100shares = current_pv_check * MAX_SINGLE_WEIGHT / 100
+        _ind_max_count = int(np.ceil(MAX_INDUSTRY_WEIGHT * TOP_N))
+        _filtered = []
+        _industry_counts = {}
+        for code, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+            # 板块过滤
+            if _market_filter.include_prefixes and not any(code.startswith(p) for p in _market_filter.include_prefixes):
+                continue
+            if _market_filter.exclude_prefixes and any(code.startswith(p) for p in _market_filter.exclude_prefixes):
+                continue
+            # 流动性过滤
+            _p = price_data.get(code, 0)
+            if pd.isna(_p) or _p <= 0 or _p > _min_price_for_100shares:
+                continue
+            # 行业分散
+            _ind = get_industry(code, names.get(code, ""))
+            if _industry_counts.get(_ind, 0) >= _ind_max_count:
+                continue
+            _filtered.append(code)
+            _industry_counts[_ind] = _industry_counts.get(_ind, 0) + 1
+            if len(_filtered) >= TOP_N:
+                break
+
+        logger.info(f"选股过滤: {len(scores)} → {len(_filtered)} 只 "
+                    f"(排除板块不符 + 单价>{_min_price_for_100shares:.0f}元 + 行业分散≤{_ind_max_count}只/行业)")
+        top_stocks = _filtered
 
         logger.info(f"目标持仓 (Top {TOP_N}):")
         for i, code in enumerate(top_stocks):
@@ -993,18 +1030,7 @@ def run_day_end():
                         if sold:
                             logger.info(f"  ❌ {code} {names.get(code, code)} 已卖出")
 
-        # 权重分配
-        from core.account import allocate_weights
-        _vol_series = pd.Series(dtype=float)
-        for _f in files:
-            _code = _f.replace(".csv", "")
-            _df = pd.read_csv(os.path.join(DATA_DIR, "daily", _f), index_col='date', parse_dates=True)
-            if len(_df) >= 21:
-                _ret = _df['close'].pct_change().tail(20)
-                _vol_series[_code] = _ret.std()
-
-        target_weights = allocate_weights(top_stocks, price_data, method='vol_inverse',
-                                          vol_series=_vol_series, max_position=MAX_SINGLE_WEIGHT)
+        # 权重分配 — 等权，不用 vol_inverse（避免与 hlr 因子矛盾）
         weight_per_stock = 1.0 / TOP_N
 
         current_pv = portfolio_value(state, latest_date, price_data)
@@ -1012,6 +1038,7 @@ def run_day_end():
 
         turnover_info = None
         industry_info = None
+        target_weights = {c: weight_per_stock for c in top_stocks}
         if target_weights:
             target_weights, turnover_info = cap_daily_turnover(
                 None, target_weights, price_dict, max_turnover=MAX_DAILY_TURNOVER, current_state=state)
@@ -1055,7 +1082,13 @@ def run_day_end():
                             logger.info(f"  ⏭️  {code} {names.get(code, code)} 【{reason}】无法买入")
                             continue
                     old_holdings = set(state.holdings.keys())
-                    state = buy(state, code, p, latest_date)
+                    # 用等权目标金额买入
+                    target_mv = current_pv * weight_per_stock
+                    _min_target = p * 100 * (1 + SLIPPAGE_RATE)
+                    if target_mv < _min_target:
+                        logger.info(f"  ⏭️  {code} {names.get(code, code)} 目标¥{target_mv:,.0f} < 最低¥{_min_target:,.0f}(100股)，跳过")
+                        continue
+                    state = buy(state, code, p, latest_date, target_value=target_mv)
                     if code in state.holdings and code not in old_holdings:
                         logger.info(f"  ✅ {code} {names.get(code, code)} 买入 @ {p:.2f}")
                     else:

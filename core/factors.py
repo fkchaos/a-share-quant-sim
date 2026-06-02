@@ -31,6 +31,23 @@ def calc_factors_single(df: pd.DataFrame) -> dict:
 
     factors = {}
 
+    # Market cap (small-cap factor)
+    # outstanding_share is optional; if missing, skip
+    if 'outstanding_share' in df.columns:
+        osh = df['outstanding_share'].iloc[-1]
+        if pd.notna(osh) and osh > 0:
+            # 流通市值 = close × 流通股本（单位：元）
+            # 取对数后取负值 → 小市值 = 大正因子
+            cap = close.iloc[-1] * osh
+            factors['market_cap'] = cap
+            factors['log_market_cap'] = np.log(cap + eps)
+            # 小市值因子：市值的倒数（标准化用）
+            factors['small_cap'] = -factors['log_market_cap']
+        else:
+            factors['small_cap'] = np.nan
+    else:
+        factors['small_cap'] = np.nan
+
     # Momentum
     for w in [5, 10, 20, 60, 120]:
         factors[f'mom_{w}'] = close.iloc[-1] / close.iloc[-w] - 1 if len(close) >= w else np.nan

@@ -322,6 +322,56 @@ STRATEGY_PROFILES = {
     # v9_short_term: RETIRED (freq=5 too costly for A-shares)
 }
 
+# ── v10 系列：小市值因子 ──────────────────────────────────────────
+
+PROFILE_V10_SMALL_CAP = StrategyConfig(
+    label="v10_small_cap",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        # 精简版：小市值 + 跳空比 + 5个强因子
+        'small_cap':       0.20,   # 小市值因子（2025年最强）
+        'gap_ratio':       0.18,   # 跳空比
+        'rsi_6':           0.15,   # 短期RSI
+        'boll_pos_10':     0.15,   # 布林位置
+        'amount_ratio':    0.12,   # 成交额比
+        'mom_5':           0.10,   # 5日动量
+        'rsi_14':          0.10,   # 中期RSI
+    },
+)
+
+# v10b：小市值 + 动量 + 反转（测试反转因子在小市值股票上是否有效）
+PROFILE_V10B_SMALL_MOM = StrategyConfig(
+    label="v10b_small_mom",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'small_cap':       0.25,   # 小市值
+        'gap_ratio':       0.15,   # 跳空
+        'mom_5':           0.15,   # 短期动量
+        'mom_10':          0.10,   # 中期动量
+        'rsi_6':           0.10,   # RSI
+        'amount_ratio':    0.10,   # 成交额
+        'rev_5':           0.08,   # 短期反转（小市值上可能有效）
+        'boll_pos_10':     0.07,   # 布林
+    },
+)
+
+STRATEGY_PROFILES["v10_small_cap"] = PROFILE_V10_SMALL_CAP
+STRATEGY_PROFILES["v10b_small_mom"] = PROFILE_V10B_SMALL_MOM
+
 
 @dataclass
 class Config:

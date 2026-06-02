@@ -1,0 +1,48 @@
+{
+  "v6b_8f_pos_ic": {
+    "label": "v6b_8f_pos_ic",
+    "total_return": 1.866491,
+    "annual_return": 0.315042,
+    "annual_volatility": 0.188613,
+    "sharpe_ratio": 1.6703,
+    "max_drawdown": 0.181719,
+    "calmar_ratio": 1.7337,
+    "sortino_ratio": 1.9443,
+    "win_rate": 0.43905,
+    "total_trades": 3522,
+    "stop_loss_trades": 3,
+    "total_cost": 12396059.64,
+    "rebalance_count": 43,
+    "final_value": 573298.29,
+    "params": {
+      "top_n": 12,
+      "rebalance_freq": 20,
+      "stop_loss": 0.2,
+      "max_position": 0.1,
+      "use_vol_scaling": true
+    }
+  },
+  "v10_small_cap": {
+    "label": "v10_small_cap",
+    "total_return": 1.444745,
+    "annual_return": 0.261725,
+    "annual_volatility": 0.173655,
+    "sharpe_ratio": 1.5072,
+    "max_drawdown": 0.17517,
+    "calmar_ratio": 1.4941,
+    "sortino_ratio": 1.7987,
+    "win_rate": 0.438017,
+    "total_trades": 3317,
+    "stop_loss_trades": 5,
+    "total_cost": 10423435.43,
+    "rebalance_count": 43,
+    "final_value": 488949.0,
+    "params": {
+      "top_n": 12,
+      "rebalance_freq": 20,
+      "stop_loss": 0.2,
+      "max_position": 0.1,
+      "use_vol_scaling": true
+    }
+  }
+}

@@ -1,0 +1,3 @@
+strategy,annual_return,sharpe,max_dd,calmar,sortino,win_rate,trades,stop_loss,cost,final_value
+v6b_8f_pos_ic,31.50%,1.6703,18.17%,1.7337,1.9443,43.91%,3522,3,12396059.64,573298.29
+v10_small_cap,26.17%,1.5072,17.52%,1.4941,1.7987,43.80%,3317,5,10423435.43,488949.0

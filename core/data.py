@@ -154,7 +154,7 @@ def load_and_build_panel(
         low_panel  = pd.DataFrame({c: d['low']  for c, d in valid.items() if 'low'  in d.columns})
 
     common_dates = close_panel.dropna(how='all').index
-    common_dates = common_dates[(common_dates >= sd) & (common_dates <= ed)]
+    common_dates = common_dates[(common_dates >= pd.Timestamp(sd)) & (common_dates <= pd.Timestamp(ed))]
 
     result = (
         close_panel.loc[common_dates].sort_index(),

@@ -23,3 +23,6 @@ venv/
 .idea/
 *.swp
 *.swo
+
+# ML backtest results
+data/backtest_results/

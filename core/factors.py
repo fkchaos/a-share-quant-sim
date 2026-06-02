@@ -324,9 +324,9 @@ def calc_factors_panel(
             # 衡量当天方向性，值域约 [-1, 1]，正值 = 收盘在开盘上方
             factors['intraday_drift'] = (close_panel - open_panel) / (high_panel - low_panel + eps)
         else:
-            factors['intraday_drift'] = pd.Series(0.0, index=close_panel.index)
+            factors['intraday_drift'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
     else:
-        factors['high_low_range'] = pd.Series(0.0, index=close_panel.index)
-        factors['intraday_drift'] = pd.Series(0.0, index=close_panel.index)
+        factors['high_low_range'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
+        factors['intraday_drift'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
 
     return factors

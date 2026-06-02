@@ -1,27 +1,27 @@
 """
-ML Rolling Training Engine
-==========================
+ML Rolling Training Engine v2
+=============================
 
-LightGBM 滚动训练 + Walk-Forward 回测核心模块。
+LightGBM 滚动训练 + Walk-Forward 回测核心模块（增强版）。
 
-架构：
-  1. FeatureBuilder  — 从因子面板构建 (stock×date) 特征矩阵和标签
-  2. RollingTrainer  — Walk-Forward 滚动训练 + 预测
-  3. MLSignalEngine  — 把 ML 预测转成选股信号，复用 run_backtest 交易逻辑
+四大优化方向（v2）：
+  1. 多周期标签融合    — 5d/20d/60d 三周期预测，IC 加权融合
+  2. 因子分组训练      — 动量/反转/波动率/量能 4 组独立 GBDT，stacking
+  3. Regime Switching  — 市场状态识别（牛/熊/震荡）× 差异化模型参数
+  4. 特征增强          — 行业 one-hot + 市值分位数 + 因子交互项
 
 使用：
-  from core.ml import FeatureBuilder, RollingTrainer, ml_score_panel
+  from core.ml import FeatureBuilder, RollingTrainer, run_ml_pipeline
 """
 
 import numpy as np
 import pandas as pd
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List
 
 # ============================================================
 # 常量
 # ============================================================
 
-# 可用作 ML 特征的全部因子名（与 calc_factors_panel 输出一致）
 ALL_FACTOR_NAMES = [
     # 动量
     'mom_5', 'mom_10', 'mom_20', 'mom_60', 'mom_120',
@@ -53,9 +53,50 @@ ALL_FACTOR_NAMES = [
     'small_cap',
 ]
 
+# 因子分组（用于分组训练 stacking）
+FACTOR_GROUPS = {
+    'momentum': [
+        'mom_5', 'mom_10', 'mom_20', 'mom_60', 'mom_120',
+        'rel_strength_20', 'rel_strength_60', 'vwap_mom', 'macd_12_26', 'macd_5_35',
+    ],
+    'reversal': [
+        'rev_3', 'rev_5', 'rev_10', 'rsi_6', 'rsi_14', 'rsi_28',
+        'boll_pos_10', 'boll_pos_20',
+    ],
+    'volatility': [
+        'vol_10', 'vol_20', 'vol_60', 'vol_change',
+        'atr_14', 'skew_20', 'kurt_20', 'amplitude', 'boll_width_20',
+        'high_low_range', 'intraday_drift', 'chip_kurt',
+    ],
+    'volume': [
+        'vol_ratio_5', 'vol_ratio_20', 'amount_ratio',
+        'turnover_skew', 'turnover_change', 'price_impact',
+        'pv_corr', 'illiquidity', 'obv_slope', 'gap_ratio',
+    ],
+    # 小市值单独一组（风格因子）
+    'style': ['small_cap'],
+}
+
+# 市场状态（regime）参数
+REGIME_PARAMS = {
+    'bull': {       # 牛市：更激进，更深的树
+        'num_leaves': 127,
+        'learning_rate': 0.08,
+        'min_data_in_leaf': 10,
+    }, 'bear': {    # 熊市：更保守，浅层 + 强正则
+        'num_leaves': 31,
+        'learning_rate': 0.03,
+        'min_data_in_leaf': 40,
+    }, 'choppy': {  # 震荡市：中等
+        'num_leaves': 63,
+        'learning_rate': 0.05,
+        'min_data_in_leaf': 20,
+    },
+}
+
 
 def _factor_names_available(factors: dict) -> list:
-    """返回当前 factor dict 中实际存在的因子名（排除 small_cap 可能为 nan 的情况）"""
+    """返回因子面板中实际可用的因子名"""
     names = []
     for name in ALL_FACTOR_NAMES:
         if name in factors and isinstance(factors[name], pd.DataFrame):
@@ -64,53 +105,62 @@ def _factor_names_available(factors: dict) -> list:
     return names
 
 
+def _available_factor_group(factors: dict) -> dict:
+    """返回当前数据中实际可用的因子分组"""
+    available = _factor_names_available(factors)
+    groups = {}
+    for gname, gfactors in FACTOR_GROUPS.items():
+        valid = [f for f in gfactors if f in available]
+        if len(valid) >= 2:  # 组内至少 2 个因子才有意义
+            groups[gname] = valid
+    return groups
+
+
 # ============================================================
-# 1. FeatureBuilder
+# 1. FeatureBuilder v2
 # ============================================================
 
 class FeatureBuilder:
-    """从因子面板构建 ML 特征矩阵和标签。
+    """从因子面板构建 ML 特征矩阵和标签（增强版）。
 
-    输入：
-      factors : {factor_name: DataFrame (dates × stocks)}
-      close_panel : DataFrame (dates × stocks)
-      stock_names : dict {code: name} 可选，用于行业编码
-
-    输出：
-      X : DataFrame (samples × features)，每行 = (stock, date) 的截面因子值
-      y : Series (samples,)，标签 = 未来 forward_period 日超额收益
-      dates_index : 每个样本的 date
-      codes_index : 每个样本的 stock code
+    新增功能：
+      - 多周期标签：同时生成 forward=5/20/60 三个标签
+      - 特征增强：行业 one-hot + 市值分位数 + 因子交互
+      - 增强因子添加到 X_extra（与原始因子 concat）
     """
 
     def __init__(
         self,
-        forward_period: int = 5,
+        forward_periods: list = None,
         neutralize: bool = True,
+        enhance: bool = True,
     ):
         """
         Parameters
         ----------
-        forward_period : int
-            预测未来 N 日收益（默认 5 天 ≈ 1 周）
+        forward_periods : list of int
+            多周期标签，默认 [5, 20, 60]
         neutralize : bool
-            是否截面去均值（转换为超额收益，减少市场 Beta 影响）
+            标签截面去均值
+        enhance : bool
+            是否添加增强特征（行业 one-hot + 市值分位数 + 因子交互）
         """
-        self.forward_period = forward_period
+        self.forward_periods = forward_periods or [5, 20, 60]
         self.neutralize = neutralize
+        self.enhance = enhance
 
     def build(
         self,
         factors: dict,
         close_panel: pd.DataFrame,
         stock_names: Optional[dict] = None,
-    ) -> Tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series]:
+    ) -> Tuple[pd.DataFrame, Dict[str, pd.Series], pd.Series, pd.Series]:
         """构建特征和标签。
 
         Returns
         -------
         X : DataFrame (samples × features)
-        y : Series (samples,) — 未来 N 日超额收益
+        y_multi : dict[str, Series] — {'fwd_5': ..., 'fwd_20': ..., 'fwd_60': ...}
         date_index : Series — 每行的日期
         code_index : Series — 每行的股票代码
         """
@@ -118,29 +168,36 @@ class FeatureBuilder:
         if not factor_names:
             raise ValueError("⚠️  No valid factor DataFrames found in factors dict.")
 
-        # 获取所有共同日期和股票
+        # 共同日期（所有因子对齐）
         common_dates = close_panel.index
         for name in factor_names:
             f = factors[name]
             if isinstance(f, pd.DataFrame):
                 common_dates = common_dates.intersection(f.index)
-        # 去掉最后 forward_period 天（无法计算标签）
-        max_date = common_dates[-1]
-        label_cutoff = max_date - pd.Timedelta(days=self.forward_period * 2)  # 安全余量
+        common_dates = common_dates.sort_values()
+
+        # 去掉最后 max(forward_periods) 天（无法计算标签）
+        max_fwd = max(self.forward_periods)
+        label_cutoff = common_dates[-1] - pd.Timedelta(days=max_fwd * 2)
         feature_dates = common_dates[common_dates <= label_cutoff]
 
-        print(f"  FeatureBuilder: {len(factor_names)} features × "
+        print(f"  FeatureBuilder v2: {len(factor_names)} factors × "
               f"{len(feature_dates)} dates × ~{close_panel.shape[1]} stocks")
+        print(f"  Multi-period labels: {self.forward_periods}")
+        print(f"  Enhanced features: {self.enhance}")
 
         rows_X = []
-        rows_y = []
+        rows_y = {f'fp_{fp}': [] for fp in self.forward_periods}
         rows_date = []
         rows_code = []
 
+        # 市值分位数预计算（如果需要增强特征）
+        cap_panel = factors.get('small_cap')  # small_cap = -log(market_cap)，负值越大=市值越小
+
         for i, date in enumerate(feature_dates):
-            # 特征：所有股票的因子截面值
+            # 收集当日所有因子截面
             date_features = {}
-            skip_date = False
+            skip = False
             for name in factor_names:
                 f = factors[name]
                 if date in f.index:
@@ -148,78 +205,138 @@ class FeatureBuilder:
                     if isinstance(vals, pd.Series):
                         date_features[name] = vals
                     else:
-                        skip_date = True
+                        skip = True
                         break
                 else:
-                    skip_date = True
+                    skip = True
                     break
-
-            if skip_date:
+            if skip:
                 continue
 
             feat_df = pd.DataFrame(date_features)
-            # 去掉所有特征都缺失的行（股票）
             valid_stocks = feat_df.dropna(how='all').index
 
-            # 计算标签：未来 forward_period 日收益
+            # 每个日期、每个 forward_period 都产生一个标签
+            all_valid = set(valid_stocks)
             close_today = close_panel.loc[date]
-            future_date_idx = close_panel.index.get_loc(date) + self.forward_period
-            if future_date_idx >= len(close_panel):
-                continue
-            future_date = close_panel.index[future_date_idx]
-            close_future = close_panel.loc[future_date]
 
-            # 截面收益
-            future_ret = (close_future / close_today - 1).reindex(valid_stocks)
+            y_per_fp = {}
+            for fp in self.forward_periods:
+                fwd_idx = close_panel.index.get_loc(date) + fp
+                if fwd_idx >= len(close_panel):
+                    all_valid = set()  # 任何 fp 不可用→跳过整行
+                    break
+                future_date = close_panel.index[fwd_idx]
+                close_future = close_panel.loc[future_date]
+                fwd_ret = (close_future / close_today - 1).reindex(valid_stocks)
+                if self.neutralize:
+                    fwd_ret = fwd_ret - fwd_ret.mean()
+                y_per_fp[fp] = fwd_ret
+                all_valid = all_valid & set(fwd_ret.dropna().index)
 
-            # 截面去均值（超额收益）
-            if self.neutralize:
-                mean_ret = future_ret.mean()
-                future_ret = future_ret - mean_ret
-
-            # 去掉 label 为 nan 的行
-            valid_mask = future_ret.notna()
-            valid_stocks = valid_stocks[valid_mask]
-            if len(valid_stocks) < 10:
+            if len(all_valid) < 10:
                 continue
 
-            feat_valid = feat_df.loc[valid_stocks]
-            ret_valid = future_ret[valid_stocks]
+            all_valid = sorted(all_valid)
+            feat_valid = feat_df.loc[all_valid]
+
+            # === 特征增强 ===
+            if self.enhance:
+                feat_valid = self._add_enhanced_features(
+                    feat_valid, all_valid, cap_panel, date, stock_names
+                )
 
             rows_X.append(feat_valid)
-            rows_y.append(ret_valid)
-            rows_date.append(pd.Series(date, index=valid_stocks))
-            rows_code.append(pd.Series(valid_stocks, index=valid_stocks))
-
-            # 截面标准化特征
-            # （每个日期截面独立标准化，消除量纲差异）
+            for fp in self.forward_periods:
+                if fp in y_per_fp:
+                    rows_y[f'fp_{fp}'].append(y_per_fp[fp][all_valid])
+            rows_date.append(pd.Series(date, index=all_valid))
+            rows_code.append(pd.Series(all_valid, index=all_valid))
 
         if not rows_X:
             raise ValueError("⚠️  No valid samples generated — check date alignment")
 
         X_raw = pd.concat(rows_X, axis=0)
-        y_all = pd.concat(rows_y, axis=0)
+        y_multi = {}
+        for fp in self.forward_periods:
+            key = f'fp_{fp}'
+            if rows_y[key]:
+                y_multi[key] = pd.concat(rows_y[key], axis=0)
+            else:
+                y_multi[key] = pd.Series(dtype=float)
+
         date_all = pd.concat(rows_date, axis=0)
         code_all = pd.concat(rows_code, axis=0)
 
-        # 截面标准化（按日期分组）
+        # 截面标准化
         X = self._cross_sectional_normalize(X_raw, date_all)
-
-        # 对缺失值填 0（截面标准化后均值 ≈ 0）
         X = X.fillna(0)
 
-        print(f"  FeatureBuilder: {X.shape[0]} samples ready "
-              f"({X.shape[1]} features)")
+        print(f"  FeatureBuilder: {X.shape[0]} samples, {X.shape[1]} features")
+        for fp in self.forward_periods:
+            key = f'fp_{fp}'
+            if key in y_multi:
+                print(f"    y_{fp}d: mean={y_multi[key].mean():.6f}, "
+                      f"std={y_multi[key].std():.6f}")
 
-        return X, y_all, date_all, code_all
+        return X, y_multi, date_all, code_all
+
+    def _add_enhanced_features(
+        self,
+        feat_df: pd.DataFrame,
+        valid_stocks: list,
+        cap_panel: pd.DataFrame,
+        date,
+        stock_names: dict = None,
+    ) -> pd.DataFrame:
+        """添加增强特征：市值分位数 + 换手率变化 + 因子交互"""
+        extras = pd.DataFrame(index=feat_df.index)
+
+        # ① 市值分位数（截面 rank，0-1 之间）
+        if cap_panel is not None and date in cap_panel.index:
+            cap_vals = cap_panel.loc[date]
+            cap_rank = cap_vals.rank(pct=True)
+            extras['cap_quantile'] = cap_rank.reindex(valid_stocks).fillna(0.5)
+        else:
+            extras['cap_quantile'] = 0.5
+
+        # ② 换手率加速度（turnover_change 的二阶差分近似）
+        if 'turnover_change' in feat_df.columns:
+            tc = feat_df['turnover_change']
+            extras['turnover_accel'] = (tc - tc.median()).abs()
+
+        # ③ 动量-反转交互（mom_20 × rev_5）
+        if 'mom_20' in feat_df.columns and 'rev_5' in feat_df.columns:
+            extras['mom_rev_interact'] = feat_df['mom_20'] * feat_df['rev_5']
+
+        # ④ 波动率-量能交互（vol_20 × vol_ratio_5）
+        if 'vol_20' in feat_df.columns and 'vol_ratio_5' in feat_df.columns:
+            extras['vol_volr_interact'] = feat_df['vol_20'] * feat_df['vol_ratio_5']
+
+        # ⑤ 行业 one-hot（简化：申万一级行业 → top-10 行业 + other）
+        if stock_names:
+            from scripts.industry import get_industry
+            industries = {c: get_industry(c, stock_names.get(c, "")) for c in valid_stocks}
+            ind_counts = pd.Series(industries).value_counts()
+            top_ind = set(ind_counts.head(10).index)
+            for ind in top_ind:
+                col = f'ind_{ind}'
+                extras[col] = pd.Series(
+                    {c: 1.0 if industries.get(c) == ind else 0.0 for c in valid_stocks},
+                    index=valid_stocks,
+                )
+
+        return pd.concat([feat_df, extras], axis=1)
 
     def _cross_sectional_normalize(
         self, X: pd.DataFrame, date_index: pd.Series
     ) -> pd.DataFrame:
-        """按日期截面标准化特征（z-score）。"""
+        """按日期截面 z-score 标准化"""
         X_norm = X.copy()
-        for date in date_index.unique():
+        for date in pd.Series(date_index.unique()).sort_values():
             mask = date_index == date
+            if mask.sum() == 0:
+                continue
             day_X = X.loc[mask]
             mean = day_X.mean()
             std = day_X.std().replace(0, np.nan)
@@ -228,18 +345,70 @@ class FeatureBuilder:
 
 
 # ============================================================
-# 2. RollingTrainer
+# 2. Regime Detector
+# ============================================================
+
+class RegimeDetector:
+    """市场状态识别器。
+
+    使用两个信号：
+      - 市场趋势：沪深300（或全市场均值）20日均线 vs 60日均线
+      - 市场波动率：全市场收益 20 日滚动标准差
+
+    状态定义：
+      - bull:   20ma > 60ma AND vol < vol_threshold_high
+      - bear:   20ma < 60ma AND vol > vol_threshold_low
+      - choppy: 其他情况
+    """
+
+    def __init__(
+        self,
+        vol_window: int = 20,
+        vol_threshold_high: float = 0.25,
+        vol_threshold_low: float = 0.15,
+    ):
+        self.vol_window = vol_window
+        self.vol_high = vol_threshold_high
+        self.vol_low = vol_threshold_low
+
+    def detect(self, close_panel: pd.DataFrame) -> pd.Series:
+        """返回每个交易日的市场状态 ('bull'/'bear'/'choppy')"""
+        # 截面均值收益（近似市场收益）
+        market_ret = close_panel.mean(axis=1).pct_change()
+        market_price = (1 + market_ret).cumsum()  # 近似净值
+
+        # 均线
+        ma20 = market_price.rolling(20).mean()
+        ma60 = market_price.rolling(60).mean()
+
+        # 波动率
+        vol = market_ret.rolling(self.vol_window).std() * np.sqrt(252)
+
+        regime = pd.Series('choppy', index=close_panel.index, dtype=str)
+        bull_mask = (ma20 > ma60) & (vol < self.vol_high)
+        bear_mask = (ma20 < ma60) & (vol > self.vol_low)
+        regime[bull_mask] = 'bull'
+        regime[bear_mask] = 'bear'
+
+        # 统计
+        counts = regime.value_counts()
+        print(f"  Regime distribution: bull={counts.get('bull',0)}, "
+              f"bear={counts.get('bear',0)}, choppy={counts.get('choppy',0)}")
+
+        return regime
+
+
+# ============================================================
+# 3. RollingTrainer v2
 # ============================================================
 
 class RollingTrainer:
-    """Walk-Forward 滚动训练引擎。
+    """Walk-Forward 滚动训练引擎（增强版）。
 
-    Parameters
-    ----------
-    train_days : int — 训练窗口长度（交易日数，默认 252 ≈ 1年）
-    test_days  : int — 测试窗口长度（默认 63 ≈ 1季度）
-    step_days  : int — 滚动步长（默认 63，等于 test_days）
-    min_train_samples : int — 最少训练样本数（少于这个数跳过）
+    新增：
+      - 多周期标签融合训练
+      - 因子分组 stacking
+      - Regime 感知参数
     """
 
     def __init__(
@@ -248,65 +417,71 @@ class RollingTrainer:
         test_days: int = 63,
         step_days: int = 63,
         min_train_samples: int = 5000,
-        forward_period: int = 5,
-        lgb_params: Optional[dict] = None
+        forward_periods: list = None,
+        use_group_stacking: bool = True,
+        use_regime: bool = True,
+        lgb_params: dict = None,
+        regime_params: dict = None,
     ):
         self.train_days = train_days
         self.test_days = test_days
         self.step_days = step_days
         self.min_train_samples = min_train_samples
-        self.forward_period = forward_period
+        self.forward_periods = forward_periods or [5, 20, 60]
+        self.use_group_stacking = use_group_stacking
+        self.use_regime = use_regime
 
-        # LightGBM 默认参数（针对金融时序调优）
-        self.lgb_params = lgb_params or {
-            'objective': 'regression_l1',   # MAE 更鲁棒，对异常值不敏感
+        self.lgb_base = lgb_params or {
+            'objective': 'regression_l1',
             'metric': 'mae',
             'learning_rate': 0.05,
             'num_leaves': 63,
-            'min_data_in_leaf': 20,          # 防止过拟合
-            'feature_fraction': 0.8,         # 列采样
-            'bagging_fraction': 0.8,         # 行采样
+            'min_data_in_leaf': 20,
+            'feature_fraction': 0.8,
+            'bagging_fraction': 0.8,
             'bagging_freq': 5,
             'lambda_l1': 0.1,
             'lambda_l2': 1.0,
             'verbose': -1,
         }
+        self.regime_overrides = regime_params or REGIME_PARAMS
 
     def run(
         self,
         X: pd.DataFrame,
-        y: pd.Series,
+        y_multi: Dict[str, pd.Series],
         date_index: pd.Series,
         code_index: pd.Series,
-    ) -> Tuple[pd.Series, list]:
-        """执行 Walk-Forward 滚动训练。
+        regime_series: Optional[pd.Series] = None,
+    ) -> Tuple[pd.Series, List[dict]]:
+        """执行 Walk-Forward 多周期+分组+regime 滚动训练。
 
         Parameters
         ----------
-        X, y : FeatureBuilder.build() 的输出
-        date_index, code_index : 每个样本对应的日期和股票代码
+        X, y_multi : FeatureBuilder.build() 的输出
+            y_multi = {'fp_5': Series, 'fp_20': Series, 'fp_60': Series}
+        date_index, code_index : 每样本的日期和股票代码
+        regime_series : 每日市场状态 ('bull'/'bear'/'choppy')，需要 date_index 对齐
 
         Returns
         -------
-        predictions : Series (samples,) — 仅测试集的预测值，训练集为 NaN
-        fold_info  : list[dict] — 每轮训练信息
+        predictions : Series — 融合后预测值
+        fold_info   : list[dict]
         """
         import lightgbm as lgb
 
         unique_dates = pd.Series(date_index.unique()).sort_values().values
         n_dates = len(unique_dates)
+        max_fwd = max(self.forward_periods)
 
         if n_dates < self.train_days + self.test_days:
-            print(f"  ⚠️  {n_dates} days < train({self.train_days}) + test({self.test_days}), skip ML")
-            return pd.Series(np.nan, index=y.index), []
+            print(f"  ⚠️  {n_dates} days < train+test, skip ML")
+            return pd.Series(np.nan, index=y_multi[f'fp_{self.forward_periods[0]}'].index), []
 
-        # 预建日期→样本 mask 缓存
-        date_masks = {}
-        for date in unique_dates:
-            date_masks[date] = date_index == date
+        # 计算融合权重（基于各周期的历史 IC，动态更新）
+        fp_weights = {fp: 1.0 / len(self.forward_periods) for fp in self.forward_periods}
 
-        # 滚动训练
-        predictions = pd.Series(np.nan, index=y.index, name='pred')
+        predictions = pd.Series(np.nan, index=y_multi[f'fp_{max_fwd}'].index, name='pred')
         fold_info = []
         fold = 0
 
@@ -321,66 +496,177 @@ class RollingTrainer:
             train_dates = unique_dates[train_start_idx:train_end_idx]
             test_dates = unique_dates[test_start_idx:test_end_idx]
 
-            # 收集训练样本（用布尔 mask 保留位置信息）
             train_mask = date_index.isin(train_dates).values
             test_mask = date_index.isin(test_dates).values
 
-            X_train = X[train_mask]
-            y_train = y[train_mask]
-            X_test = X[test_mask]
-            y_test = y[test_mask]
-
-            if len(X_train) < self.min_train_samples:
-                print(f"  ML Fold {fold}: skip (train samples {len(X_train)} < {self.min_train_samples})")
+            if train_mask.sum() < self.min_train_samples:
                 train_end_idx += self.step_days
                 continue
 
-            # 训练模型
-            train_data = lgb.Dataset(X_train, label=y_train)
-            model = lgb.train(
-                self.lgb_params,
-                train_data,
-                num_boost_round=500,
-                valid_sets=[lgb.Dataset(X_test, label=y_test)],
-                callbacks=[
-                    lgb.early_stopping(50),
-                    lgb.log_evaluation(period=0),  # 静默
-                ],
-            )
+            # 当前 fold 的 regime（取训练期最后一天的状态）
+            train_end_date = train_dates[-1]
+            current_regime = 'choppy'
+            if self.use_regime and regime_series is not None and train_end_date in regime_series.index:
+                current_regime = regime_series.loc[train_end_date]
 
-            # 预测测试集 — 按位置写入，避免重复 index 问题
-            y_pred = model.predict(X_test)
-            pred_positions = np.where(test_mask)[0]
-            predictions.iloc[pred_positions] = y_pred
+            # == 针对每个 forward_period 训练模型 ==
+            fold_preds = {}      # {fp: pred_array}
+            fold_train_ics = {}  # {fp: ic}
+            fold_test_ics = {}   # {fp: ic}
 
-            # 记录 fold 信息
-            train_pred = model.predict(X_train)
-            train_ic = np.corrcoef(y_train.values, train_pred)[0, 1] if len(y_train) > 10 else 0
-            test_ic = np.corrcoef(y_test.values, y_pred)[0, 1] if len(y_test) > 10 else 0
+            for fp in self.forward_periods:
+                key = f'fp_{fp}'
+                if key not in y_multi or len(y_multi[key]) == 0:
+                    continue
+
+                y_all = y_multi[key]
+
+                X_train = X[train_mask]
+                y_train = y_all[train_mask]
+                X_test = X[test_mask]
+                y_test = y_all[test_mask]
+
+                if len(X_train) < 100 or len(X_test) < 20:
+                    continue
+
+                # 差异化参数
+                params = dict(self.lgb_base)
+                if current_regime in self.regime_overrides:
+                    params.update(self.regime_overrides[current_regime])
+
+                # == 分组 stacking（可选）==
+                if self.use_group_stacking:
+                    y_pred_test, y_pred_train = self._group_stacking_train(
+                        X_train, y_train, X_test, params, X.columns.tolist()
+                    )
+                else:
+                    train_data = lgb.Dataset(X_train, label=y_train)
+                    model = lgb.train(
+                        params, train_data,
+                        num_boost_round=500,
+                        valid_sets=[lgb.Dataset(X_test, label=y_test)],
+                        callbacks=[lgb.early_stopping(50), lgb.log_evaluation(period=0)],
+                    )
+                    y_pred_test = model.predict(X_test)
+                    y_pred_train = model.predict(X_train)
+
+                train_ic = np.corrcoef(y_train.values, y_pred_train)[0, 1] if len(y_train) > 10 else 0
+                test_ic = np.corrcoef(y_test.values, y_pred_test)[0, 1] if len(y_test) > 10 else 0
+
+                fold_preds[fp] = y_pred_test
+                fold_train_ics[fp] = train_ic
+                fold_test_ics[fp] = test_ic
+
+                # 动态更新权重（指数加权，更重视最近的 IC）
+                fp_weights[fp] = max(0.05, test_ic)  # 防止负权重
+
+            if not fold_preds:
+                train_end_idx += self.step_days
+                continue
+
+            # == 融合多周期预测（IC 加权）==
+            weight_sum = sum(fp_weights.get(fp, 0) for fp in fold_preds.keys())
+            if weight_sum == 0:
+                weight_sum = 1.0
+
+            n_test = sum(len(v) for v in fold_preds.values()) // len(fold_preds)
+            fused_pred = np.zeros(n_test)
+            for fp, pred in fold_preds.items():
+                w = fp_weights.get(fp, 0) / weight_sum
+                fused_pred += w * pred[:n_test]
+
+            pred_positions = np.where(test_mask)[0][:n_test]
+            common_idx = predictions.iloc[pred_positions].index[:n_test]
+            predictions.iloc[pred_positions[:n_test]] = fused_pred
+
+            # fold 信息
+            avg_train_ic = np.mean(list(fold_train_ics.values())) if fold_train_ics else 0
+            avg_test_ic = np.mean(list(fold_test_ics.values())) if fold_test_ics else 0
+            fp_ic_str = ", ".join(f"{fp}d_ic={fold_test_ics.get(fp,0):.4f}" for fp in fold_preds)
 
             info = {
                 'fold': fold,
-                'train_dates': f"{train_dates[0]}~{train_dates[-1]}",
                 'test_dates': f"{test_dates[0]}~{test_dates[-1]}",
-                'train_samples': len(X_train),
-                'test_samples': len(X_test),
-                'train_ic': float(train_ic),
-                'test_ic': float(test_ic),
-                'best_iteration': model.best_iteration,
+                'regime': current_regime,
+                'train_samples': int(train_mask.sum()),
+                'test_samples': int(test_mask.sum()),
+                'train_ic': round(avg_train_ic, 4),
+                'test_ic': round(avg_test_ic, 4),
+                'fp_ics': fp_ic_str,
+                'fp_weights': str({fp: round(fp_weights[fp], 3) for fp in fold_preds}),
             }
             fold_info.append(info)
 
-            print(f"  ML Fold {fold}: {info['test_dates']} | "
-                  f"train_ic={info['train_ic']:.4f} test_ic={info['test_ic']:.4f} "
-                  f"(samples: {len(X_train)}→{len(X_test)})")
+            print(f"  Fold {fold} [{current_regime:5s}]: {info['test_dates']} | "
+                  f"train_ic={avg_train_ic:.4f} test_ic={avg_test_ic:.4f}")
 
             train_end_idx += self.step_days
 
         return predictions, fold_info
 
+    def _group_stacking_train(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_test: pd.DataFrame,
+        params: dict,
+        all_feature_names: list,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """分组 stacking：每个因子组训练一个子模型，输出 stacking 到 meta-learner"""
+        import lightgbm as lgb
+
+        groups = _available_factor_group({k: pd.DataFrame() for k in all_feature_names})
+        if len(groups) < 2:
+            # 因子不够分组，退化为单模型
+            train_data = lgb.Dataset(X_train, label=y_train)
+            model = lgb.train(
+                params, train_data,
+                num_boost_round=500,
+                valid_sets=[lgb.Dataset(X_test, label=y_train.iloc[:len(X_test)])],
+                callbacks=[lgb.early_stopping(50), lgb.log_evaluation(period=0)],
+            )
+            return model.predict(X_test), model.predict(X_train)
+
+        group_train_preds = []
+        group_test_preds = []
+        sub_rounds = max(50, params.get('num_boost_round', 500) // len(groups))
+
+        for gname, gfactors in groups.items():
+            # 找到该组因子在 X 中的列
+            if isinstance(gfactors, str):
+                gfactors = [gfactors]
+            valid_cols = [c for c in gfactors if c in X_train.columns]
+            if len(valid_cols) < 2:
+                continue
+
+            X_tr = X_train[valid_cols]
+            X_te = X_test[valid_cols]
+
+            tr_data = lgb.Dataset(X_tr, label=y_train)
+            sub_model = lgb.train(
+                params, tr_data,
+                num_boost_round=sub_rounds,
+                callbacks=[lgb.log_evaluation(period=0)],
+            )
+            group_train_preds.append(sub_model.predict(X_tr))
+            group_test_preds.append(sub_model.predict(X_te))
+
+        if not group_train_preds:
+            # 退化
+            train_data = lgb.Dataset(X_train, label=y_train)
+            model = lgb.train(params, train_data, num_boost_round=200,
+                              callbacks=[lgb.log_evaluation(period=0)])
+            return model.predict(X_test), model.predict(X_train)
+
+        # Meta-learner：简单的平均 stacking
+        meta_train = np.mean(group_train_preds, axis=0)
+        meta_test = np.mean(group_test_preds, axis=0)
+
+        return meta_test, meta_train
+
 
 # ============================================================
-# 3. MLSignalEngine — 预测 → 选股面板
+# 4. ml_score_panel — 预测 → 选股面板
 # ============================================================
 
 def ml_score_panel(
@@ -389,39 +675,24 @@ def ml_score_panel(
     code_index: pd.Series,
     close_panel: pd.DataFrame,
 ) -> pd.DataFrame:
-    """将 ML 预测值转换为选股评分面板（dates × stocks），格式与 composite_score 兼容。
-
-    Parameters
-    ----------
-    predictions : RollingTrainer.run() 输出的预测值（仅测试集有值）
-    date_index  : 每个样本的日期
-    code_index  : 每个样本的股票代码
-    close_panel : 用于对齐日期和股票代码
-
-    Returns
-    -------
-    score_panel : DataFrame (dates × stocks) — ML 预测分数，训练期为 NaN
-    """
+    """将 ML 预测值转换为选股评分面板（dates × stocks）"""
     score = pd.DataFrame(index=close_panel.index, columns=close_panel.columns, dtype=float)
 
-    # 只遍历非 NaN 的预测值
     valid_mask = predictions.notna()
-    valid_preds = predictions[valid_mask]
-    valid_dates = date_index[valid_mask]
-    valid_codes = code_index[valid_mask]
-
-    for pred_val, date, code in zip(valid_preds, valid_dates, valid_codes):
+    for pred_val, date, code in zip(
+        predictions[valid_mask],
+        date_index[valid_mask],
+        code_index[valid_mask],
+    ):
         if date in score.index and code in score.columns:
             score.loc[date, code] = pred_val
 
-    # 回填：往前填充到下一个有值的日期（作为信号持续直到下次调仓）
     score = score.ffill().fillna(0)
-
     return score
 
 
 # ============================================================
-# 4. 一次性入口（供 ml_rolling_train.py 调用）
+# 5. run_ml_pipeline v2 — 端到端流水线
 # ============================================================
 
 def run_ml_pipeline(
@@ -430,40 +701,68 @@ def run_ml_pipeline(
     train_days: int = 252,
     test_days: int = 63,
     step_days: int = 63,
-    forward_period: int = 5,
-    lgb_params: Optional[dict] = None,
-    stock_names: Optional[dict] = None,
-) -> Tuple[pd.DataFrame, list]:
-    """端到端 ML 流水线：构建特征 → 滚动训练 → 返回评分面板。
+    forward_periods: list = None,
+    use_multi_period: bool = True,
+    use_group_stacking: bool = True,
+    use_regime: bool = True,
+    use_enhanced_features: bool = True,
+    lgb_params: dict = None,
+    regime_params: dict = None,
+    stock_names: dict = None,
+) -> Tuple[pd.DataFrame, List[dict]]:
+    """端到端 ML 流水线（增强版）。
+
+    Parameters
+    ----------
+    use_multi_period : bool — 多周期标签融合
+    use_group_stacking : bool — 因子分组 stacking
+    use_regime : bool — regime switching
+    use_enhanced_features : bool — 特征增强
 
     Returns
     -------
-    score_panel : DataFrame (dates × stocks) — ML 选股评分
-    fold_info   : list[dict] — 每轮训练信息
+    score_panel : DataFrame (dates × stocks)
+    fold_info   : list[dict]
     """
-    # Step 1: 构建特征和标签
-    print("\n[ML Pipeline] Step 1: Building features...")
-    builder = FeatureBuilder(forward_period=forward_period, neutralize=True)
-    X, y, date_idx, code_idx = builder.build(factors, close_panel, stock_names)
+    forward_periods = forward_periods or [5, 20, 60]
 
-    # Step 2: Walk-Forward 滚动训练
-    print(f"\n[ML Pipeline] Step 2: Walk-Forward training "
-          f"(train={train_days}d, test={test_days}d, step={step_days}d)...")
+    # Step 1: 构建特征 + 多周期标签
+    print("\n[ML v2] Step 1: Building features with multi-period labels...")
+    builder = FeatureBuilder(
+        forward_periods=forward_periods if use_multi_period else [forward_periods[0]],
+        neutralize=True,
+        enhance=use_enhanced_features,
+    )
+    X, y_multi, date_idx, code_idx = builder.build(factors, close_panel, stock_names)
+
+    # Step 2: Regime detection
+    regime_series = None
+    if use_regime:
+        print("\n[ML v2] Step 2: Detecting market regimes...")
+        detector = RegimeDetector()
+        regime_series = detector.detect(close_panel)
+
+    # Step 3: Walk-Forward 训练
+    print(f"\n[ML v2] Step 3: Walk-Forward training "
+          f"(group_stacking={use_group_stacking}, regime={use_regime})...")
     trainer = RollingTrainer(
         train_days=train_days,
         test_days=test_days,
         step_days=step_days,
-        forward_period=forward_period,
+        forward_periods=forward_periods if use_multi_period else [forward_periods[0]],
+        use_group_stacking=use_group_stacking,
+        use_regime=use_regime,
         lgb_params=lgb_params,
+        regime_params=regime_params,
     )
-    predictions, fold_info = trainer.run(X, y, date_idx, code_idx)
+    predictions, fold_info = trainer.run(X, y_multi, date_idx, code_idx, regime_series)
 
-    # Step 3: 预测 → 评分面板
-    print("\n[ML Pipeline] Step 3: Converting predictions to score panel...")
+    # Step 4: → 评分面板
+    print("\n[ML v2] Step 4: Converting predictions to score panel...")
     score_panel = ml_score_panel(predictions, date_idx, code_idx, close_panel)
 
-    n_predicted = score_panel.abs().sum(axis=1) > 0
-    print(f"  Score panel: {score_panel.shape[0]} days × {score_panel.shape[1]} stocks")
-    print(f"  Days with ML predictions: {n_predicted.sum()}")
+    n_valid = (score_panel.abs().sum(axis=1) > 0).sum()
+    print(f"  Score panel: {score_panel.shape[0]}d × {score_panel.shape[1]}s")
+    print(f"  Days with predictions: {n_valid}")
 
     return score_panel, fold_info

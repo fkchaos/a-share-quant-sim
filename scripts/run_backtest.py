@@ -697,10 +697,10 @@ def _load_stock_names() -> dict:
     import pandas as pd
     hs300_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "hs300_constituents.csv"
+        "zz800_constituents.csv"
     )
     if not os.path.exists(hs300_path):
-        hs300_path = "/root/hs300_constituents.csv"
+        hs300_path = "/root/zz800_constituents.csv"
     try:
         hs300 = pd.read_csv(hs300_path)
         return dict(zip(

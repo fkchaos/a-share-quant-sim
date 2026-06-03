@@ -56,8 +56,8 @@ def _load_stock_names() -> dict:
 def main():
     parser = argparse.ArgumentParser(description="ML Rolling Training v2 — Walk-Forward 回测")
     # ML 核心参数
-    parser.add_argument("--forward-periods", nargs="+", type=int, default=[5, 20, 60],
-                        help="多周期标签 (default: 5 20 60)")
+    parser.add_argument("--forward-periods", nargs="+", type=int, default=[5, 20],
+                        help="多周期标签 (default: 5 20)")
     parser.add_argument("--train-days", type=int, default=252)
     parser.add_argument("--test-days", type=int, default=63)
     parser.add_argument("--step-days", type=int, default=63)

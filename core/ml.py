@@ -289,42 +289,27 @@ class FeatureBuilder:
         date,
         stock_names: dict = None,
     ) -> pd.DataFrame:
-        """添加增强特征：市值分位数 + 换手率变化 + 因子交互"""
+        """添加精简增强特征：cap_quantile + 两项交互"""
         extras = pd.DataFrame(index=feat_df.index)
 
-        # ① 市值分位数（截面 rank，0-1 之间）
+        # ① 市值分位数
         if cap_panel is not None and date in cap_panel.index:
-            cap_vals = cap_panel.loc[date]
-            cap_rank = cap_vals.rank(pct=True)
+            cap_rank = cap_panel.loc[date].rank(pct=True)
             extras['cap_quantile'] = cap_rank.reindex(valid_stocks).fillna(0.5)
         else:
             extras['cap_quantile'] = 0.5
 
-        # ② 换手率加速度（turnover_change 的二阶差分近似）
-        if 'turnover_change' in feat_df.columns:
-            tc = feat_df['turnover_change']
-            extras['turnover_accel'] = (tc - tc.median()).abs()
-
-        # ③ 动量-反转交互（mom_20 × rev_5）
+        # ② 动量-反转交互（mom_20 × rev_5）：捕捉动量与反转的博弈
         if 'mom_20' in feat_df.columns and 'rev_5' in feat_df.columns:
             extras['mom_rev_interact'] = feat_df['mom_20'] * feat_df['rev_5']
 
-        # ④ 波动率-量能交互（vol_20 × vol_ratio_5）
+        # ③ 波动率-量能交互（vol_20 × vol_ratio_5）：异动信号
         if 'vol_20' in feat_df.columns and 'vol_ratio_5' in feat_df.columns:
             extras['vol_volr_interact'] = feat_df['vol_20'] * feat_df['vol_ratio_5']
 
-        # ⑤ 行业 one-hot（简化：申万一级行业 → top-10 行业 + other）
-        if stock_names:
-            from scripts.industry import get_industry
-            industries = {c: get_industry(c, stock_names.get(c, "")) for c in valid_stocks}
-            ind_counts = pd.Series(industries).value_counts()
-            top_ind = set(ind_counts.head(10).index)
-            for ind in top_ind:
-                col = f'ind_{ind}'
-                extras[col] = pd.Series(
-                    {c: 1.0 if industries.get(c) == ind else 0.0 for c in valid_stocks},
-                    index=valid_stocks,
-                )
+        # ④ RSI 背离（rsi_6 - rsi_14）：短中期 RSI 差值
+        if 'rsi_6' in feat_df.columns and 'rsi_14' in feat_df.columns:
+            extras['rsi_divergence'] = feat_df['rsi_6'] - feat_df['rsi_14']
 
         return pd.concat([feat_df, extras], axis=1)
 
@@ -478,8 +463,10 @@ class RollingTrainer:
             print(f"  ⚠️  {n_dates} days < train+test, skip ML")
             return pd.Series(np.nan, index=y_multi[f'fp_{self.forward_periods[0]}'].index), []
 
-        # 计算融合权重（基于各周期的历史 IC，动态更新）
+        # 计算融合权重（EWMA 滚动 IC，半衰期=2 folds）
         fp_weights = {fp: 1.0 / len(self.forward_periods) for fp in self.forward_periods}
+        fp_ic_history = {fp: [] for fp in self.forward_periods}
+        ewma_alpha = 0.3  # EWMA 衰减因子
 
         predictions = pd.Series(np.nan, index=y_multi[f'fp_{max_fwd}'].index, name='pred')
         fold_info = []
@@ -557,8 +544,14 @@ class RollingTrainer:
                 fold_train_ics[fp] = train_ic
                 fold_test_ics[fp] = test_ic
 
-                # 动态更新权重（指数加权，更重视最近的 IC）
-                fp_weights[fp] = max(0.05, test_ic)  # 防止负权重
+                # EWMA 更新权重
+                fp_ic_history[fp].append(test_ic)
+                # 越新的 IC 权重越大
+                weights_ic = fp_ic_history[fp]
+                n_ic = len(weights_ic)
+                ewma_weights = [ewma_alpha * (1 - ewma_alpha) ** (n_ic - 1 - i) for i in range(n_ic)]
+                ewma_ic = sum(w * ic for w, ic in zip(ewma_weights, weights_ic))
+                fp_weights[fp] = max(0.01, ewma_ic)  # 防止负权重，最小 0.01
 
             if not fold_preds:
                 train_end_idx += self.step_days

@@ -22,7 +22,7 @@ CACHE_DIR = os.path.join(_BASE_DIR, "data", "cache", "financial")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 
-def prefetch_all(codes: list, n_workers: int = 8, use_cache: bool = True):
+def prefetch_all(codes: list, n_workers: int = 4, use_cache: bool = True):
     """预缓存所有股票财务数据"""
     total = len(codes)
     cached = sum(1 for c in codes if os.path.exists(os.path.join(CACHE_DIR, f"{c}.json")))
@@ -43,6 +43,7 @@ def prefetch_all(codes: list, n_workers: int = 8, use_cache: bool = True):
         if use_cache and os.path.exists(cache_file):
             return ('cached', code)
         try:
+            time.sleep(0.3)  # 避免限流
             fin = fetch_financial(code, use_cache=False)
             if fin:
                 return ('ok', code)

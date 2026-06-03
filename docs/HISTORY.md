@@ -252,3 +252,7 @@ load_state 时自动补 `tp_taken: []`。
 1. **ALL quantity fields' units must be verified** against the raw API output before setting thresholds
 2. 成分股范围过小会导致行业覆盖不全，选股池必须足够大
 3. 数据源稳定性 > 数据源数量，腾讯HTTP接口是目前最可靠的免费源
+
+### 补充教训（2026-06-03 选股池扩大过程中）
+4. **财务数据源不可靠时的工程决策**：AKShare stock_financial_report_sina 接口在并发下被限流到 ~9只/s，批量获取 2838 只财务数据不可行。此时不应阻塞系统开发，而应采用备选方案（中证500+沪深300成分股 632 只）作为 fallback，财务过滤后续迭代。
+5. **PE 作为质量过滤的代理指标**：PE<0 近似亏损股（533/2838≈19%），PE>200 近似异常估值（256/2838≈9%）。在无法获取完整财务数据时，0<PE≤100 可有效排除大部分垃圾股，但会误伤周期性行业暂时亏损的优质公司。

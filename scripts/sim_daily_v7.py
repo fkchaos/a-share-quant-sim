@@ -390,11 +390,11 @@ def step_data_quality(files, date):
 
 # ── 上午模式：只生成信号，不执行 ──
 
-def step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names):
+def step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_actions=None):
     """
     Step 5 (AM): 上午收盘 → 生成操作计划
     算因子评分 → 确定目标持仓 → 对比当前持仓 → 输出买卖计划
-    不修改 state，只生成 signal 文件
+    risk_actions: {code: {action: 'stop_loss'|'take_profit'|'holding_decay', 'shares': N|'all'}}
     """
     trade_count_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")
     trade_count = 0
@@ -432,6 +432,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             'mode': 'intraday_signal',
             'no_rebalance': True,
             'total_nav': float(current_pv) if current_pv else float(INITIAL_CAPITAL),
+            'risk_plan': risk_actions or {},
             'sell_plan': [],
             'hold_plan': hold_plan,
             'buy_plan': [],
@@ -587,6 +588,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         'trade_count': trade_count,
         'mode': 'intraday_signal',
         'total_nav': float(current_pv) if current_pv else float(INITIAL_CAPITAL),
+        'risk_plan': risk_actions or {},
         'sell_plan': sell_plan,
         'hold_plan': hold_plan,
         'buy_plan': buy_plan,
@@ -903,8 +905,42 @@ def run_intraday_signal():
     # Step 3: 数据质量
     quality_blocked = step_data_quality(files, date)
 
-    # Step 4: 生成信号 (不修改 state，只输出 plan)
-    plan = step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names)
+    # Step 4: 风控检查（止损/止盈/decay），记录到 plan
+    risk_actions = {}
+    if not quality_blocked:
+        # 止损检查
+        prev_holdings = set(state.holdings.keys())
+        state, stopped = step_check_stop_loss(state, date, price_data, names)
+        for code in stopped:
+            risk_actions[code] = {'action': 'stop_loss', 'shares': 'all'}
+        # 分级止盈
+        if _strategy_profile.use_take_profit:
+            prev_shares = {c: h['shares'] for c, h in state.holdings.items()}
+            state = step_check_take_profit(state, date, price_data, names)
+            for code in prev_shares:
+                if code in state.holdings and state.holdings[code]['shares'] < prev_shares[code]:
+                    risk_actions[code] = {'action': 'take_profit', 'shares': prev_shares[code] - state.holdings[code]['shares']}
+                elif code not in state.holdings:
+                    risk_actions[code] = {'action': 'take_profit', 'shares': 'all'}
+        # 持有期 decay
+        if _strategy_profile.use_holding_decay:
+            prev_shares = {c: h['shares'] for c, h in state.holdings.items()}
+            state = step_holding_decay(state, date, price_data, names)
+            for code in prev_shares:
+                if code in state.holdings and state.holdings[code]['shares'] < prev_shares[code]:
+                    risk_actions[code] = {'action': 'holding_decay', 'shares': prev_shares[code] - state.holdings[code]['shares']}
+
+    # Step 5: 生成信号
+    plan = step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_actions)
+
+    # 保存风控+信号后的 state（含止损/止盈/decay 的持仓变化）
+    if risk_actions:
+        tc_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")
+        tc = 0
+        if os.path.exists(tc_file):
+            with open(tc_file) as f:
+                tc = int(f.read().strip())
+        step_save_state(state, tc)
 
     return plan
 
@@ -955,18 +991,7 @@ def run_intraday_execute():
         except Exception:
             pass
 
-    # Step 3: 止损检查
-    state, stopped = step_check_stop_loss(state, date, price_data, names)
-
-    # Step 3b: 分级止盈
-    if _strategy_profile.use_take_profit:
-        state = step_check_take_profit(state, date, price_data, names)
-
-    # Step 3c: 持有期 decay
-    if _strategy_profile.use_holding_decay:
-        state = step_holding_decay(state, date, price_data, names)
-
-    # Step 4: 执行计划
+    # Step 3: 执行计划（风控已在上午信号中执行并保存到 state）
     state, plan = step_execute_plan(state, date, price_data, names, code_dataframes)
 
     # Step 5: 保存状态

@@ -405,7 +405,11 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
     if not need_rebalance:
         logger.info(f"非调仓日 (距下次调仓 {REBAL_FREQ - trade_count % REBAL_FREQ} 天)")
-        # 仍然生成报告（展示当前持仓状态）
+        # 清除旧操作计划，防止下午误执行过期计划
+        plan_file = os.path.join(PORTFOLIO_DIR, "trade_plan.json")
+        if os.path.exists(plan_file):
+            os.remove(plan_file)
+            logger.info("已清除旧 trade_plan.json")
         return {"mode": "no_rebalance", "trade_count": trade_count}
 
     logger.info("🔄 调仓日 — 生成操作计划")
@@ -614,6 +618,13 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
 
     with open(plan_file) as f:
         plan = json.load(f)
+
+    # 校验：trade_plan 必须是今天生成的（防止执行过期计划）
+    plan_date = plan.get('date', '')
+    today_str = str(date).split('_')[0][:10]  # 取 YYYY-MM-DD 部分
+    if plan_date != str(date) and plan_date != today_str and not plan_date.startswith(today_str):
+        logger.warning(f"trade_plan.json 日期 ({plan_date}) 与当前日期 ({date}) 不符，跳过执行")
+        return state, plan
 
     if not plan.get('sell_plan') and not plan.get('buy_plan') and not any(h.get('action') == 'add' for h in plan.get('hold_plan', [])):
         logger.info("操作计划为空，无需执行")

@@ -900,21 +900,10 @@ def run_intraday_signal():
     except Exception:
         pass
 
-    # Step 3: 止损检查
-    state, stopped = step_check_stop_loss(state, date, price_data, names)
-
-    # Step 3b: 分级止盈
-    if _strategy_profile.use_take_profit:
-        state = step_check_take_profit(state, date, price_data, names)
-
-    # Step 3c: 持有期 decay
-    if _strategy_profile.use_holding_decay:
-        state = step_holding_decay(state, date, price_data, names)
-
-    # Step 4: 数据质量
+    # Step 3: 数据质量
     quality_blocked = step_data_quality(files, date)
 
-    # Step 5: 生成信号 (不执行)
+    # Step 4: 生成信号 (不修改 state，只输出 plan)
     plan = step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names)
 
     return plan
@@ -966,14 +955,25 @@ def run_intraday_execute():
         except Exception:
             pass
 
-    # Step 5: 执行计划
+    # Step 3: 止损检查
+    state, stopped = step_check_stop_loss(state, date, price_data, names)
+
+    # Step 3b: 分级止盈
+    if _strategy_profile.use_take_profit:
+        state = step_check_take_profit(state, date, price_data, names)
+
+    # Step 3c: 持有期 decay
+    if _strategy_profile.use_holding_decay:
+        state = step_holding_decay(state, date, price_data, names)
+
+    # Step 4: 执行计划
     state, plan = step_execute_plan(state, date, price_data, names, code_dataframes)
 
-    # Step 6: 保存状态
+    # Step 5: 保存状态
     trade_count = plan.get('trade_count', 0) + 1 if plan else 0
     step_save_state(state, trade_count)
 
-    # Step 7: 报告
+    # Step 6: 报告
     report = step_report(state, date, price_data, names, mode="intraday_pm")
 
     logger.info("=" * 70)

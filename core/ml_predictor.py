@@ -149,12 +149,30 @@ def train_and_save(
 
     # LightGBM
     try:
-        lgb_model = lgb.train(
-            lgb_params,
-            lgb.Dataset(X_train_norm, label=y_train),
-            num_boost_round=500,
-            callbacks=[lgb.early_stopping(50), lgb.log_evaluation(period=0)],
-        )
+        # 拆分验证集（最后 63 天 ≈ 1/4 训练集）
+        _n = len(X_train_norm)
+        _split = max(_n - 63 * len(X_train_norm) // 252, int(_n * 0.8))
+        _X_tr = X_train_norm.iloc[:_split]
+        _y_tr = y_train.iloc[:_split]
+        _X_val = X_train_norm.iloc[_split:]
+        _y_val = y_train.iloc[_split:]
+
+        if len(_X_val) < 100:
+            # 数据量不够时不做 early stopping
+            lgb_model = lgb.train(
+                lgb_params,
+                lgb.Dataset(X_train_norm, label=y_train),
+                num_boost_round=200,
+                callbacks=[lgb.log_evaluation(period=0)],
+            )
+        else:
+            lgb_model = lgb.train(
+                lgb_params,
+                lgb.Dataset(_X_tr, label=_y_tr),
+                num_boost_round=500,
+                valid_sets=[lgb.Dataset(_X_val, label=_y_val)],
+                callbacks=[lgb.early_stopping(50), lgb.log_evaluation(period=0)],
+            )
         models['lgb'] = lgb_model
         train_preds['lgb'] = lgb_model.predict(X_train_norm)
         if verbose:
@@ -342,14 +360,14 @@ class MLPredictor:
         for name, model in self.models.items():
             try:
                 if name == 'lgb':
-                    model_preds[name] = model.predict(X.values)
+                    model_preds[name] = model.predict(X)
                 elif name == 'xgb':
                     import xgboost as xgb
-                    model_preds[name] = model.predict(xgb.DMatrix(X.values))
+                    model_preds[name] = model.predict(xgb.DMatrix(X))
                 elif name == 'ridge':
-                    model_preds[name] = model.predict(X.values)
+                    model_preds[name] = model.predict(X)
                 else:
-                    model_preds[name] = model.predict(X.values)
+                    model_preds[name] = model.predict(X)
             except Exception:
                 pass
 

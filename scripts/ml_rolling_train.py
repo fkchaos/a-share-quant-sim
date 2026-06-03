@@ -73,6 +73,14 @@ def main():
     parser.add_argument("--lgb-leaves", type=int, default=63)
     parser.add_argument("--lgb-min-data", type=int, default=20)
 
+    # 风控参数
+    parser.add_argument("--no-vol-scaling", action="store_true", help="关闭波动率缩放")
+    parser.add_argument("--vol-target", type=float, default=0.20, help="波动率目标 (default: 0.20)")
+    parser.add_argument("--use-take-profit", action="store_true", help="启用分级止盈")
+    parser.add_argument("--use-holding-decay", action="store_true", help="启用持有期decay")
+    parser.add_argument("--use-atr-stop", action="store_true", help="启用ATR自适应止损")
+    parser.add_argument("--atr-k", type=float, default=2.0, help="ATR止损倍数 (default: 2.0)")
+
     # 策略对比
     parser.add_argument("--strategy", nargs="+", default=["v6b_8f_pos_ic"])
     parser.add_argument("--no-v6b", action="store_true")
@@ -187,6 +195,13 @@ def main():
         stop_loss=args.stop_loss, max_position=args.max_position,
         max_industry_weight=max_ind, max_daily_turnover=0,
         weight_method='equal', stock_names=sn, exec_timing=args.exec_timing,
+        use_vol_scaling=not args.no_vol_scaling,
+        vol_target=args.vol_target,
+        use_take_profit=args.use_take_profit,
+        tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)] if args.use_take_profit else None,
+        use_holding_decay=args.use_holding_decay,
+        use_atr_stop=args.use_atr_stop,
+        atr_k=args.atr_k,
     )
     if args.exec_timing == 'open':
         bt_kwargs['open_panel'] = open_panel

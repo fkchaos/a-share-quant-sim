@@ -662,6 +662,213 @@ class RollingTrainer:
 # 4. ml_score_panel — 预测 → 选股面板
 # ============================================================
 
+# ============================================================
+# 4b. Ensemble Trainer (LGB + XGB + Ridge)
+# ============================================================
+
+class EnsembleTrainer:
+    """三模型 ensemble：LightGBM + XGBoost + Ridge。
+
+    每个模型独立预测股票收益，然后 stacking 融合。
+    Stacking 权重用 OLS 回归（在训练集上拟合最优权重）。
+
+    与 RollingTrainer 接口兼容，直接替换使用。
+    """
+
+    def __init__(
+        self,
+        train_days: int = 252,
+        test_days: int = 63,
+        step_days: int = 63,
+        min_train_samples: int = 5000,
+        forward_periods: list = None,
+        lgb_params: dict = None,
+        xgb_params: dict = None,
+        ridge_alpha: float = 1.0,
+        stacking_method: str = 'ols',  # 'ols' | 'equal' | 'ic_weighted'
+    ):
+        self.train_days = train_days
+        self.test_days = test_days
+        self.step_days = step_days
+        self.min_train_samples = min_train_samples
+        self.forward_periods = forward_periods or [5, 20]
+        self.ridge_alpha = ridge_alpha
+        self.stacking_method = stacking_method
+
+        self.lgb_params = lgb_params or {
+            'objective': 'regression_l1', 'metric': 'mae',
+            'learning_rate': 0.05, 'num_leaves': 63, 'min_data_in_leaf': 20,
+            'feature_fraction': 0.8, 'bagging_fraction': 0.8, 'bagging_freq': 5,
+            'lambda_l1': 0.1, 'lambda_l2': 1.0, 'verbose': -1,
+        }
+        self.xgb_params = xgb_params or {
+            'objective': 'reg:squarederror', 'eval_metric': 'mae',
+            'learning_rate': 0.05, 'max_depth': 6, 'subsample': 0.8,
+            'colsample_bytree': 0.8, 'reg_alpha': 0.1, 'reg_lambda': 1.0,
+            'verbosity': 0,
+        }
+
+    def run(self, X, y_multi, date_index, code_index, regime_series=None):
+        """Walk-Forward ensemble 训练"""
+        import lightgbm as lgb
+        import xgboost as xgb
+        from sklearn.linear_model import Ridge
+
+        max_fwd = max(self.forward_periods)
+        primary_fp = self.forward_periods[0]  # 用最短的 forward 做主标签
+
+        unique_dates = pd.Series(date_index.unique()).sort_values().values
+        n_dates = len(unique_dates)
+
+        if n_dates < self.train_days + self.test_days:
+            return pd.Series(np.nan, index=y_multi[f'fp_{primary_fp}'].index), []
+
+        predictions = pd.Series(np.nan, index=y_multi[f'fp_{primary_fp}'].index, name='pred')
+        fold_info = []
+        fold = 0
+        train_end = self.train_days
+
+        while train_end + self.test_days <= n_dates:
+            fold += 1
+            train_start = max(0, train_end - self.train_days)
+            test_start = train_end
+            test_end = min(n_dates, train_end + self.test_days)
+
+            train_dates = unique_dates[train_start:train_end]
+            test_dates = unique_dates[test_start:test_end]
+
+            train_mask = date_index.isin(train_dates).values
+            test_mask = date_index.isin(test_dates).values
+
+            if train_mask.sum() < self.min_train_samples:
+                train_end += self.step_days
+                continue
+
+            # 用 primary forward 的标签
+            key = f'fp_{primary_fp}'
+            if key not in y_multi or len(y_multi[key]) == 0:
+                train_end += self.step_days
+                continue
+
+            y_all = y_multi[key]
+            X_train, y_train = X[train_mask], y_all[train_mask]
+            X_test, y_test = X[test_mask], y_all[test_mask]
+
+            if len(X_train) < 100 or len(X_test) < 20:
+                train_end += self.step_days
+                continue
+
+            # --- 训练三个模型 ---
+            model_preds = {}
+            model_train_preds = {}
+
+            # 1. LightGBM
+            try:
+                lgb_model = lgb.train(
+                    self.lgb_params,
+                    lgb.Dataset(X_train, label=y_train),
+                    num_boost_round=500,
+                    callbacks=[lgb.early_stopping(50), lgb.log_evaluation(period=0)],
+                )
+                model_preds['lgb'] = lgb_model.predict(X_test)
+                model_train_preds['lgb'] = lgb_model.predict(X_train)
+            except Exception:
+                pass
+
+            # 2. XGBoost
+            try:
+                xgb_model = xgb.train(
+                    self.xgb_params,
+                    xgb.DMatrix(X_train, label=y_train),
+                    num_boost_round=500,
+                    evals=[(xgb.DMatrix(X_test, label=y_test), 'eval')],
+                    early_stopping_rounds=50, verbose_eval=False,
+                )
+                model_preds['xgb'] = xgb_model.predict(xgb.DMatrix(X_test))
+                model_train_preds['xgb'] = xgb_model.predict(xgb.DMatrix(X_train))
+            except Exception:
+                pass
+
+            # 3. Ridge
+            try:
+                ridge_model = Ridge(alpha=self.ridge_alpha)
+                ridge_model.fit(X_train, y_train)
+                model_preds['ridge'] = ridge_model.predict(X_test)
+                model_train_preds['ridge'] = ridge_model.predict(X_train)
+            except Exception:
+                pass
+
+            if len(model_preds) == 0:
+                train_end += self.step_days
+                continue
+
+            # --- Stacking 融合 ---
+            if self.stacking_method == 'ols' and len(model_preds) >= 2:
+                # OLS stacking：在训练集上拟合最优权重
+                from sklearn.linear_model import LinearRegression
+                stack_X_train = np.column_stack([model_train_preds[m] for m in model_preds])
+                stack_X_test = np.column_stack([model_preds[m] for m in model_preds])
+                meta = LinearRegression(positive=True).fit(stack_X_train, y_train.values)
+                fused_pred = meta.predict(stack_X_test)
+                stacking_weights = dict(zip(model_preds.keys(), meta.coef_))
+            elif self.stacking_method == 'ic_weighted' and len(model_preds) >= 2:
+                # IC 加权
+                ics = {}
+                for m, pred in model_train_preds.items():
+                    ics[m] = max(0.01, np.corrcoef(y_train.values, pred)[0, 1])
+                total = sum(ics.values())
+                weights = {m: ics[m] / total for m in model_preds}
+                fused_pred = sum(weights[m] * model_preds[m] for m in model_preds)
+                stacking_weights = weights
+            else:
+                # 等权
+                fused_pred = np.mean(list(model_preds.values()), axis=0)
+                stacking_weights = {m: 1.0 / len(model_preds) for m in model_preds}
+
+            # 写入预测
+            pred_positions = np.where(test_mask)[0][:len(fused_pred)]
+            predictions.iloc[pred_positions] = fused_pred
+
+            # IC: compute train IC from training set fusion
+            if self.stacking_method == 'ols' and len(model_train_preds) >= 2:
+                from sklearn.linear_model import LinearRegression
+                fused_train = LinearRegression(positive=True).fit(
+                    np.column_stack(list(model_train_preds.values())),
+                    y_train.values
+                ).predict(np.column_stack(list(model_train_preds.values())))
+            elif self.stacking_method == 'ic_weighted' and len(model_train_preds) >= 2:
+                ics = {m: max(0.01, float(np.corrcoef(y_train.values, p)[0, 1]))
+                       for m, p in model_train_preds.items()}
+                total = sum(ics.values())
+                fused_train = sum(ics[m] / total * model_train_preds[m] for m in model_train_preds)
+            else:
+                fused_train = np.mean(list(model_train_preds.values()), axis=0)
+
+            train_ic = float(np.corrcoef(y_train.values, fused_train)[0, 1]) if len(y_train) > 10 else 0
+            test_ic = float(np.corrcoef(y_test.values, fused_pred)[0, 1]) if len(y_test) > 10 else 0
+
+            info = {
+                'fold': fold,
+                'test_dates': f"{test_dates[0]}~{test_dates[-1]}",
+                'models': list(model_preds.keys()),
+                'stacking_weights': str({k: round(v, 3) for k, v in stacking_weights.items()}),
+                'train_ic': round(float(train_ic), 4),
+                'test_ic': round(float(test_ic), 4),
+            }
+            fold_info.append(info)
+            print(f"  Ensemble Fold {fold}: {info['test_dates']} | "
+                  f"models={list(model_preds.keys())} test_ic={test_ic:.4f} | "
+                  f"weights={stacking_weights}")
+
+            train_end += self.step_days
+
+        return predictions, fold_info
+
+
+# ============================================================
+# 4b. ml_score_panel — 预测 → 选股面板
+# ============================================================
+
 def ml_score_panel(
     predictions: pd.Series,
     date_index: pd.Series,
@@ -700,6 +907,8 @@ def run_ml_pipeline(
     use_regime: bool = True,
     use_enhanced_features: bool = True,
     lgb_params: dict = None,
+    use_ensemble: bool = False,
+    ensemble_stacking: str = 'ols',
     regime_params: dict = None,
     stock_names: dict = None,
 ) -> Tuple[pd.DataFrame, List[dict]]:
@@ -736,18 +945,22 @@ def run_ml_pipeline(
         regime_series = detector.detect(close_panel)
 
     # Step 3: Walk-Forward 训练
-    print(f"\n[ML v2] Step 3: Walk-Forward training "
-          f"(group_stacking={use_group_stacking}, regime={use_regime})...")
-    trainer = RollingTrainer(
-        train_days=train_days,
-        test_days=test_days,
-        step_days=step_days,
-        forward_periods=forward_periods if use_multi_period else [forward_periods[0]],
-        use_group_stacking=use_group_stacking,
-        use_regime=use_regime,
-        lgb_params=lgb_params,
-        regime_params=regime_params,
-    )
+    if use_ensemble:
+        print(f"\n[ML v2] Step 3: Ensemble training (LGB+XGB+Ridge, stacking={ensemble_stacking})...")
+        trainer = EnsembleTrainer(
+            train_days=train_days, test_days=test_days, step_days=step_days,
+            forward_periods=forward_periods if use_multi_period else [forward_periods[0]],
+            lgb_params=lgb_params, stacking_method=ensemble_stacking,
+        )
+    else:
+        print(f"\n[ML v2] Step 3: Walk-Forward training "
+              f"(group_stacking={use_group_stacking}, regime={use_regime})...")
+        trainer = RollingTrainer(
+            train_days=train_days, test_days=test_days, step_days=step_days,
+            forward_periods=forward_periods if use_multi_period else [forward_periods[0]],
+            use_group_stacking=use_group_stacking, use_regime=use_regime,
+            lgb_params=lgb_params, regime_params=regime_params,
+        )
     predictions, fold_info = trainer.run(X, y_multi, date_idx, code_idx, regime_series)
 
     # Step 4: → 评分面板

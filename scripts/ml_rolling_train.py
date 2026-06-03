@@ -70,6 +70,10 @@ def main():
     parser.add_argument("--ablation", choices=["baseline","multi_period","group","regime","enhanced","full"])
     parser.add_argument("--hybrid-alpha", type=float, default=None,
                         help="α×ML + (1-α)×v6b, e.g. 0.7")
+    parser.add_argument("--ensemble", action="store_true",
+                        help="启用 LGB+XGB+Ridge ensemble")
+    parser.add_argument("--ensemble-stacking", choices=["ols","equal","ic_weighted"],
+                        default="ols", help="ensemble stacking 方法")
     # 回测
     parser.add_argument("--start", default="2021-01-01")
     parser.add_argument("--end", default=None)
@@ -124,6 +128,9 @@ def main():
 
     # 2. ML Pipeline
     label = f"ml{label_suffix}"
+    if args.ensemble:
+        label = f"ml_ens_{args.ensemble_stacking}"
+        use_multi = True  # ensemble 默认开多周期
     score_ml, fold_info = run_ml_pipeline(
         factors=factors, close_panel=close_panel,
         train_days=args.train_days, test_days=args.test_days, step_days=args.step_days,
@@ -131,6 +138,8 @@ def main():
         use_multi_period=use_multi, use_group_stacking=use_group,
         use_regime=use_regime, use_enhanced_features=use_enhanced,
         lgb_params=lgb_params, stock_names=stock_names,
+        use_ensemble=args.ensemble,
+        ensemble_stacking=args.ensemble_stacking,
     )
     if score_ml.abs().sum().sum() == 0:
         print("⚠️ ML score 全零"); sys.exit(1)

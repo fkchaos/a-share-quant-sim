@@ -403,23 +403,43 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             trade_count = int(f.read().strip())
 
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
+    current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
     if not need_rebalance:
         logger.info(f"非调仓日 (距下次调仓 {REBAL_FREQ - trade_count % REBAL_FREQ} 天)")
-        # 非调仓日也写入空计划，保证下午执行永远加载当天 plan，不依赖脏数据
+        # 非调仓日：sell_plan/buy_plan 为空，hold_plan 包含所有当前持仓（全部持有不动）
+        hold_plan = []
+        for code in state.holdings:
+            if code in price_data.index:
+                p = price_data[code]
+                if not pd.isna(p) and p > 0:
+                    info = state.holdings[code]
+                    mv = info['shares'] * p
+                    w = mv / current_pv if current_pv > 0 else 0
+                    hold_plan.append({
+                        'code': code,
+                        'name': names.get(code, code),
+                        'current_shares': info['shares'],
+                        'price': float(p),
+                        'current_weight': w,
+                        'target_weight': w,
+                        'action': 'hold',
+                        'add_amount': 0,
+                    })
         plan = {
             'generated_at': str(datetime.now()),
             'date': str(date),
             'trade_count': trade_count,
             'mode': 'intraday_signal',
             'no_rebalance': True,
+            'total_nav': float(current_pv) if current_pv else float(INITIAL_CAPITAL),
             'sell_plan': [],
-            'hold_plan': [],
+            'hold_plan': hold_plan,
             'buy_plan': [],
         }
         plan_file = os.path.join(PORTFOLIO_DIR, "trade_plan.json")
         with open(plan_file, 'w') as f:
             json.dump(plan, f, indent=2, default=str, ensure_ascii=False)
-        logger.info(f"✅ 空操作计划已保存 → {plan_file}")
+        logger.info(f"✅ 空操作计划已保存 → {plan_file} (持有 {len(hold_plan)} 只)")
         return plan
 
     logger.info("🔄 调仓日 — 生成操作计划")
@@ -1012,6 +1032,7 @@ def run_day_end():
             trade_count = int(f.read().strip())
 
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
+    current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
     if not need_rebalance:
         logger.info(f"非调仓日 (距下次调仓 {REBAL_FREQ - trade_count % REBAL_FREQ} 天)")
         trade_count_final = trade_count

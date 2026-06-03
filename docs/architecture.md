@@ -2,7 +2,7 @@
 
 > 面向开发者的实现逻辑与框架说明
 >
-> 最后更新：2026-06-01（三阶段模拟盘 + 8 策略 Profile 体系）
+> 最后更新：2026-06-03（ML hybrid 模式上线 + StrategyEngine 统一入口）
 
 ## 一、整体架构：共享引擎 + 策略 Profile 模式
 
@@ -10,12 +10,12 @@
                           core/ (唯一权威引擎)
   ┌─────────────────────────────────────────────────────────────────┐
   │  config.py                                                      │
-  │    DEFAULT_FACTOR_WEIGHTS (29因子权重, sum=1.0)                  │
+  │    DEFAULT_FACTOR_WEIGHTS (40因子权重, sum=1.0)                  │
   │    StrategyConfig dataclass (所有策略参数)                        │
-  │    STRATEGY_PROFILES dict (预定义策略: v4/v5)                     │
+  │    STRATEGY_PROFILES dict (预定义策略: v4/v5/v6b/v8/v10)          │
   │    TradingCosts + RiskLimits dataclass                          │
   │  factors.py    calc_factors_panel() / calc_factors_single()     │
-  │                29 技术因子计算                                    │
+  │                40 技术因子计算                                    │
   │  scoring.py    composite_score(panel) / score_all_stocks(live)  │
   │                截面 Z-Score + 加权评分                            │
   │  account.py    PortfolioState + buy/sell/check_stop_loss        │
@@ -23,6 +23,13 @@
   │                apply_holding_decay / allocate_weights           │
   │                纯函数式交易 API                                    │
   │  position.py   Position 领域模型                                 │
+  │  ──────────────────────────────────────────────────────────────  │
+  │  ml.py         FeatureBuilder + RollingTrainer + EnsembleTrainer│
+  │                ML 训练/预测核心 (Walk-Forward 回测用)              │
+  │  ml_predictor.py  train_and_save() + MLPredictor                │
+  │                离线训练 + 在线推理 (模拟盘用)                      │
+  │  strategy.py   StrategyEngine 统一策略入口                       │
+  │                factor / ml / hybrid 三种模式                     │
   └──────────┬──────────────────────────────┬──────────────────────┘
              │                              │
              ▼                              ▼
@@ -31,74 +38,73 @@
   │  (三阶段模拟盘)      │   │  (历史回测引擎)               │
   │                      │   │                             │
   │  策略来源:            │   │  策略来源:                    │
-  │  STRATEGY_PROFILES   │   │  STRATEGY_PROFILES           │
-  │  [_PROFILE]          │   │  + _build_cfg() helper       │
-  │                      │   │                             │
-  │ **模拟盘 Pipeline (三阶段)**: │  │  流程:                       │
-  │  ① 更新数据 (AM)       │  │  1. 加载 CSV 面板             │
-  │  ② 加载账户            │  │  2. calc_factors_panel()     │
-  │  ③ 止损/止盈/decay     │  │  3. IC 分析(可选)             │
-  │  ④ 数据质量            │  │  4. composite_score()        │
+  │  StrategyEngine      │   │  composite_score /           │
+  │  (config/strategy_   │   │  run_ml_pipeline             │
+  │   config.json)       │   │                             │
+  │                      │   │  流程:                       │
+  │  **模拟盘 Pipeline (三阶段)**: │  │  1. 加载 CSV 面板             │
+  │  ① 更新数据 (AM)       │  │  2. calc_factors_panel()     │
+  │  ② 加载账户            │  │  3. IC 分析(可选)             │
+  │  ③ 止损/止盈/decay     │  │  4. composite_score/         │
+  │  ④ 数据质量            │  │     run_ml_pipeline          │
   │  ⑤ 调仓 → 信号文件(PM) │  │  5. 回测循环→buy/sell        │
   │  ⑥ 执行信号→交易(PM)   │  │  6. 绩效指标+自检             │
   │  ⑦ 保存+报告(收盘)     │  │                             │
-  │ 11:35 信号 → 13:00 执行 → 15:30 报告 │
+  │ 11:35 信号 → 13:00 执行 → 15:30 报告 │                  │
   └──────────────────────┘   └─────────────────────────────┘
 
-  ┌──────────────────────┐
-  │ update_daily_data.py │
-  │ (数据层: 腾讯 API → CSV)│
-  └──────────────────────┘
+  ┌──────────────────────┐   ┌─────────────────────────────┐
+  │ train_ml_model.py   │   │  update_daily_data.py       │
+  │ (ML 离线训练)        │   │  (数据层: 腾讯 API → CSV)    │
+  │ 每周一 06:00 cron   │   │                             │
+  └──────────────────────┘   └─────────────────────────────┘
 ```
 
 **设计原则**：
 - `core/` 是纯数据结构和函数 — 无 I/O、无副作用
 - `STRATEGY_PROFILES` 是策略参数唯一权威来源（回测+模拟盘共用）
 - 因子权重唯一权威来源是 `core/config.py` 的 `DEFAULT_FACTOR_WEIGHTS`
+- **策略评分统一入口**：`StrategyEngine`（factor/ml/hybrid 三种模式）
+- **ML 训练/推理分离**：`train_and_save()` 离线训练 → `MLPredictor` 在线推理
 
 ---
 
-## 二、`core/` 层：四个模块详解
+## 二、`core/` 层：六个模块详解
 
 ### 2.1 `config.py` — 配置管理 + 策略 Profiles
 
 ```python
-# 因子权重（29因子，sum=1.0）
+# 因子权重（40因子，sum=1.0）
 DEFAULT_FACTOR_WEIGHTS = { 'mom_5': 0.05, ... }
 
 # 策略参数 dataclass
 @dataclass
 class StrategyConfig:
     label: str
-    weight_method: str          # equal | ic_ir | markowitz
+    weight_method: str          # equal | vol_inverse
     top_n: int
     rebalance_freq: int
     stop_loss: float
     max_industry_weight: float
     max_daily_turnover: float
-    use_take_profit: bool       # v5
-    tp_tiers: list              # v5: [(0.10,0.30),(0.20,0.30),(0.30,1.00)]
-    use_holding_decay: bool     # v5
+    use_take_profit: bool
+    tp_tiers: list
+    use_holding_decay: bool
+    factor_weights: dict        # 因子权重（v6b 为8因子等权）
 
 # 预定义策略 Profiles（回测+模拟盘共用）
 STRATEGY_PROFILES = {
-    "v4_baseline":      PROFILE_V4_BASELINE,          # 无限制基准
-    "v4_industry_cap":  PROFILE_V4_WITH_INDUSTRY_CAP, # +行业限制25%
-    "v6b_8f_pos_ic":       PROFILE_V6B_8F_POS_IC,        # 8因子正IC等权（当前最优）
-    "v7a_8f_ind40":        PROFILE_V7A_8F_IND40,         # 8因子+行业≤40%
-    "v7b_8f_ind50":        PROFILE_V7B_8F_IND50,         # 8因子+行业≤50%
-    "v7c_8f_no_ind":       PROFILE_V7C_8F_NO_IND,        # 8因子+无行业限制
-    "v8_all_icir":         PROFILE_V8_ALL_ICIR,          # 18因子全量IC_IR加权
+    "v4_baseline":      PROFILE_V4_BASELINE,
+    "v4_industry_cap":  PROFILE_V4_WITH_INDUSTRY_CAP,
+    "v6b_8f_pos_ic":    PROFILE_V6B_8F_POS_IC,        # 8因子正IC等权
+    "v7a_8f_ind40":     PROFILE_V7A_8F_IND40,
+    "v7b_8f_ind50":     PROFILE_V7B_8F_IND50,
+    "v7c_8f_no_ind":    PROFILE_V7C_8F_NO_IND,
+    "v8_all_icir":      PROFILE_V8_ALL_ICIR,
+    "v10_small_cap":    PROFILE_V10_SMALL_CAP,
+    "v10b_small_mom":   PROFILE_V10B_SMALL_MOM,
 }
 ```
-
-| Profile | 年化(close) | 夏普(close) | 夏普(open) | 核心差异 |
-|---------|-----------|-----------|-----------|---------|
-| v4_baseline | 22.19% | 1.06 | 0.57 | 无行业/换手率限制 |
-| v4_industry_cap | 21.64% | 1.06 | 0.49 | +行业≤25% |
-| **v6b_8f_pos_ic** ⚡ | **23.81%** | **1.33** | **1.05** | **8因子正IC等权（最优）** |
-| v8_all_icir | 21.49% | 1.25 | 0.99 | 18因子IC_IR加权 |
-| v5_tp_decay | 18.55% | 1.14 | 0.79 | +分级止盈+持有期decay |
 
 ### 2.2 `factors.py` — 因子计算引擎
 
@@ -106,13 +112,13 @@ STRATEGY_PROFILES = {
 
 ```python
 # 面板模式（回测）: DataFrame (dates × stocks) → {factor_name: DataFrame}
-calc_factors_panel(close_panel, volume_panel, amount_panel)
+calc_factors_panel(close_panel, volume_panel, amount_panel, open_p, high_p, low_p)
 
 # 单股模式（模拟盘）: DataFrame (single stock) → {factor_name: float}
 calc_factors_single(df)
 ```
 
-共 29 个因子，分 7 类：
+共 **40 个因子**，分 8 类：
 
 | 类别 | 因子 |
 |------|------|
@@ -123,8 +129,7 @@ calc_factors_single(df)
 | RSI | rsi_6, rsi_14, rsi_28 |
 | 趋势 | macd_12_26, macd_5_35, boll_pos_10, boll_pos_20, boll_width_20 |
 | 统计/其他 | atr_14, skew_20, kurt_20, vwap_mom, rel_strength_20, rel_strength_60 |
-
-**⚠️ 防错**：不传 `vol_panel` 时会有 `UserWarning`——之前 bug 的遗留防护。
+| 短线/风格 | amplitude, illiquidity, turnover_skew, turnover_change, price_impact, pv_corr, chip_kurt, obv_slope, gap_ratio, high_low_range, intraday_drift, small_cap |
 
 ### 2.3 `account.py` — 纯函数式交易 API
 
@@ -138,70 +143,122 @@ class PortfolioState:
     nav_history: List[dict]
 
 # 核心交易函数（全部返回新 state，不修改旧 state）
-def buy(state, code, price, date, shares=None) -> PortfolioState:
+def buy(state, code, price, date, shares=None, target_value=None) -> PortfolioState:
 def sell(state, code, price, date, reason='SELL') -> PortfolioState:
 def partial_sell(state, code, price, date, sell_fraction, reason) -> PortfolioState:
 
 # 风控函数
 def check_stop_loss(state, date, prices) -> PortfolioState:
 def check_take_profit(state, date, prices, tiers=None) -> PortfolioState:
-    # tiers: [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
-    # 每档只触发一次（通过 holdings[code]['dp_taken'] 追踪）
 def apply_holding_decay(state, date, prices, rebalance_freq=20) -> PortfolioState:
-    # >rf天→70%, >2rf天→40%
 
 # 权重分配
 def allocate_weights(top_stocks, price_data, method='equal', vol_series=None, max_position=0.10):
-    # method: equal | vol_inverse | markowitz
 
 def portfolio_value(state, date, prices) -> float:
 ```
 
-**📝 holdings 结构变更 (v5)**：每只股票持仓新增 `tp_taken` 字段（list of float），记录已触发的止盈档位，防止重复触发。
-
-### 2.4 `scoring.py` — 评分合成
+### 2.4 `scoring.py` — 评分合成（因子加权模式）
 
 ```python
-def standardize(df):                                    # 截面 Z-Score + MAD 去极值
+def standardize(df):                                    # 截面 Z-Score
 def composite_score(factors, weights):                  # 加权合成（回测 panel 模式）
-def score_all_stocks(all_factors, weights):             # 评分（模拟盘单股模式）→ {code: score}
-def factor_correlation(factors):                        # 因子相关性矩阵 + 高相关对检测
+def score_all_stocks(all_factors, weights, dynamic_weights=None):  # 模拟盘单股模式 → {code: score}
+def factor_correlation(factors):                        # 因子相关性矩阵
+```
+
+### 2.5 `ml.py` — ML 训练/预测核心（Walk-Forward 回测用）
+
+```python
+class FeatureBuilder:
+    """从因子面板构建 ML 特征矩阵和标签（多周期）"""
+    def build(factors, close_panel, stock_names) -> (X, y_multi, date_index, code_index):
+
+class RollingTrainer:
+    """Walk-Forward 滚动训练引擎（单模型 LGB）"""
+    def run(X, y_multi, date_index, code_index) -> (predictions, fold_info):
+
+class EnsembleTrainer:
+    """三模型 ensemble Walk-Forward 训练（LGB+XGB+Ridge + OLS Stacking）"""
+    def run(X, y_multi, date_index, code_index) -> (predictions, fold_info):
+
+def ml_score_panel(predictions, date_index, code_index, close_panel) -> DataFrame:
+    """ML 预测值 → 选股评分面板"""
+
+def run_ml_pipeline(factors, close_panel, ...) -> (score_panel, fold_info):
+    """端到端 ML 流水线"""
+```
+
+### 2.6 `ml_predictor.py` — ML 离线训练 + 在线推理（模拟盘用）
+
+```python
+def train_and_save(factors, close_panel, model_dir, profile, hybrid_alpha, ...) -> meta:
+    """
+    全量训练并保存 ML ensemble 模型。
+    - 取最近 train_days 天数据
+    - 训练 LGB + XGB + Ridge
+    - OLS Stacking（positive constraint）
+    - pickle 序列化 + JSON 元数据
+    - 保存到 model_dir/latest.json
+    """
+
+class MLPredictor:
+    """在线推理器（模拟盘用）"""
+    def __init__(self, model_dir):   # 加载 latest.json + pickle 模型
+    def predict(all_factors) -> {code: score}:  # 对当日截面做 ML 预测
+```
+
+### 2.7 `strategy.py` — 统一策略评分入口
+
+```python
+class StrategyEngine:
+    """
+    统一选股评分引擎。
+    支持 factor / ml / hybrid 三种模式。
+    通过 config/strategy_config.json 配置。
+    """
+    def __init__(self, profile, mode, hybrid_alpha, model_dir):
+        # mode: "factor" | "ml" | "hybrid"
+
+    def score_panel(factors_panel, close_panel) -> DataFrame:
+        """面板模式评分（回测用）"""
+
+    def score_single(all_factors) -> {code: score}:
+        """单股模式评分（模拟盘用）"""
+        # factor → score_all_stocks()
+        # ml → MLPredictor.predict()
+        # hybrid → α×ML_zscore + (1-α)×factor_zscore
+
+    def filter_stocks(scores, price_data, portfolio_value, ...) -> (codes, scores):
+        """统一选股过滤：板块 + 流动性 + 行业分散 → top_n"""
+```
+
+**策略配置文件** (`config/strategy_config.json` 或 `$DATA_DIR/strategy_config.json`)：
+```json
+{
+  "mode": "hybrid",
+  "hybrid_alpha": 0.8,
+  "model_dir": "/root/data/ml_models",
+  "profile": "v6b_8f_pos_ic"
+}
 ```
 
 ---
-
-## 三、调度层：sim_daily_v6.py
-
-### 每日 Pipeline（9 步）
-
-```
-daily_operation():
-  ① step_update_data()           subprocess 调用 update_daily_data.py
-  ② step_load_account()          从 account.json → PortfolioState（含 tp_taken 兼容）
-  ③ step_load_prices()           遍历 CSV → price_data (Series)
-  ④ step_check_stop_loss()       check_stop_loss() → 触发则卖出
-  ⑤ step_check_take_profit()  ◉  check_take_profit() → 分级卖出（仅 v5）
-  ⑥ step_holding_decay()      ◉  apply_holding_decay() → 减持（仅 v5）
-  ⑦ step_data_quality()          DataQualityAuditor.audit()
-  ⑧ step_rebalance()             因子计算 → 评分 → 换手率控制 → 行业限制 → 补仓/买入
-  ⑨ step_save_state() + step_report() + step_tomorrow_plan()
-```
 
 ## 三、调度层：sim_daily_v7.py
 
 ### 三阶段 Pipeline
 
 ```
-daily_operation(mode):
-  intraday_signal (11:35):
-    ① update_data → ② load_account → ③ stop loss → ④ data quality
-    → ⑤ rebalance(因子→评分→调仓) → 写 trade_plan.json
+intraday_signal (11:35):
+  ① update_data → ② load_account → ③ stop_loss/tp/decay → ④ data_quality
+  → ⑤ StrategyEngine.score_single() + filter_stocks() → 写 trade_plan.json
 
-  intraday_execute (13:00):
-    ⑥ load trade_plan → 开盘价买入/卖出 → 更新 account
+intraday_execute (13:00):
+  ⑥ load trade_plan → 开盘价买入/卖出 → 更新 account
 
-  day_end (15:30):
-    ⑦ save state → ⑧ report → ⑨ tomorrow plan
+day_end (15:30):
+  ⑦ save state → ⑧ report → ⑨ tomorrow plan
 ```
 
 ### 辅助模块
@@ -211,7 +268,7 @@ daily_operation(mode):
 | `constraints.py` | 涨跌停/T+1/停牌检查 | P0-1 |
 | `data_quality.py` | 数据过期/空值/异常跳变 | P0-2 |
 | `portfolio_controls.py` | 日换手率上限控制 | P0-3 |
-| `industry.py` | 行业分类 + 行业≤25% | P1-1 |
+| `industry.py` | 行业分类 + 行业上限 | P1-1 |
 | `indices.py` | 6个指数趋势展示 | P1-2 |
 
 ---
@@ -226,45 +283,39 @@ run_backtest.py   ──▶ core.account.buy / sell / check_stop_loss / check_ta
                       ↑↑↑ 完全相同的函数 ↑↑↑
 ```
 
-**这是整个项目最重要的设计决策**。之前存在两份独立的交易逻辑，现在只有一份。
-
-### 策略运行方式
-
-```python
-# 从 STRATEGY_PROFILES 构建 config（命令行参数可覆盖）
-def _build_cfg(profile, score, extra_kwargs=None):
-    kw = dict(top_n=..., rebalance_freq=..., stop_loss=...,
-              use_take_profit=profile.use_take_profit,
-              tp_tiers=profile.tp_tiers, ...)
-    return {'label': profile.label, 'score': score, 'kwargs': kw}
-```
-
-### 命令行接口
+### ML 回测路径
 
 ```bash
-# 跑所有策略
-python scripts/run_backtest.py --strategy all --start 2021-01-01
+# Walk-Forward ML 回测
+python scripts/ml_rolling_train.py --hybrid-alpha 0.8 --start 2021-01-01
 
-# 跑单个策略
-python scripts/run_backtest.py --strategy v5_tp_decay --top-n 12 --rebalance-freq 20
-
-# 参数扫描 + Walk-Forward
-python scripts/run_backtest.py --strategy v5_tp_decay --scan --walk-forward
-
-# 自动记录结果到 RESULTS_LOG.md
-python scripts/run_backtest.py --strategy v5_tp_decay --log
+# 纯因子回测
+python scripts/run_backtest.py --strategy v6b_8f_pos_ic --start 2021-01-01
 ```
 
 ### 防错机制
 
-- **vol_panel 缺失 warning**：`calc_factors_panel(close_panel)` 不传 vol_panel 时触发
-- **stock_names 加载独立函数**：失败时有 warning，不静默影响行业限制
 - **启动配置摘要**：每次回测打印 ind_cap/tp/decay/atr 状态
 - **结果自检**：负收益/超大回撤/零止损触发时主动告警
+- **数据质量门禁**：过期/空值/异常跳变检测
 
 ---
 
-## 五、数据层：增量更新机制
+## 五、ML 训练脚本：train_ml_model.py
+
+```bash
+# 一键训练（全量数据 → 三模型 ensemble → 保存）
+python scripts/train_ml_model.py
+
+# 输出: /root/data/ml_models/latest.json + pickle 文件
+# 耗时: ~60s (280只 × 5年 × 3模型)
+```
+
+**Cron 定时训练**：每周一 06:00 自动训练（赶在开盘前完成）
+
+---
+
+## 六、数据层：增量更新机制
 
 ```
 ① 读取本地 CSV，找到最后日期 local_latest
@@ -274,20 +325,19 @@ python scripts/run_backtest.py --strategy v5_tp_decay --log
 ```
 
 **数据路径**：
-- 默认：`data/daily/`（工程内，相对于项目根目录）
+- 默认：`data/daily/`（工程内）
 - 覆盖：设 `BACKTEST_DATA_DIR=/path/to/data` 环境变量
-- 所有脚本（sim_daily_v7 / run_backtest / update_daily_data）均支持
+- 所有脚本均支持
 
 ---
 
-## 六、Golden Tests
+## 七、Golden Tests
 
 ```
 tests/test_golden.py — 12 个快速测试（< 1s）
-  TestFactorComputation (5):  29因子完整性、权重和=1.0、vol_panel有/无检测
-  TestScoring (2):           评分分布正确性、score_all_stocks 输出
-  TestAccountLogic (4):      分级止盈触发、持有期decay、等权分配
-  TestImplicitDependencyGuard (1): vol_panel=None → warning
+  TestFactorComputation (5):  40因子完整性、权重和=1.0
+  TestScoring (2):           评分分布正确性
+  TestAccountLogic (4):      分级止盈、持有期decay、等权分配
   TestGoldenBaseline (1, slow): 端到端回测基准值验证
 
 运行: python -m pytest tests/test_golden.py -v -k "not slow"
@@ -295,7 +345,7 @@ tests/test_golden.py — 12 个快速测试（< 1s）
 
 ---
 
-## 七、关键常量一览
+## 八、关键常量一览
 
 | 常量 | 值 | 位置 |
 |------|-----|------|
@@ -303,14 +353,15 @@ tests/test_golden.py — 12 个快速测试（< 1s）
 | 佣金率 | 0.03% | `core.config.costs.commission_rate` |
 | 印花税 | 0.1% | `core.config.costs.stamp_tax_rate` |
 | 滑点 | 0.1% | `core.config.costs.slippage_rate` |
-| 因子数 | 29 | `core.config.DEFAULT_FACTOR_WEIGHTS` |
-| 因子权重和 | 1.0 | `core.config.DEFAULT_FACTOR_WEIGHTS` |
+| 因子数 | 40 | `core.config.DEFAULT_FACTOR_WEIGHTS` |
 | 止盈档位 | [(0.10,0.30),(0.20,0.30),(0.30,1.00)] | `PROFILE_V5_TP_DECAY.tp_tiers` |
+| ML 训练窗口 | 252天 | `train_ml_model.py TRAIN_DAYS` |
+| ML 预测周期 | [5, 20]天 | `train_ml_model.py FORWARD_PERIODS` |
 | 数据 API | `web.ifzq.gtimg.cn` | `update_daily_data.py` |
 
 ---
 
-## 八、改进行动追踪
+## 九、改进行动追踪
 
 | 优先级 | 方向 | 状态 | 日期 |
 |--------|------|------|------|
@@ -320,15 +371,11 @@ tests/test_golden.py — 12 个快速测试（< 1s）
 | P1 🟠 | 行业仓位上限 | ✅ 完成 | 2026-05-29 |
 | P1 🟠 | 指数趋势展示 | ✅ 完成 | 2026-05-29 |
 | ⭐ | core/ 统一（回测=模拟盘交易逻辑） | ✅ 完成 | 2026-05-30 |
-| ⭐ | 29 因子权重对齐 | ✅ 完成 | 2026-05-30 |
-| ⭐ | 废弃脚本清理（→ archive/） | ✅ 完成 | 2026-05-30 |
-| ⭐ | **分级止盈 (check_take_profit)** | ✅ 完成 | 2026-06-02 |
-| ⭐ | **持有期 decay (apply_holding_decay)** | ✅ 完成 | 2026-06-02 |
-| ⭐ | **策略参数解耦 (STRATEGY_PROFILES)** | ✅ 完成 | 2026-06-02 |
-| ⭐ | **Golden Tests (12 tests)** | ✅ 完成 | 2026-06-02 |
-| ⭐ | **RESULTS_LOG 自动记录** | ✅ 完成 | 2026-06-02 |
-| P2 🟡 | 参数配置抽离 | ✅ 完成 | 2026-05-30 |
-| P3 🟢 | Walk-Forward 滚动验证 | ✅ 完成 | 2026-05-30 |
-| P3 🟢 | Sortino + 因子相关性分析 | ✅ 完成 | 2026-05-30 |
-| P4 🔵 | 日志系统 + Pipeline 重构 | ✅ 完成 | 2026-05-30 |
+| ⭐ | 分级止盈 + 持有期 decay | ✅ 完成 | 2026-06-02 |
+| ⭐ | 策略参数解耦 (STRATEGY_PROFILES) | ✅ 完成 | 2026-06-02 |
+| ⭐ | Golden Tests (12 tests) | ✅ 完成 | 2026-06-02 |
+| ⭐ | **ML Ensemble 训练/推理引擎** | ✅ 完成 | 2026-06-03 |
+| ⭐ | **StrategyEngine 统一策略入口** | ✅ 完成 | 2026-06-03 |
+| ⭐ | **ML hybrid 模拟盘上线** | ✅ 完成 | 2026-06-03 |
+| ⭐ | **ML 周度自动训练 cron** | ✅ 完成 | 2026-06-03 |
 | P4 🔵 | 生产监控（RankIC/基准对比） | 📋 待开始 | - |

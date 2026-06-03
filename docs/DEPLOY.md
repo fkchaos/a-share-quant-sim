@@ -109,8 +109,53 @@ data/
 │   ├── account.json
 │   └── trade_plan.json # 上午信号 → 下午执行的计划
 ├── signals/            # 因子缓存
+├── ml_models/          # ML 模型（train_ml_model.py 生成）
+│   ├── latest.json     # 最新模型元数据
+│   ├── lgb_*.pkl       # LightGBM 模型
+│   ├── xgb_*.pkl       # XGBoost 模型
+│   ├── ridge_*.pkl     # Ridge 模型
+│   └── scaler_*.pkl    # 标准化参数
 └── logs/               # 运行日志
 ```
+
+## ML 模型管理
+
+### 策略模式切换
+
+编辑 `config/strategy_config.json`（或 `$DATA_DIR/strategy_config.json`）：
+
+```json
+{
+  "mode": "hybrid",        // factor | ml | hybrid
+  "hybrid_alpha": 0.8,     // ML 权重（仅 hybrid 模式）
+  "model_dir": "/root/data/ml_models",
+  "profile": "v6b_8f_pos_ic"
+}
+```
+
+- **factor**：纯因子加权（传统评分）
+- **ml**：纯 ML 推理（三模型 ensemble）
+- **hybrid**：α×ML + (1-α)×因子（推荐）
+
+修改后无需重启，下次 cron 自动生效。
+
+### 手动训练
+
+```bash
+# 全量训练（约 60s）
+python scripts/train_ml_model.py
+
+# 输出到 /root/data/ml_models/
+```
+
+### 自动训练（Hermes cron）
+
+每周一 06:00 自动训练，确保在开盘前完成：
+- 拉取最新代码
+- 加载 2021-01 ~ 最新全量数据
+- 训练 LGB + XGB + Ridge 三模型
+- 验证模型可加载
+- 备份旧模型到 `ml_models/archive/`
 
 ## 常见问题
 

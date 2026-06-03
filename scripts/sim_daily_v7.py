@@ -390,11 +390,10 @@ def step_data_quality(files, date):
 
 # ── 上午模式：只生成信号，不执行 ──
 
-def step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_actions=None):
+def step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_sell=None):
     """
-    Step 5 (AM): 上午收盘 → 生成操作计划
-    算因子评分 → 确定目标持仓 → 对比当前持仓 → 输出买卖计划
-    risk_actions: {code: {action: 'stop_loss'|'take_profit'|'holding_decay', 'shares': N|'all'}}
+    生成操作计划：sell_plan / hold_plan / buy_plan
+    risk_sell: 风控卖出的股票列表，合并到 sell_plan
     """
     trade_count_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")
     trade_count = 0
@@ -404,6 +403,10 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
 
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
     current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
+
+    # 合并风控卖出到 sell_plan（风控优先）
+    sell_plan = list(risk_sell or [])
+
     if not need_rebalance:
         logger.info(f"非调仓日 (距下次调仓 {REBAL_FREQ - trade_count % REBAL_FREQ} 天)")
         # 非调仓日：sell_plan/buy_plan 为空，hold_plan 包含所有当前持仓（全部持有不动）
@@ -432,8 +435,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             'mode': 'intraday_signal',
             'no_rebalance': True,
             'total_nav': float(current_pv) if current_pv else float(INITIAL_CAPITAL),
-            'risk_plan': risk_actions or {},
-            'sell_plan': [],
+            'sell_plan': sell_plan,
             'hold_plan': hold_plan,
             'buy_plan': [],
         }
@@ -588,7 +590,6 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         'trade_count': trade_count,
         'mode': 'intraday_signal',
         'total_nav': float(current_pv) if current_pv else float(INITIAL_CAPITAL),
-        'risk_plan': risk_actions or {},
         'sell_plan': sell_plan,
         'hold_plan': hold_plan,
         'buy_plan': buy_plan,
@@ -602,37 +603,37 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
 
     # ── 输出计划摘要 ──
     logger.info("═" * 50)
-    logger.info("📋 下午操作计划")
+    logger.info("📋 下午操作计划（13:00执行）")
     logger.info("═" * 50)
 
     if sell_plan:
-        logger.info(f"📉 卖出 ({len(sell_plan)} 只):")
-        for item in sell_plan:
-            pnl = (item['price'] - item['cost_price']) / item['cost_price']
-            mv = item['shares'] * item['price']
-            logger.info(f"  📉 {item['code']} {item['name']:<8} {item['shares']:>6}股  "
-                        f"市值¥{mv:>10,.0f}  盈亏{pnl:>7.2%}  (13:00按开盘价)")
-
-    if hold_plan:
-        logger.info(f"🔄 保留/补仓 ({len(hold_plan)} 只):")
-        for item in hold_plan:
-            if item['action'] == "add":
-                add_shares = int(item['add_amount'] / item['price'] / 100) * 100
-                logger.info(f"  🔺 {item['code']} {item['name']:<8} 权重{item['current_weight']:.1%}→{item['target_weight']:.1%}  "
-                            f"补仓¥{item['add_amount']:,.0f} (≈{add_shares}股)")
-            else:
-                logger.info(f"  ➡️  {item['code']} {item['name']:<8} 权重{item['current_weight']:.1%}  持有不动")
+        logger.info(f"📉 卖出 ({len(sell_plan)} 笔):")
+        for i, item in enumerate(sell_plan, 1):
+            shares_str = f"{item['shares']}股" if item['shares'] != 'all' else "全部"
+            logger.info(f"  {i}. 📉 {item['code']} {item['name']:<8} 卖出 {shares_str:<6} @ ¥{item['price']:.2f}  ({item.get('reason', '')})")
 
     if buy_plan:
-        logger.info(f"✅ 新买入 ({len(buy_plan)} 只):")
-        for item in buy_plan:
+        logger.info(f"✅ 买入 ({len(buy_plan)} 笔):")
+        for i, item in enumerate(buy_plan, 1):
             est_shares = int(item['target_amount'] / item['reference_price'] / 100) * 100
-            logger.info(f"  ✅ {item['code']} {item['name']:<8} 参考价={item['reference_price']:.2f}  "
-                        f"目标¥{item['target_amount']:,.0f} (≈{est_shares}股)")
+            logger.info(f"  {i}. ✅ {item['code']} {item['name']:<8} 买入 ≈{est_shares}股  @ ¥{item['reference_price']:.2f}  目标¥{item['target_amount']:,.0f}")
+
+    if hold_plan:
+        add_items = [h for h in hold_plan if h['action'] == 'add']
+        if add_items:
+            logger.info(f"🔺 补仓 ({len(add_items)} 笔):")
+            for i, item in enumerate(add_items, 1):
+                add_shares = int(item['add_amount'] / item['price'] / 100) * 100
+                logger.info(f"  {i}. 🔺 {item['code']} {item['name']:<8} 补仓 {add_shares}股  @ ¥{item['price']:.2f}  权重{item['current_weight']:.1%}→{item['target_weight']:.1%}")
+
+        hold_items = [h for h in hold_plan if h['action'] != 'add']
+        if hold_items:
+            logger.info(f"➡️ 持有不动 ({len(hold_items)} 只)")
+            for item in hold_items:
+                logger.info(f"     {item['code']} {item['name']:<8} {item['current_shares']}股  权重{item['current_weight']:.1%}")
 
     logger.info("═" * 50)
     logger.info(f"💰 当前净值: ¥{current_pv:,.0f}" if current_pv else "")
-    logger.info(f"⏰ 计划执行时间: 13:00 (下午开盘)")
 
     return plan
 
@@ -905,36 +906,51 @@ def run_intraday_signal():
     # Step 3: 数据质量
     quality_blocked = step_data_quality(files, date)
 
-    # Step 4: 风控检查（止损/止盈/decay），记录到 plan
-    risk_actions = {}
+    # Step 4: 风控检查（止损/止盈/decay），结果记录到 risk_sell/risk_hold
+    risk_sell = []  # [{code, name, shares, price, reason}]
+    risk_hold = []  # [{code, name, current_shares, new_shares, price, reason}]
     if not quality_blocked:
         # 止损检查
         prev_holdings = set(state.holdings.keys())
         state, stopped = step_check_stop_loss(state, date, price_data, names)
         for code in stopped:
-            risk_actions[code] = {'action': 'stop_loss', 'shares': 'all'}
+            p = price_data.get(code, 0)
+            risk_sell.append({'code': code, 'name': names.get(code, code),
+                              'shares': 'all', 'price': float(p) if p > 0 else 0,
+                              'reason': '止损'})
         # 分级止盈
         if _strategy_profile.use_take_profit:
             prev_shares = {c: h['shares'] for c, h in state.holdings.items()}
             state = step_check_take_profit(state, date, price_data, names)
             for code in prev_shares:
                 if code in state.holdings and state.holdings[code]['shares'] < prev_shares[code]:
-                    risk_actions[code] = {'action': 'take_profit', 'shares': prev_shares[code] - state.holdings[code]['shares']}
+                    p = price_data.get(code, 0)
+                    sell_shares = prev_shares[code] - state.holdings[code]['shares']
+                    risk_sell.append({'code': code, 'name': names.get(code, code),
+                                      'shares': sell_shares, 'price': float(p) if p > 0 else 0,
+                                      'reason': '分级止盈'})
                 elif code not in state.holdings:
-                    risk_actions[code] = {'action': 'take_profit', 'shares': 'all'}
+                    p = price_data.get(code, 0)
+                    risk_sell.append({'code': code, 'name': names.get(code, code),
+                                      'shares': 'all', 'price': float(p) if p > 0 else 0,
+                                      'reason': '分级止盈清仓'})
         # 持有期 decay
         if _strategy_profile.use_holding_decay:
             prev_shares = {c: h['shares'] for c, h in state.holdings.items()}
             state = step_holding_decay(state, date, price_data, names)
             for code in prev_shares:
                 if code in state.holdings and state.holdings[code]['shares'] < prev_shares[code]:
-                    risk_actions[code] = {'action': 'holding_decay', 'shares': prev_shares[code] - state.holdings[code]['shares']}
+                    p = price_data.get(code, 0)
+                    sell_shares = prev_shares[code] - state.holdings[code]['shares']
+                    risk_sell.append({'code': code, 'name': names.get(code, code),
+                                      'shares': sell_shares, 'price': float(p) if p > 0 else 0,
+                                      'reason': '持有期decay'})
 
-    # Step 5: 生成信号
-    plan = step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_actions)
+    # Step 5: 生成调仓信号
+    plan = step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_sell)
 
     # 保存风控+信号后的 state（含止损/止盈/decay 的持仓变化）
-    if risk_actions:
+    if risk_sell:
         tc_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")
         tc = 0
         if os.path.exists(tc_file):
@@ -1058,6 +1074,10 @@ def run_day_end():
 
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
     current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
+
+    # 合并风控卖出到 sell_plan（风控优先）
+    sell_plan = list(risk_sell or [])
+
     if not need_rebalance:
         logger.info(f"非调仓日 (距下次调仓 {REBAL_FREQ - trade_count % REBAL_FREQ} 天)")
         trade_count_final = trade_count

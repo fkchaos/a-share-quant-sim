@@ -405,12 +405,22 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
     if not need_rebalance:
         logger.info(f"非调仓日 (距下次调仓 {REBAL_FREQ - trade_count % REBAL_FREQ} 天)")
-        # 清除旧操作计划，防止下午误执行过期计划
+        # 非调仓日也写入空计划，保证下午执行永远加载当天 plan，不依赖脏数据
+        plan = {
+            'generated_at': str(datetime.now()),
+            'date': str(date),
+            'trade_count': trade_count,
+            'mode': 'intraday_signal',
+            'no_rebalance': True,
+            'sell_plan': [],
+            'hold_plan': [],
+            'buy_plan': [],
+        }
         plan_file = os.path.join(PORTFOLIO_DIR, "trade_plan.json")
-        if os.path.exists(plan_file):
-            os.remove(plan_file)
-            logger.info("已清除旧 trade_plan.json")
-        return {"mode": "no_rebalance", "trade_count": trade_count}
+        with open(plan_file, 'w') as f:
+            json.dump(plan, f, indent=2, default=str, ensure_ascii=False)
+        logger.info(f"✅ 空操作计划已保存 → {plan_file}")
+        return plan
 
     logger.info("🔄 调仓日 — 生成操作计划")
 
@@ -620,10 +630,10 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
         plan = json.load(f)
 
     # 校验：trade_plan 必须是今天生成的（防止执行过期计划）
-    plan_date = plan.get('date', '')
-    today_str = str(date).split('_')[0][:10]  # 取 YYYY-MM-DD 部分
-    if plan_date != str(date) and plan_date != today_str and not plan_date.startswith(today_str):
-        logger.warning(f"trade_plan.json 日期 ({plan_date}) 与当前日期 ({date}) 不符，跳过执行")
+    plan_date = str(plan.get('date', '')).split('_')[0]
+    today_str = str(date).split('_')[0]
+    if plan_date != today_str:
+        logger.warning(f"trade_plan.json 日期 ({plan.get('date')}) 与当前日期 ({date}) 不符，跳过执行")
         return state, plan
 
     if not plan.get('sell_plan') and not plan.get('buy_plan') and not any(h.get('action') == 'add' for h in plan.get('hold_plan', [])):
@@ -741,6 +751,13 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
 
     logger.info("═" * 50)
     logger.info(f"✅ 执行完成 → {report_file}")
+
+    # 执行后清除计划，防止重复执行
+    try:
+        os.remove(plan_file)
+        logger.info("已清除已执行计划 trade_plan.json")
+    except Exception:
+        pass
 
     return state, plan
 

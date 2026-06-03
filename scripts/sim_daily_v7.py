@@ -61,6 +61,15 @@ MAX_INDUSTRY_WEIGHT = _strategy_profile.max_industry_weight
 MAX_DAILY_TURNOVER = _strategy_profile.max_daily_turnover
 MAX_SINGLE_WEIGHT = _strategy_profile.max_position
 
+
+
+# Trading costs
+SLIPPAGE_RATE = core_config.costs.slippage_rate
+COMMISSION_RATE = core_config.costs.commission_rate
+INITIAL_CAPITAL = core_config.costs.initial_capital
+
+logger = get_logger("sim_daily")
+
 # ── Strategy Engine ──────────────────────────────────────────────
 from core.strategy import StrategyEngine
 
@@ -85,13 +94,6 @@ _strategy_engine = StrategyEngine(
 )
 
 logger.info(f"StrategyEngine 初始化: profile={_PROFILE} mode={_engine_mode}")
-
-# Trading costs
-SLIPPAGE_RATE = core_config.costs.slippage_rate
-COMMISSION_RATE = core_config.costs.commission_rate
-INITIAL_CAPITAL = core_config.costs.initial_capital
-
-logger = get_logger("sim_daily")
 
 logger.debug(f"策略 profile: {_PROFILE}, top_n={TOP_N}, freq={REBAL_FREQ}, sl={STOP_LOSS}, "
              f"ind_cap={MAX_INDUSTRY_WEIGHT}, turnover_cap={MAX_DAILY_TURNOVER}")

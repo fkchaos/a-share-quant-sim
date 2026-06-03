@@ -274,7 +274,7 @@ class StrategyEngine:
                     continue
                 industry_counts[ind] = industry_counts.get(ind, 0) + 1
 
-            filtered.append(score)
+            filtered.append(code)
             if len(filtered) >= top_n:
                 break
 

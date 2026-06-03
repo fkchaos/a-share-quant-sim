@@ -66,6 +66,7 @@
 - 因子权重唯一权威来源是 `core/config.py` 的 `DEFAULT_FACTOR_WEIGHTS`
 - **策略评分统一入口**：`StrategyEngine`（factor/ml/hybrid 三种模式）
 - **ML 训练/推理分离**：`train_and_save()` 离线训练 → `MLPredictor` 在线推理
+- **上午信号 = 策略决策**（风控+调仓 → plan）；**下午执行 = 纯执行**（按 plan 买卖）
 
 ---
 
@@ -250,16 +251,47 @@ class StrategyEngine:
 ### 三阶段 Pipeline
 
 ```
-intraday_signal (11:35):
-  ① update_data → ② load_account → ③ stop_loss/tp/decay → ④ data_quality
-  → ⑤ StrategyEngine.score_single() + filter_stocks() → 写 trade_plan.json
+intraday_signal (11:35) — 策略决策，不修改 state：
+  ① update_data → ② load_account → ③ data_quality
+  → ④ 风控：止损/止盈/decay（修改 state，写入 risk_sell）
+  → ⑤ 调仓：StrategyEngine.score_single() + filter_stocks()
+  → ⑥ 生成 plan（sell_plan/hold_plan/buy_plan），保存 state
 
-intraday_execute (13:00):
-  ⑥ load trade_plan → 开盘价买入/卖出 → 更新 account
+intraday_execute (13:00) — 纯执行，不做策略判断：
+  ⑦ load trade_plan + 开盘价
+  ⑧ 执行 plan：sell → hold(add) → buy
+  ⑨ 保存 state + 报告
 
-day_end (15:30):
-  ⑦ save state → ⑧ report → ⑨ tomorrow plan
+day_end (15:30) — 收盘报告：
+  ⑩ 读取 account.json + exec_report.json → 输出报告
 ```
+
+### Plan 结构
+
+```json
+{
+  "date": "2026-06-03_AM",
+  "trade_count": 21,
+  "no_rebalance": false,
+  "total_nav": 197884.0,
+  "sell_plan": [
+    {"code": "600183", "name": "生益科技", "shares": "all", "price": 137.80, "reason": "止损"},
+    {"code": "002938", "name": "鹏鼎控股", "shares": 100, "price": 112.00, "reason": "非目标持仓"}
+  ],
+  "hold_plan": [
+    {"code": "600522", "name": "中天科技", "current_shares": 300, "price": 43.80,
+     "current_weight": 0.067, "target_weight": 0.083, "action": "add", "add_amount": 3200}
+  ],
+  "buy_plan": [
+    {"code": "600362", "name": "江西铜业", "reference_price": 48.50, "target_amount": 16584}
+  ]
+}
+```
+
+- `sell_plan`：按顺序执行（风控优先 → 调仓卖出），`shares="all"` 表示清仓
+- `hold_plan`：`action=hold` 不动，`action=add` 补仓到目标权重
+- `buy_plan`：新买入，按 `target_amount` 分配资金
+- 风控操作（止损/止盈/decay）合并到 `sell_plan`，用 `reason` 区分
 
 ### 辅助模块
 
@@ -340,7 +372,45 @@ tests/test_golden.py — 12 个快速测试（< 1s）
   TestAccountLogic (4):      分级止盈、持有期decay、等权分配
   TestGoldenBaseline (1, slow): 端到端回测基准值验证
 
-运行: python -m pytest tests/test_golden.py -v -k "not slow"
+tests/test_sim_trading.py — 39 个模拟盘执行测试（< 1s）
+  TestBasicTrading (5):       买入/卖出/partial_sell/碎股/交易日志
+  TestStopLoss (3):           止损触发/不触发/全仓卖出
+  TestTakeProfit (4):         tier1/tier2/不触发/tp_taken防重复
+  TestHoldingDecay (2):       超期衰减/期内不衰减
+  TestPlanGeneration (5):     调仓日/非调仓日/sell/buy/hold分配
+  TestPlanExecution (5):      执行顺序/跳过不存在持仓/零价格
+  TestPlanSafety (4):         日期校验/空plan/清除防重复
+  TestEndToEndEnd (3):        非调仓日/调仓日/止损端到端
+  TestSimBacktestConsistency (5): 净值计算/plan结构/一致性
+
+运行: python -m pytest tests/ -v -k "not slow"
+```
+
+---
+
+## 十、Cron 报告格式
+
+### 上午信号报告
+```
+一、当前持仓（执行前）
+二、操作计划（卖出/补仓/新买入/持有不动）
+三、汇总（现金占比/预期持仓数/调仓日/ML状态）
+```
+
+### 下午执行报告
+```
+一、执行明细（卖出/买入/补仓，含状态）
+二、执行后持仓
+三、净值变化
+四、异常/注意事项
+```
+
+### 收盘报告
+```
+一、今日操作汇总
+二、当前持仓
+三、净值
+四、指数概况
 ```
 
 ---

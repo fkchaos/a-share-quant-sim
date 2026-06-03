@@ -1,13 +1,15 @@
 """
-备选股票池 — 中证500 + 沪深300
-================================
-当主选股池（全A股多层过滤）因条件过严导致数量不足时，
-回落到备选池：中证500 + 沪深300 成分股（排除科创板/北交所/ST）
+备选股票池 — 中证800（沪深300 + 中证500 并集）
+================================================
+直接用中证800成分股，减去科创板，避免手动合并去重。
+
+数量: 730只（800 - 70科创板 - 0ST）
+更新频率: 成分股列表缓存7天
 
 用法:
   from scripts.fallback_pool import build_fallback_pool
   
-  pool = build_fallback_pool()  # ~500-600只
+  pool = build_fallback_pool()  # 730只
 """
 
 import os, sys, time
@@ -65,27 +67,19 @@ def build_fallback_pool(
     exclude_kcb: bool = True,
     exclude_bse: bool = True,
     exclude_st: bool = True,
-    min_market_cap: float = 0,  # 备选池不过滤市值
+    min_market_cap: float = 0,
 ) -> pd.DataFrame:
     """
-    构建备选股票池：中证500 + 沪深300
-    自动去重（中证500不含沪深300成分股，但以防万一）
+    构建备选股票池：中证800（沪深300 + 中证500 并集）
+    直接用中证800成分股，避免手动合并去重。
     """
     print("=" * 60)
-    print("备选股票池构建 (中证500 + 沪深300)")
+    print("备选股票池构建 (中证800)")
     print("=" * 60)
     
-    # 获取成分股
-    df_hs300 = fetch_index_constituents('000300')
-    df_zz500 = fetch_index_constituents('000905')
-    
-    print(f"沪深300: {len(df_hs300)} 只")
-    print(f"中证500: {len(df_zz500)} 只")
-    
-    # 合并去重
-    df = pd.concat([df_hs300, df_zz500], ignore_index=True)
-    df = df.drop_duplicates(subset=['code'])
-    print(f"合并去重: {len(df)} 只")
+    # 获取中证800成分股
+    df = fetch_index_constituents('000906')
+    print(f"中证800: {len(df)} 只")
     
     # 板块分类
     df['board'] = df['code'].apply(classify_board)

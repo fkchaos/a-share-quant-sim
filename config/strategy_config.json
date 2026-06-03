@@ -1,0 +1,6 @@
+{
+  "mode": "factor",
+  "hybrid_alpha": 0.8,
+  "model_dir": "/root/data/ml_models",
+  "profile": "v6b_8f_pos_ic"
+}

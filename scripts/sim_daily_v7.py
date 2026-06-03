@@ -61,6 +61,31 @@ MAX_INDUSTRY_WEIGHT = _strategy_profile.max_industry_weight
 MAX_DAILY_TURNOVER = _strategy_profile.max_daily_turnover
 MAX_SINGLE_WEIGHT = _strategy_profile.max_position
 
+# ── Strategy Engine ──────────────────────────────────────────────
+from core.strategy import StrategyEngine
+
+# 策略配置（与 _PROFILE 保持同步）
+_strategy_config_path = os.path.join(DATA_DIR, "strategy_config.json")
+if os.path.exists(_strategy_config_path):
+    with open(_strategy_config_path) as _f:
+        _sc = json.load(_f)
+    _engine_mode = _sc.get("mode", "factor")  # factor / ml / hybrid
+    _engine_hybrid_alpha = _sc.get("hybrid_alpha", 0.8)
+    _engine_model_dir = _sc.get("model_dir", "/root/data/ml_models")
+else:
+    _engine_mode = "factor"
+    _engine_hybrid_alpha = 0.8
+    _engine_model_dir = "/root/data/ml_models"
+
+_strategy_engine = StrategyEngine(
+    profile=_PROFILE,
+    mode=_engine_mode,
+    hybrid_alpha=_engine_hybrid_alpha,
+    model_dir=_engine_model_dir,
+)
+
+logger.info(f"StrategyEngine 初始化: profile={_PROFILE} mode={_engine_mode}")
+
 # Trading costs
 SLIPPAGE_RATE = core_config.costs.slippage_rate
 COMMISSION_RATE = core_config.costs.commission_rate
@@ -383,7 +408,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
 
     logger.info("🔄 调仓日 — 生成操作计划")
 
-    # 生成评分
+    # 生成因子
     all_factors = {}
     for f in files:
         code = f.replace(".csv", "")
@@ -391,22 +416,11 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         if len(df) > 120:
             all_factors[code] = calc_factors_single(df)
 
-    # ── 小市值择时：动态调整 small_cap 权重 ──
-    # 简化版：用市值与近期收益的相关性判断小市值风格是否有效
+    # ── 评分（通过 Strategy Engine）──
+    # 小市值择时：构造 dynamic_weights
     _dynamic_weights = None
-    if 'small_cap' in _strategy_profile.factor_weights:
+    if 'small_cap' in _strategy_profile.factor_weights and _engine_mode == "factor":
         _small_cap_base_w = _strategy_profile.factor_weights['small_cap']
-        # 计算最近60天小市值因子与收益的截面IC
-        _ic_window = 60
-        _ic_vals = []
-        for _code, _f in all_factors.items():
-            if 'small_cap' in _f and not np.isnan(_f['small_cap']):
-                # 用 price_data 中的近期收益近似
-                if _code in price_data.index:
-                    _p_now = price_data.get(_code, np.nan)
-                    # 简化：跳过，用因子值本身的相关性
-                    pass
-        # 择时信号：small_cap 因子在全市场中的分位数分布
         _small_cap_vals = {c: f.get('small_cap', np.nan)
                            for c, f in all_factors.items()
                            if not np.isnan(f.get('small_cap', np.nan))}
@@ -414,46 +428,35 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             _sc_arr = np.array(list(_small_cap_vals.values()))
             _sc_mean = np.mean(_sc_arr)
             _sc_std = np.std(_sc_arr) + 1e-10
-            # 因子离散度：标准差越大 → 小市值分化越明显 → 小市值因子越有效
             _dispersion = _sc_std / (np.abs(_sc_mean) + 1e-10)
-            # 映射到权重调整系数：0.5 ~ 1.5
             _adj = np.clip(_dispersion / 2.0, 0.5, 1.5)
             _timed_w = _small_cap_base_w * _adj
             _dynamic_weights = {
                 'small_cap': lambda base_w, factors, tw=_timed_w: tw
             }
-            logger.debug(f"小市值择时：dispersion={_dispersion:.3f} weight_adj={_adj:.2f} base={_small_cap_base_w:.3f} → timed={_timed_w:.3f}")
+            logger.info(f"小市值择时：dispersion={_dispersion:.3f} adj={_adj:.2f} weight={_timed_w:.3f}")
 
-    scores = score_all_stocks(all_factors, dynamic_weights=_dynamic_weights)
+    # 用 engine 评分（factor 模式传 dynamic_weights，ml/hybrid 模式忽略）
+    if _engine_mode == "factor":
+        scores = _strategy_engine.score_single(all_factors)
+    else:
+        # ml / hybrid 模式：engine 内部处理，dynamic_weights 不传（ML 不需要）
+        scores = _strategy_engine.score_single(all_factors)
 
-    # ── 股票范围过滤：板块 + 流动性 + 行业分散 ──
-    _market_filter = core_config.market
+    # ── 选股过滤（通过 Strategy Engine）──
     current_pv_signal = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
-    _min_price_for_100shares = current_pv_signal * MAX_SINGLE_WEIGHT / 100
-    _ind_max_count = int(np.ceil(MAX_INDUSTRY_WEIGHT * TOP_N))
-    _filtered = []
-    _industry_counts = {}
-    for code, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
-        if _market_filter.include_prefixes and not any(code.startswith(p) for p in _market_filter.include_prefixes):
-            continue
-        if _market_filter.exclude_prefixes and any(code.startswith(p) for p in _market_filter.exclude_prefixes):
-            continue
-        _p = price_data.get(code, 0)
-        if pd.isna(_p) or _p <= 0 or _p > _min_price_for_100shares:
-            continue
-        _ind = get_industry(code, names.get(code, ""))
-        if _industry_counts.get(_ind, 0) >= _ind_max_count:
-            continue
-        _filtered.append(code)
-        _industry_counts[_ind] = _industry_counts.get(_ind, 0) + 1
-        if len(_filtered) >= TOP_N:
-            break
+    top_stocks, filtered_scores = _strategy_engine.filter_stocks(
+        scores=scores,
+        price_data=price_data,
+        portfolio_value=current_pv_signal,
+        current_holdings=state.holdings,
+        stock_names_map=names,
+        get_industry_fn=get_industry,
+    )
 
-    logger.info(f"选股过滤: {len(scores)} → {len(_filtered)} 只 "
-                f"(排除板块不符 + 单价>{_min_price_for_100shares:.0f}元 + 行业分散≤{_ind_max_count}只/行业)")
-    top_stocks = _filtered
+    logger.info(f"选股过滤: {len(scores)} → {len(top_stocks)} 只 "
+                f"(排除板块不符 + 流动性 + 行业分散)")
 
-    logger.info(f"目标持仓 (Top {TOP_N}):")
     for i, code in enumerate(top_stocks):
         name = names.get(code, '—')
         s = scores.get(code, 0)
@@ -994,9 +997,9 @@ def run_day_end():
             if len(df) > 120:
                 all_factors[code] = calc_factors_single(df)
 
-        # ── 小市值择时：动态调整 small_cap 权重 ──
+        # ── 评分 + 选股过滤（通过 Strategy Engine）──
         _dynamic_weights = None
-        if 'small_cap' in _strategy_profile.factor_weights:
+        if 'small_cap' in _strategy_profile.factor_weights and _engine_mode == "factor":
             _small_cap_base_w = _strategy_profile.factor_weights['small_cap']
             _small_cap_vals = {c: f.get('small_cap', np.nan)
                                for c, f in all_factors.items()
@@ -1013,37 +1016,21 @@ def run_day_end():
                 }
                 logger.debug(f"小市值择时：dispersion={_dispersion:.3f} adj={_adj:.2f} {_small_cap_base_w:.3f}→{_timed_w:.3f}")
 
-        scores = score_all_stocks(all_factors, dynamic_weights=_dynamic_weights)
+        scores = _strategy_engine.score_single(all_factors)
 
-        # ── 股票范围过滤：板块 + 流动性 + 行业分散 ──
-        _market_filter = core_config.market
         current_pv_check = portfolio_value(state, latest_date, price_data)
-        _min_price_for_100shares = current_pv_check * MAX_SINGLE_WEIGHT / 100
-        _ind_max_count = int(np.ceil(MAX_INDUSTRY_WEIGHT * TOP_N))
-        _filtered = []
-        _industry_counts = {}
-        for code, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
-            # 板块过滤
-            if _market_filter.include_prefixes and not any(code.startswith(p) for p in _market_filter.include_prefixes):
-                continue
-            if _market_filter.exclude_prefixes and any(code.startswith(p) for p in _market_filter.exclude_prefixes):
-                continue
-            # 流动性过滤
-            _p = price_data.get(code, 0)
-            if pd.isna(_p) or _p <= 0 or _p > _min_price_for_100shares:
-                continue
-            # 行业分散
-            _ind = get_industry(code, names.get(code, ""))
-            if _industry_counts.get(_ind, 0) >= _ind_max_count:
-                continue
-            _filtered.append(code)
-            _industry_counts[_ind] = _industry_counts.get(_ind, 0) + 1
-            if len(_filtered) >= TOP_N:
-                break
+        top_stocks, _ = _strategy_engine.filter_stocks(
+            scores=scores,
+            price_data=price_data,
+            portfolio_value=current_pv_check,
+            current_holdings=state.holdings,
+            stock_names_map=names,
+            get_industry_fn=get_industry,
+        )
 
-        logger.info(f"选股过滤: {len(scores)} → {len(_filtered)} 只 "
-                    f"(排除板块不符 + 单价>{_min_price_for_100shares:.0f}元 + 行业分散≤{_ind_max_count}只/行业)")
-        top_stocks = _filtered
+        logger.info(f"选股过滤: {len(scores)} → {len(top_stocks)} 只 "
+                    f"(排除板块不符 + 流动性 + 行业分散)")
+        top_stocks = top_stocks  # already a list
 
         logger.info(f"目标持仓 (Top {TOP_N}):")
         for i, code in enumerate(top_stocks):

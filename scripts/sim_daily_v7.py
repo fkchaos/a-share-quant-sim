@@ -574,7 +574,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         for item in sell_plan:
             pnl = (item['price'] - item['cost_price']) / item['cost_price']
             mv = item['shares'] * item['price']
-            logger.info(f"  ❌ {item['code']} {item['name']:<8} {item['shares']:>6}股  "
+            logger.info(f"  📉 {item['code']} {item['name']:<8} {item['shares']:>6}股  "
                         f"市值¥{mv:>10,.0f}  盈亏{pnl:>7.2%}  (13:00按开盘价)")
 
     if hold_plan:
@@ -651,7 +651,7 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
 
             old_shares = state.holdings[code]['shares']
             state = sell(state, code, p, date, 'SELL')
-            logger.info(f"  ❌ {code} {item['name']} 卖出 {old_shares}股 @ {p:.2f}")
+            logger.info(f"  📉 {code} {item['name']} 卖出 {old_shares}股 @ {p:.2f}")
             exec_report['results'].append({'code': code, 'action': 'sell', 'status': 'done', 'shares': old_shares, 'price': float(p)})
         else:
             logger.info(f"  ⏭️ {code} 不在持仓中, 跳过")

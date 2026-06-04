@@ -162,3 +162,108 @@ def factor_correlation(factors: dict, date=None):
 
     redundant.sort(key=lambda x: abs(x[2]), reverse=True)
     return corr, redundant
+
+
+# ── Ensemble 多组选股 ────────────────────────────────────────────
+
+def ensemble_union_score(
+    factors: dict,
+    ensemble_groups: dict,
+    group_top_n: int = 4,
+) -> pd.DataFrame:
+    """多组 Ensemble 评分（面板模式，回测用）。
+
+    每组独立评分选 top_n，最终 score = 选中该股票的组数 (0 ~ len(groups))。
+    被多个组同时选中的股票得分更高（自然加权）。
+
+    factors: {factor_name: DataFrame (dates × stocks)}
+    ensemble_groups: {group_name: {factor_name: weight}}
+    group_top_n: 每组选几只
+
+    返回: DataFrame (dates × stocks)
+    """
+    if not ensemble_groups:
+        first_key = list(factors.keys())[0]
+        return pd.DataFrame(0.0, index=factors[first_key].index, columns=factors[first_key].columns)
+
+    first_key = list(factors.keys())[0]
+    template = factors[first_key]
+    dates = template.index
+    stocks = template.columns
+
+    selection_count = pd.DataFrame(0.0, index=dates, columns=stocks)
+
+    for group_name, weights in ensemble_groups.items():
+        group_factors = {k: v for k, v in factors.items() if k in weights}
+        if not group_factors:
+            continue
+        group_score = composite_score(group_factors, weights)
+
+        for date in dates:
+            if date not in group_score.index:
+                continue
+            day_scores = group_score.loc[date].dropna()
+            if len(day_scores) < group_top_n:
+                continue
+            for s in day_scores.nlargest(group_top_n).index:
+                if s in selection_count.columns:
+                    selection_count.loc[date, s] += 1.0
+
+    return selection_count
+
+
+def ensemble_union_score_single(
+    all_factors: dict,
+    ensemble_groups: dict,
+    group_top_n: int = 4,
+) -> dict:
+    """多组 Ensemble 评分（单股模式，模拟盘用）。
+
+    all_factors: {code: {factor_name: float}}
+    ensemble_groups: {group_name: {factor_name: weight}}
+    group_top_n: 每组选几只
+
+    返回: {code: score}，score = 选中该股票的组数 (0 ~ len(groups))
+    """
+    if not ensemble_groups:
+        return {code: 0.0 for code in all_factors}
+
+    selection_count = {code: 0.0 for code in all_factors}
+
+    for group_name, weights in ensemble_groups.items():
+        # 收集该组所有股票的因子值
+        factor_names = [f for f in weights if any(f in fdict for fdict in all_factors.values())]
+        if not factor_names:
+            continue
+
+        # 截面标准化
+        std_values = {}
+        for fname in factor_names:
+            vals = {code: fdict.get(fname, np.nan) for code, fdict in all_factors.items()}
+            arr = np.array(list(vals.values()))
+            valid_mask = ~np.isnan(arr) & ~np.isinf(arr)
+            if valid_mask.sum() < 10:
+                std_values[fname] = {code: 0.0 for code in all_factors}
+                continue
+            valid_vals = arr[valid_mask]
+            mean = np.mean(valid_vals)
+            std = np.std(valid_vals)
+            if std == 0:
+                std_values[fname] = {code: 0.0 for code in all_factors}
+                continue
+            std_values[fname] = {code: (v - mean) / std if not np.isnan(v) else 0.0
+                                 for code, v in vals.items()}
+
+        # 加权求和
+        group_scores = {}
+        for code in all_factors:
+            score = sum(std_values[fname].get(code, 0.0) * weights.get(fname, 0.0)
+                        for fname in factor_names)
+            group_scores[code] = score
+
+        # 选 top_n
+        sorted_stocks = sorted(group_scores.items(), key=lambda x: x[1], reverse=True)
+        for code, _ in sorted_stocks[:group_top_n]:
+            selection_count[code] += 1.0
+
+    return selection_count

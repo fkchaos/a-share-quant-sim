@@ -3,30 +3,32 @@ Strategy Engine — 统一选股评分入口
 ====================================
 
 所有选股评分的统一入口，支持：
-  1. 纯因子加权（传统方式，score_all_stocks）
+  1. 纯因子加权（传统方式，score_all_stocks / composite_score）
   2. ML 预测（MLPredictor）
   3. Hybrid：α × ML + (1-α) × 因子加权
+  4. Ensemble 多组选股（ensemble_union_score）
 
 设计原则：
   - 策略名称（profile）即配置，不硬编码
   - 所有策略共用同一套选股过滤（板块/流动性/行业分散）
-  - 回测（ml_rolling_train.py）和模拟盘（sim_daily_v7.py）用同一入口
-  - ML 训练/推理分离（ml_predictor.py 负责）
+  - 回测和模拟盘用同一入口
+  - 评分逻辑全部在 core/scoring.py 里，本模块只做调度
 
 评分模式：
-  - mode = "factor"   → 纯因子加权（score_all_stocks）
-  - mode = "ml"       → 纯 ML 推理（MLPredictor）
-  - mode = "hybrid"   → ML + 因子加权混合
+  - mode = "factor"     → 纯因子加权
+  - mode = "ml"         → 纯 ML 推理
+  - mode = "hybrid"     → ML + 因子加权混合
+  - mode = "ensemble"   → 多组 Ensemble 选股
 
 Usage (回测):
     from core.strategy import StrategyEngine
-    engine = StrategyEngine(profile="v6b_8f_pos_ic", mode="hybrid", hybrid_alpha=0.8)
-    scores = engine.score(all_factors_panel)  # DataFrame (dates × stocks)
+    engine = StrategyEngine(profile="v11b_zz800_union", mode="ensemble")
+    scores = engine.score_panel(factors_panel, close_panel)
 
 Usage (模拟盘):
     from core.strategy import StrategyEngine
-    engine = StrategyEngine(profile="v6b_8f_pos_ic", mode="hybrid")
-    scores = engine.score_single(all_factors_dict)  # {code: score}
+    engine = StrategyEngine(profile="v11b_zz800_union", mode="ensemble")
+    scores = engine.score_single(all_factors_dict)
 """
 
 import os
@@ -35,7 +37,10 @@ import pandas as pd
 from typing import Dict, Optional, Tuple, List
 
 from core.config import config, STRATEGY_PROFILES
-from core.scoring import score_all_stocks, composite_score
+from core.scoring import (
+    score_all_stocks, composite_score,
+    ensemble_union_score, ensemble_union_score_single,
+)
 from core.ml_predictor import MLPredictor
 
 
@@ -48,7 +53,7 @@ class StrategyEngine:
     profile : str
         策略 profile 名（STRATEGY_PROFILES 中的 key）
     mode : str
-        'factor' | 'ml' | 'hybrid'
+        'factor' | 'ml' | 'hybrid' | 'ensemble'
     hybrid_alpha : float
         ML 因子混合比（仅 hybrid 模式），0.8 = 80% ML + 20% 因子
     model_dir : str
@@ -84,7 +89,7 @@ class StrategyEngine:
     def score_panel(
         self,
         factors_panel: dict,
-        close_panel: pd.DataFrame,
+        close_panel: pd.DataFrame = None,
     ) -> pd.DataFrame:
         """
         对因子面板做评分（回测用）。
@@ -94,7 +99,7 @@ class StrategyEngine:
         factors_panel : dict
             {factor_name: DataFrame (dates × stocks)}
         close_panel : DataFrame
-            收盘价面板 (dates × stocks)
+            收盘价面板 (dates × stocks)，ensemble 模式需要
 
         Returns
         -------
@@ -102,17 +107,17 @@ class StrategyEngine:
         """
         if self.mode == "factor":
             return self._score_panel_factor(factors_panel)
+        elif self.mode == "ensemble":
+            return self._score_panel_ensemble(factors_panel)
         elif self.mode == "ml":
             raise NotImplementedError(
                 "ML panel 模式用 ml_rolling_train.py 的 run_ml_pipeline()，"
-                "本引擎仅支持 panel 模式的纯因子评分"
+                "本引擎仅支持 panel 模式的纯因子/ensemble 评分"
             )
         elif self.mode == "hybrid":
-            # hybrid panel：先算 ML panel，再混合
-            # 注意：这里需要 Walk-Forward 训练，不在此实现
             raise NotImplementedError(
                 "Hybrid panel 模式用 ml_rolling_train.py --hybrid-alpha，"
-                "本引擎仅支持 panel 模式的纯因子评分"
+                "本引擎仅支持 panel 模式的纯因子/ensemble 评分"
             )
         else:
             raise ValueError(f"未知模式: {self.mode}")
@@ -124,6 +129,16 @@ class StrategyEngine:
             filtered = {k: v for k, v in factors_panel.items() if k in weights}
             return composite_score(filtered, weights)
         return composite_score(factors_panel)
+
+    def _score_panel_ensemble(self, factors_panel: dict) -> pd.DataFrame:
+        """Ensemble 多组选股评分（面板模式）"""
+        groups = self.prof.ensemble_groups
+        if not groups:
+            raise ValueError(
+                f"策略 {self.profile_name} 的 mode=ensemble 但 ensemble_groups 未配置"
+            )
+        group_top_n = self.prof.ensemble_group_top_n
+        return ensemble_union_score(factors_panel, groups, group_top_n)
 
     # ── Single-Stock 模式（模拟盘用）──────────────────────────
 
@@ -146,6 +161,8 @@ class StrategyEngine:
         """
         if self.mode == "factor":
             return self._score_single_factor(all_factors)
+        elif self.mode == "ensemble":
+            return self._score_single_ensemble(all_factors)
         elif self.mode == "ml":
             return self._score_single_ml(all_factors)
         elif self.mode == "hybrid":
@@ -159,6 +176,18 @@ class StrategyEngine:
         """纯因子加权（单股模式，与 score_all_stocks 对齐）"""
         weights = dict(self.prof.factor_weights) if self.prof.factor_weights else {}
         return score_all_stocks(all_factors, weights=weights, dynamic_weights=self.dynamic_weights)
+
+    def _score_single_ensemble(
+        self, all_factors: Dict[str, Dict[str, float]]
+    ) -> Dict[str, float]:
+        """Ensemble 多组选股评分（单股模式）"""
+        groups = self.prof.ensemble_groups
+        if not groups:
+            raise ValueError(
+                f"策略 {self.profile_name} 的 mode=ensemble 但 ensemble_groups 未配置"
+            )
+        group_top_n = self.prof.ensemble_group_top_n
+        return ensemble_union_score_single(all_factors, groups, group_top_n)
 
     def _score_single_ml(
         self, all_factors: Dict[str, Dict[str, float]]

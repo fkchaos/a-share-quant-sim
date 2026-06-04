@@ -111,7 +111,46 @@
 ### 结论
 - **v10c 不能视为最优**：WF 正收益 fold 最高 50%（v10e），未达 60% 标准
 - **v6b_hlr 保持模拟盘默认**：WF 正收益 fold 69%，更稳定
-- **下一步**：需从根本上改变选股逻辑（非简单优化因子权重/持仓数）
+- **下一步**：从根本上改变选股逻辑 → v11b 多组 Ensemble 策略
+
+## v11b: 多组 Ensemble 策略（2026-06-04~05）
+
+### 核心思路
+**根本性改变**：不再用单一评分选 top N，而是 3 个因子组独立选股，并集构建组合。
+
+| 因子组 | 因子 | 逻辑 |
+|--------|------|------|
+| Momentum | mom_20, mom_10, rsi_14, high_low_range | 选强势股 |
+| Volatility | vol_60, vol_20, vol_10, boll_width_20 | 选高波动股 |
+| Reversal | rev_10, rev_5, rsi_6, boll_pos_10 | 选超跌反弹股 |
+
+每组独立评分选 top 5，最终持仓 = 并集（最多 15 只），等权。
+
+### 参数扫描（WF 252d/63d/63d, 16 folds）
+| GROUP_TOP_N | WF 年化 | WF Sharpe | 正收益 fold |
+|-------------|---------|-----------|------------|
+| 3 | 67.5% | 1.73 | 10/16 (63%) |
+| 4 | 60.4% | 1.61 | 10/16 (63%) |
+| **5** | **63.7%** | **1.70** | **11/16 (69%)** |
+
+### v11b vs v10c WF 对比
+| 指标 | v11b (top5) | v10c | 差异 |
+|------|------------|------|------|
+| WF 年化 | **63.7%** | 32.9% | +30.8pp |
+| WF Sharpe | **1.70** | 0.61 | +1.09 |
+| 正收益 fold | **11/16 (69%)** | 7/16 (44%) | +4 folds |
+
+### 架构改进
+- 评分逻辑统一到 `core/scoring.py`（panel + single 两种模式）
+- `core/strategy.py` 的 `StrategyEngine` 支持 factor/ensemble/ml/hybrid 四种模式
+- `run_backtest.py` 统一调用 `StrategyEngine.score_panel()` 构建评分
+- 模拟盘统一调用 `StrategyEngine.score_single()` 选股
+- 策略配置全部在 `core/config.py` 的 `STRATEGY_PROFILES` 里
+
+### 结论
+- **v11b 通过 WF 验证**：正收益 fold 69% ≥ 60%，Sharpe 1.70 >> 0.5
+- **v11b 为当前最优策略**：WF 年化 63.7%，远超 v10c 的 32.9%
+- **下一步**：考虑切换模拟盘到 v11b
 
 ## 已舍弃方向
 

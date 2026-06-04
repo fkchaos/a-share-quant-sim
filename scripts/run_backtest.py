@@ -57,10 +57,11 @@ import numpy as np
 import pandas as pd
 
 # ── Core engine (single source of truth) ────────────────────────────
-from core.config import config as core_config
+from core.config import config as core_config, STRATEGY_PROFILES
 from core.factors import calc_factors_panel
 from core.scoring import composite_score, composite_score_equal, standardize
 from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
+from core.strategy import StrategyEngine
 
 # ============================================================
 # 配置
@@ -487,6 +488,7 @@ def walk_forward(close_panel, train_days=252, test_days=63,
                  step_days=63, top_n=12, rebalance_freq=20,
                  stop_loss=0.20, score=None, label='wf',
                  factor_weights=None,
+                 ensemble_groups=None, ensemble_group_top_n=4,
                  volume_panel=None, amount_panel=None,
                  high_panel=None, low_panel=None,
                  **kwargs):
@@ -505,9 +507,13 @@ def walk_forward(close_panel, train_days=252, test_days=63,
     fold_navs = []
     fold = 0
 
-    # 构建评分函数
-    from core.scoring import composite_score
-    if factor_weights is not None:
+    # 构建评分函数 (supports factor_weights and ensemble_groups)
+    from core.scoring import composite_score, ensemble_union_score
+    if ensemble_groups is not None:
+        _eg = ensemble_groups
+        _egn = ensemble_group_top_n
+        score_fn = lambda factors, w=None: ensemble_union_score(factors, _eg, _egn)
+    elif factor_weights is not None:
         def _make_score(factors, weights=factor_weights):
             return composite_score(
                 {k: v for k, v in factors.items() if k in weights},
@@ -871,27 +877,28 @@ def main():
             kw['open_panel'] = open_panel
         return {'label': profile.label, 'score': score, 'kwargs': kw}
 
+    # Score building: unified via StrategyEngine (supports factor + ensemble)
+    def _build_score_for_profile(profile):
+        if profile.ensemble_groups:
+            engine = StrategyEngine(profile=profile.label, mode="ensemble")
+            return engine.score_panel(factors)
+        elif profile.factor_weights:
+            engine = StrategyEngine(profile=profile.label, mode="factor")
+            return engine.score_panel(factors)
+        else:
+            return score_equal
+
     if run_all:
-        # 跑所有已注册策略
         for name, profile in sorted(STRATEGY_PROFILES.items()):
-            score = score_equal if profile.factor_weights is None else composite_score(
-                {k: v for k, v in factors.items() if k in profile.factor_weights},
-                profile.factor_weights
-            )
+            score = _build_score_for_profile(profile)
             configs.append(_build_cfg(profile, score))
     else:
         for name in requested:
             if name not in STRATEGY_PROFILES:
-                print(f"  ⚠️ 未知策略 '{name}'，跳过。可用：{list(STRATEGY_PROFILES.keys())}")
+                print(f"  Unknown strategy '{name}', skipping")
                 continue
             profile = STRATEGY_PROFILES[name]
-            if profile.factor_weights:
-                score = composite_score(
-                    {k: v for k, v in factors.items() if k in profile.factor_weights},
-                    profile.factor_weights
-                )
-            else:
-                score = score_equal
+            score = _build_score_for_profile(profile)
             configs.append(_build_cfg(profile, score))
 
     if not configs:
@@ -933,11 +940,14 @@ def main():
         for cfg in configs:
             profile = STRATEGY_PROFILES.get(cfg['label'])
             fw = profile.factor_weights if profile else None
+            eg = profile.ensemble_groups if profile else None
+            egn = profile.ensemble_group_top_n if profile else 4
             print(f"\n  --- WF: {cfg['label']} ---")
             wf_results, wf_nav = walk_forward(
                 close_panel,
                 top_n=top_n, rebalance_freq=rebal_freq, stop_loss=sl,
                 factor_weights=fw, label=cfg['label'],
+                ensemble_groups=eg, ensemble_group_top_n=egn,
                 volume_panel=volume_panel, amount_panel=amount_panel,
                 high_panel=high_panel, low_panel=low_panel,
             )

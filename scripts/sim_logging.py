@@ -1,5 +1,5 @@
 """
-sim_daily_v6 — 日志配置
+sim_daily_v7 — 日志配置
 """
 import logging
 import os

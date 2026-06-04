@@ -2,7 +2,7 @@
 
 > 面向开发者的实现逻辑与框架说明
 >
-> 最后更新：2026-06-04（选股池扩大至中证800 + 缺口填充/IC分析脚本）
+> 最后更新：2026-06-05（v11b Ensemble 策略 + 统一评分引擎重构）
 
 ## 一、整体架构：共享引擎 + 策略 Profile 模式
 
@@ -12,12 +12,13 @@
   │  config.py                                                      │
   │    DEFAULT_FACTOR_WEIGHTS (40因子权重, sum=1.0)                  │
   │    StrategyConfig dataclass (所有策略参数)                        │
-  │    STRATEGY_PROFILES dict (预定义策略: v4/v5/v6/v7/v8/v10, 当前最优 v10c)          │
+  │    STRATEGY_PROFILES dict (预定义策略: v4~v11b, 当前最优 v11b (Ensemble))          │
   │    TradingCosts + RiskLimits dataclass                          │
   │  factors.py    calc_factors_panel() / calc_factors_single()     │
   │                40 技术因子计算                                    │
   │  scoring.py    composite_score(panel) / score_all_stocks(live)  │
-  │                截面 Z-Score + 加权评分                            │
+  │                + ensemble_union_score(panel/live)               │
+  │                截面 Z-Score + 加权评分 + 多组 Ensemble           │
   │  account.py    PortfolioState + buy/sell/check_stop_loss        │
   │                partial_sell / check_take_profit                  │
   │                apply_holding_decay / allocate_weights           │
@@ -29,7 +30,7 @@
   │  ml_predictor.py  train_and_save() + MLPredictor                │
   │                离线训练 + 在线推理 (模拟盘用)                      │
   │  strategy.py   StrategyEngine 统一策略入口                       │
-  │                factor / ml / hybrid 三种模式                     │
+  │                factor / ensemble / ml / hybrid 四种模式          │
   └──────────┬──────────────────────────────┬──────────────────────┘
              │                              │
              ▼                              ▼
@@ -68,7 +69,7 @@
 - `core/` 是纯数据结构和函数 — 无 I/O、无副作用
 - `STRATEGY_PROFILES` 是策略参数唯一权威来源（回测+模拟盘共用）
 - 因子权重唯一权威来源是 `core/config.py` 的 `DEFAULT_FACTOR_WEIGHTS`
-- **策略评分统一入口**：`StrategyEngine`（factor/ml/hybrid 三种模式）
+- **策略评分统一入口**：`StrategyEngine`（factor/ensemble/ml/hybrid 四种模式）
 - **ML 训练/推理分离**：`train_and_save()` 离线训练 → `MLPredictor` 在线推理
 - **上午信号 = 策略决策**（风控+调仓 → plan）；**下午执行 = 纯执行**（按 plan 买卖）
 
@@ -96,6 +97,8 @@ class StrategyConfig:
     tp_tiers: list
     use_holding_decay: bool
     factor_weights: dict        # 因子权重（v6b 为8因子等权）
+    ensemble_groups: dict = None  # 多组 Ensemble 配置（v11b）
+    ensemble_group_top_n: int = 4  # 每组选几只
 
 # 预定义策略 Profiles（回测+模拟盘共用）
 STRATEGY_PROFILES = {
@@ -108,6 +111,7 @@ STRATEGY_PROFILES = {
     "v8_all_icir":      PROFILE_V8_ALL_ICIR,
     "v10_small_cap":    PROFILE_V10_SMALL_CAP,
     "v10b_small_mom":   PROFILE_V10B_SMALL_MOM,
+    "v11b_zz800_union": PROFILE_V11B_ZZ800_UNION,  # 3组Ensemble, 当前最优
 }
 ```
 
@@ -163,12 +167,14 @@ def allocate_weights(top_stocks, price_data, method='equal', vol_series=None, ma
 def portfolio_value(state, date, prices) -> float:
 ```
 
-### 2.4 `scoring.py` — 评分合成（因子加权模式）
+### 2.4 `scoring.py` — 评分合成 + Ensemble 多组选股
 
 ```python
 def standardize(df):                                    # 截面 Z-Score
 def composite_score(factors, weights):                  # 加权合成（回测 panel 模式）
 def score_all_stocks(all_factors, weights, dynamic_weights=None):  # 模拟盘单股模式 → {code: score}
+def ensemble_union_score(factors, groups, group_top_n):  # Ensemble 面板模式
+def ensemble_union_score_single(all_factors, groups, group_top_n):  # Ensemble 单股模式
 def factor_correlation(factors):                        # 因子相关性矩阵
 ```
 
@@ -219,11 +225,11 @@ class MLPredictor:
 class StrategyEngine:
     """
     统一选股评分引擎。
-    支持 factor / ml / hybrid 三种模式。
+    支持 factor / ensemble / ml / hybrid 四种模式。
     通过 config/strategy_config.json 配置。
     """
     def __init__(self, profile, mode, hybrid_alpha, model_dir):
-        # mode: "factor" | "ml" | "hybrid"
+        # mode: "factor" | "ensemble" | "ml" | "hybrid"
 
     def score_panel(factors_panel, close_panel) -> DataFrame:
         """面板模式评分（回测用）"""
@@ -232,6 +238,7 @@ class StrategyEngine:
         """单股模式评分（模拟盘用）"""
         # factor → score_all_stocks()
         # ml → MLPredictor.predict()
+        # ensemble → 3组独立选股，并集得分
         # hybrid → α×ML_zscore + (1-α)×factor_zscore
 
     def filter_stocks(scores, price_data, portfolio_value, ...) -> (codes, scores):
@@ -241,10 +248,8 @@ class StrategyEngine:
 **策略配置文件** (`config/strategy_config.json` 或 `$DATA_DIR/strategy_config.json`)：
 ```json
 {
-  "mode": "hybrid",
-  "hybrid_alpha": 0.8,
-  "model_dir": "/root/data/ml_models",
-  "profile": "v6b_8f_pos_ic"
+  "mode": "ensemble",
+  "profile": "v11b_zz800_union"
 }
 ```
 
@@ -326,7 +331,7 @@ run_backtest.py   ──▶ core.account.buy / sell / check_stop_loss / check_ta
 python scripts/ml_rolling_train.py --hybrid-alpha 0.8 --start 2021-01-01
 
 # 纯因子回测
-python scripts/run_backtest.py --strategy v6b_8f_pos_ic --start 2021-01-01
+python scripts/run_backtest.py --strategy v11b_zz800_union --walk-forward
 ```
 
 ### 防错机制
@@ -371,6 +376,7 @@ python scripts/train_ml_model.py
 
 ```
 tests/test_golden.py — 12 个快速测试（< 1s）
+tests/test_ensemble.py — 19 个 Ensemble 评分测试（< 1s）
   TestFactorComputation (5):  40因子完整性、权重和=1.0
   TestScoring (2):           评分分布正确性
   TestAccountLogic (4):      分级止盈、持有期decay、等权分配

@@ -1003,7 +1003,7 @@ def main():
             if args.max_industry_weight and args.max_industry_weight > 0:
                 parts.append(f"ind{int(args.max_industry_weight*100)}%")
             params_str = ",".join(parts)
-            from scripts.log_backtest_result import append_row
+            from scripts.archive.log_backtest_result import append_row
             for m in metrics_list:
                 append_row(
                     label=m['label'],

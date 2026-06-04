@@ -13,7 +13,7 @@ v7 变更（vs v6）：
 复用 v6 所有核心逻辑:
   - 交易逻辑: core.account（PortfolioState + buy/sell/check_stop_loss）
   - 因子计算: core.factors.calc_factors_single
-  - 评分: core.scoring.score_all_stocks
+  - 评分: core.strategy.StrategyEngine (factor/ensemble/ml/hybrid)
   - P0-1/P0-2/P0-3/P1-1/P1-2 约束全部保留
 """
 import sys, os, json, time, logging
@@ -51,7 +51,7 @@ os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 os.makedirs(SIGNAL_DIR, exist_ok=True)
 
 # Strategy params — from STRATEGY_PROFILES
-_PROFILE = "v6b_8f_pos_ic"
+_PROFILE = "v11b_zz800_union"
 _strategy_profile = STRATEGY_PROFILES[_PROFILE]
 
 REBAL_FREQ = _strategy_profile.rebalance_freq
@@ -82,7 +82,7 @@ if os.path.exists(_strategy_config_path):
     _engine_hybrid_alpha = _sc.get("hybrid_alpha", 0.8)
     _engine_model_dir = _sc.get("model_dir", "/root/data/ml_models")
 else:
-    _engine_mode = "factor"
+    _engine_mode = "ensemble"
     _engine_hybrid_alpha = 0.8
     _engine_model_dir = "/root/data/ml_models"
 

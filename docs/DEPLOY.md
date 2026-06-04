@@ -51,13 +51,13 @@ python scripts/update_daily_data.py
 
 ```bash
 # 回测最优策略（close 模式，理想情况）
-python scripts/run_backtest.py --strategy v10c_zz800_balanced
+python scripts/run_backtest.py --strategy v11b_zz800_union
 
 # 回测（open 模式，接近实盘）
-python scripts/run_backtest.py --strategy v10c_zz800_balanced --exec-timing open
+python scripts/run_backtest.py --strategy v11b_zz800_union --exec-timing open
 
 # Walk-Forward 过拟合检测
-python scripts/run_backtest.py --strategy v10c_zz800_balanced --walk-forward
+python scripts/run_backtest.py --strategy v11b_zz800_union --walk-forward
 ```
 
 ## 模拟盘（盘中双阶段）
@@ -129,16 +129,15 @@ data/
 
 ```json
 {
-  "mode": "hybrid",        // factor | ml | hybrid
-  "hybrid_alpha": 0.8,     // ML 权重（仅 hybrid 模式）
-  "model_dir": "/root/data/ml_models",
-  "profile": "v10c_zz800_balanced"
+  "mode": "ensemble",      // factor | ensemble | ml | hybrid
+  "profile": "v11b_zz800_union"
 }
 ```
 
 - **factor**：纯因子加权（传统评分）
-- **ml**：纯 ML 推理（三模型 ensemble）
-- **hybrid**：α×ML + (1-α)×因子（推荐）
+- **ensemble**：多组独立选股并集（v11b 当前使用）
+- **ml**：纯 ML 推理（已弃用，样本外 IC≈0）
+- **hybrid**：α×ML + (1-α)×因子（已弃用）
 
 修改后无需重启，下次 cron 自动生效。
 
@@ -175,7 +174,7 @@ A: 检查 `config.yaml` 的 `costs.initial_capital`。如果已有 `data/portfol
 A: 检查 `crontab -l` 确认任务存在。查看 `data/logs/sim_daily_*.log` 找错误原因。
 
 **Q: 策略参数改了但没生效？**
-A: 策略参数在 `config.yaml` 的 `strategies` 段。确认 `run_backtest.py` 和 `sim_daily_v7.py` 都从 `core.config.STRATEGY_PROFILES` 读取。
+A: 策略参数在 `config.yaml` 的 `strategies` 段。确认 `run_backtest.py` 和 `sim_daily_v7.py` 都通过 `StrategyEngine` 读取 `STRATEGY_PROFILES`。
 
 ## 回测记录规范
 

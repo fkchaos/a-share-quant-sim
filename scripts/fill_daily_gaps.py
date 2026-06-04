@@ -112,7 +112,7 @@ def get_missing_codes(target_codes=None):
         # 备选池
         pool_file = os.path.join(DATA_DIR, "cache", "fallback_pool.csv")
         if not os.path.exists(pool_file):
-            print("❌ 备选池缓存不存在，请运行 fallback_pool.py")
+            print("❌ 备选池缓存不存在，请运行 archive/research/fallback_pool.py")
             return []
         pool = pd.read_csv(pool_file, dtype={'code': str})
         target_codes = set(pool['code'].tolist())

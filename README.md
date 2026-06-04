@@ -140,7 +140,7 @@ a-share-quant-sim/
 │   ├── STRATEGY_REGISTRY.md    # 策略注册表
 │   ├── BACKLOG.md              # 待办事项
 │   └── HISTORY.md              # 已解决问题
-└── config.yaml                 # 可调参数
+└── core/config.py             # 策略参数 + 交易成本（唯一配置源）
 ```
 
 ## 分支策略

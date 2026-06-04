@@ -226,13 +226,13 @@ class TestGoldenBaseline:
         stock_names=None,
     )
 
-    # 这些数字是 2026-06-02 用 fixed commit hash 跑出来的
-    # 数据范围: 2021-01-01 ~ 2026-05-29 (全量，约 285 只)
+    # 这些数字是 2026-06-05 用中证800(674只)跑出来的
+    # 数据范围: 2021-01-01 ~ 2026-06-04 (中证800，674只)
     EXPECTED = {
         "v4_baseline_no_ind_cap": dict(
-            annual_return=0.2482,
-            sharpe_ratio=1.11,
-            max_drawdown=0.2887,
+            annual_return=0.1827,
+            sharpe_ratio=0.73,
+            max_drawdown=0.2666,
             tolerance=0.02,  # ±2pp for return/DD, ±0.05 for sharpe
         ),
     }

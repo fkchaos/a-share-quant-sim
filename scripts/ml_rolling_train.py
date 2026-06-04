@@ -21,7 +21,7 @@ from datetime import datetime
 import numpy as np, pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core.config import config as core_config, STRATEGY_PROFILES
+from core.config import STRATEGY_PROFILES, MarketFilter
 from core.factors import calc_factors_panel
 from core.scoring import composite_score
 from core.data import load_and_build_panel
@@ -117,7 +117,7 @@ def main():
     # 1. 数据
     need_open = (args.exec_timing == "open")
     loaded, codes = load_and_build_panel(args.start, args.end, need_open=need_open,
-                                         need_hl=True, market_filter=core_config.market)
+                                         need_hl=True, market_filter=MarketFilter())
     close_panel = loaded[0]
     open_panel = loaded[3] if len(loaded) > 3 and need_open else None
     high_panel = loaded[4] if len(loaded) > 4 else None

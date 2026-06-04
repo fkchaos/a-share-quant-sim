@@ -31,7 +31,7 @@ import pandas as pd
 from typing import Dict, Optional, Tuple, List
 from datetime import datetime
 
-from core.config import config, STRATEGY_PROFILES
+from core.config import STRATEGY_PROFILES
 from core.ml import (
     FeatureBuilder, RollingTrainer, EnsembleTrainer,
     run_ml_pipeline, ALL_FACTOR_NAMES,

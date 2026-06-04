@@ -8,7 +8,7 @@ All score computation goes through here — no duplication elsewhere.
 import numpy as np
 import pandas as pd
 
-from core.config import config
+from core.config import DEFAULT_FACTOR_WEIGHTS
 
 
 def standardize(df: pd.DataFrame) -> pd.DataFrame:
@@ -30,7 +30,7 @@ def composite_score(
     Returns: DataFrame (dates × stocks), composite score
     """
     if weights is None:
-        weights = config.factor_weights
+        weights = DEFAULT_FACTOR_WEIGHTS
 
     first_key = list(factors.keys())[0]
     template = factors[first_key]
@@ -60,7 +60,7 @@ def score_all_stocks(all_factors: dict, weights: dict = None, dynamic_weights: d
     """Score all stocks for live simulation (single-stock mode).
 
     all_factors: {code: {factor_name: float}}
-    weights:     {factor_name: float} — missing = config.factor_weights
+    weights:     {factor_name: float} — missing = DEFAULT_FACTOR_WEIGHTS
     dynamic_weights: dict of (factor_name: callable) — 动态权重函数，每次选股时调用
                      例：{'small_cap': lambda base_w, factors: adjusted_weight}
 
@@ -69,7 +69,7 @@ def score_all_stocks(all_factors: dict, weights: dict = None, dynamic_weights: d
     This is the single source of truth for live scoring.
     """
     if weights is None:
-        weights = config.factor_weights
+        weights = DEFAULT_FACTOR_WEIGHTS
 
     # 应用 dynamic_weights
     effective_weights = dict(weights)

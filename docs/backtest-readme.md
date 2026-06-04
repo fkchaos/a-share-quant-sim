@@ -17,20 +17,19 @@
 | `--walk-forward` | off | Walk-Forward 过拟合检测 |
 | `--ic-analysis` | off | IC 因子分析 |
 | `--report-markdown` | off | 输出 Markdown 报告 |
-| `--config` | `config.yaml` | 配置文件路径 |
 
 ## 策略列表
 
-10+ 预置策略，参数在 `core/config.py` STRATEGY_PROFILES 中定义。
+10+ 预置策略，参数在 `core/config.py` 的 `STRATEGY_PROFILES` 字典中定义。
 
 **当前重点策略：**
 
 | 策略 | 因子 | 权重方法 | top_n | 行业限制 | 状态 |
 |------|------|---------|-------|---------|------|
-| **v10c_zz800_balanced** ⚡ | 13 | equal | 12 | ≤25% | 当前最优 |
+| **v11b_zz800_union** ⚡ | 3组×4因子 | ensemble | 12 | ≤25% | WF 验证最优 |
 | v6b_hlr | 9 | equal | 12 | ≤25% | 基准 |
-| v10_zz800_top_ir | 13 | equal | 12 | ≤25% | 回撤偏大 |
-| ml_hybrid80 | ML+因子 | hybrid | 12 | ≤25% | 模拟盘 |
+| v6b_8f_pos_ic | 8 | equal | 12 | ≤25% | 基准 |
+| v10c_zz800_balanced | 13 | equal | 12 | ≤25% | 回测优秀 |
 
 完整策略列表+回测结果见 [STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md)。
 
@@ -44,16 +43,16 @@ pip install -r requirements.txt
 python scripts/update_daily_data.py
 
 # Golden Tests (< 1s)
-python -m pytest tests/test_golden.py -v -k "not slow"
+python -m pytest tests/ -v
 
 # 回测最优策略
-python scripts/run_backtest.py --strategy v10c_zz800_balanced
+python scripts/run_backtest.py --strategy v11b_zz800_union
 
 # Walk-Forward 过拟合检测
-python scripts/run_backtest.py --strategy v10c_zz800_balanced --walk-forward
+python scripts/run_backtest.py --strategy v11b_zz800_union --walk-forward
 
 # 开盘执行模式（接近实盘）
-python scripts/run_backtest.py --strategy v10c_zz800_balanced --exec-timing open
+python scripts/run_backtest.py --strategy v11b_zz800_union --exec-timing open
 ```
 
 ## 与模拟盘一致性

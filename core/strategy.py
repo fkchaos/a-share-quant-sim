@@ -36,7 +36,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Optional, Tuple, List
 
-from core.config import config, STRATEGY_PROFILES
+from core.config import STRATEGY_PROFILES, TradingCosts
 from core.scoring import (
     score_all_stocks, composite_score,
     ensemble_union_score, ensemble_union_score_single,
@@ -269,9 +269,9 @@ class StrategyEngine:
         filtered_codes : list — 过滤后的股票代码（分数降序）
         filtered_scores : dict — {code: score}（仅过滤后的）
         """
-        from core.config import config as _cfg
+        from core.config import MarketFilter
 
-        market_filter = _cfg.market
+        market_filter = MarketFilter()
         max_pos = self.prof.max_position
         top_n = self.prof.top_n
         ind_cap = self.prof.max_industry_weight

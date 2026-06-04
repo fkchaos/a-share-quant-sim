@@ -431,7 +431,7 @@ tests/test_sim_trading.py — 39 个模拟盘执行测试（< 1s）
 
 | 常量 | 值 | 位置 |
 |------|-----|------|
-| 初始资金 | 200,000 | `config.yaml costs.initial_capital` |
+| 初始资金 | 200,000 | `core.config.TradingCosts.initial_capital` |
 | 佣金率 | 0.03% | `core.config.costs.commission_rate` |
 | 印花税 | 0.1% | `core.config.costs.stamp_tax_rate` |
 | 滑点 | 0.1% | `core.config.costs.slippage_rate` |

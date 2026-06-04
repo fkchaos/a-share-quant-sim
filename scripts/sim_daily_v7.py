@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Core engine (shared with run_backtest.py) ─────────────────────
 from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value, check_take_profit, apply_holding_decay
-from core.config import config as core_config, STRATEGY_PROFILES
+from core.config import STRATEGY_PROFILES, TradingCosts
 from core.scoring import score_all_stocks
 from core.factors import calc_factors_single
 
@@ -63,10 +63,11 @@ MAX_SINGLE_WEIGHT = _strategy_profile.max_position
 
 
 
-# Trading costs
-SLIPPAGE_RATE = core_config.costs.slippage_rate
-COMMISSION_RATE = core_config.costs.commission_rate
-INITIAL_CAPITAL = core_config.costs.initial_capital
+# Trading costs (defaults from TradingCosts dataclass)
+_costs = TradingCosts()
+SLIPPAGE_RATE = _costs.slippage_rate
+COMMISSION_RATE = _costs.commission_rate
+INITIAL_CAPITAL = _costs.initial_capital
 
 logger = get_logger("sim_daily")
 

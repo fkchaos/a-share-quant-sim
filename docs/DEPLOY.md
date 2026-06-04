@@ -14,25 +14,18 @@ cd a-share-quant-sim
 pip install -r requirements.txt
 ```
 
-依赖：`pandas`, `numpy`, `pyyaml`, `scipy`, `requests`
+依赖：`pandas`, `numpy`, `requests`
 
 ## 配置
 
-编辑 `config.yaml`：
+策略参数在 `core/config.py` 的 `STRATEGY_PROFILES` 字典中定义。
+交易成本（初始资金/佣金/印花税/滑点）在 `core/config.py` 的 `TradingCosts` dataclass 中定义。
 
-```yaml
-# 初始资金（模拟盘用 200000）
-costs:
-  initial_capital: 200000
+数据目录通过环境变量或代码配置：
 
+```bash
 # 数据目录（默认 data/daily/，也可设环境变量 BACKTEST_DATA_DIR）
-data:
-  daily_dir: "data/daily"
-
-# 回测区间
-backtest:
-  start_date: "2021-01-01"
-  end_date: ""          # 空 = 到今天
+export BACKTEST_DATA_DIR=/root/data
 ```
 
 ## 初始化数据
@@ -125,19 +118,17 @@ data/
 
 ### 策略模式切换
 
-编辑 `config/strategy_config.json`（或 `$DATA_DIR/strategy_config.json`）：
+编辑 `data/portfolio/strategy_config.json`（或环境变量 `$DATA_DIR/strategy_config.json`）：
 
 ```json
 {
-  "mode": "ensemble",      // factor | ensemble | ml | hybrid
+  "mode": "ensemble",      // factor | ensemble
   "profile": "v11b_zz800_union"
 }
 ```
 
 - **factor**：纯因子加权（传统评分）
-- **ensemble**：多组独立选股并集（v11b 当前使用）
-- **ml**：纯 ML 推理（已弃用，样本外 IC≈0）
-- **hybrid**：α×ML + (1-α)×因子（已弃用）
+- **ensemble**：多组独立选股并集（v11b 当前使用，WF 验证最优）
 
 修改后无需重启，下次 cron 自动生效。
 
@@ -168,13 +159,13 @@ A: 腾讯接口偶尔不稳定，重试即可。检查网络是否能访问 `htt
 A: 数据区间和股票池不同会导致结果差异。当前基准用中证800（674只），2021-01 ~ 2026-06。详见 [docs/STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md)。
 
 **Q: 模拟盘初始资金对不上？**
-A: 检查 `config.yaml` 的 `costs.initial_capital`。如果已有 `data/portfolio/account.json`，删掉让它重新初始化。
+A: 初始资金在 `core/config.py` 的 `TradingCosts` dataclass 中定义（默认 200000）。如果已有 `data/portfolio/account.json`，删掉让它重新初始化。
 
 **Q: cron 没执行？**
 A: 检查 `crontab -l` 确认任务存在。查看 `data/logs/sim_daily_*.log` 找错误原因。
 
 **Q: 策略参数改了但没生效？**
-A: 策略参数在 `config.yaml` 的 `strategies` 段。确认 `run_backtest.py` 和 `sim_daily_v7.py` 都通过 `StrategyEngine` 读取 `STRATEGY_PROFILES`。
+A: 策略参数在 `core/config.py` 的 `STRATEGY_PROFILES` 字典中定义。确认 `run_backtest.py` 和 `sim_daily_v7.py` 都通过 `StrategyEngine` 读取 `STRATEGY_PROFILES`。
 
 ## 回测记录规范
 

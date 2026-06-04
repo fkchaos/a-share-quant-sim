@@ -2,13 +2,13 @@
 Core trading engine — shared by live simulation (sim_daily.py) and backtest (run_backtest.py).
 
 Modules:
-  config   — typed configuration from config.yaml
+  config   — typed configuration (StrategyConfig dataclass + STRATEGY_PROFILES)
   factors  — factor calculation (single-stock + panel modes)
   account  — PortfolioState + buy/sell/check_stop_loss
   scoring  — factor standardization + composite score + ensemble
   strategy — StrategyEngine: unified scoring entry (factor/ml/hybrid/ensemble)
 """
-from core.config import Config, config, load_config
+from core.config import StrategyConfig, STRATEGY_PROFILES, DEFAULT_FACTOR_WEIGHTS, TradingCosts, MarketFilter
 from core.factors import calc_factors_single, calc_factors_panel
 from core.account import (
     PortfolioState, buy, sell, check_stop_loss,

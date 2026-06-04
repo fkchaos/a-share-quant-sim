@@ -317,7 +317,7 @@ class TestPlanGeneration:
 
     def test_no_rebalance_day_hold_plan_equals_holdings(self, sample_state, sample_price_data):
         """非调仓日：hold_plan 包含所有持仓，sell/buy 为空"""
-        from core.config import config as core_config, STRATEGY_PROFILES
+        from core.config import STRATEGY_PROFILES
 
         price_data = sample_price_data
         codes = list(sample_state.holdings.keys())

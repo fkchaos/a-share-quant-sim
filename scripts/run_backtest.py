@@ -57,7 +57,7 @@ import numpy as np
 import pandas as pd
 
 # ── Core engine (single source of truth) ────────────────────────────
-from core.config import config as core_config, STRATEGY_PROFILES
+from core.config import STRATEGY_PROFILES, DEFAULT_FACTOR_WEIGHTS, MarketFilter
 from core.factors import calc_factors_panel
 from core.scoring import composite_score, composite_score_equal, standardize
 from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
@@ -74,7 +74,7 @@ REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 START_DATE = "2021-01-01"
 END_DATE = datetime.now().strftime("%Y-%m-%d")
 
-FACTOR_WEIGHTS = core_config.factor_weights  # 权威权重，来自 core/config.py
+FACTOR_WEIGHTS = DEFAULT_FACTOR_WEIGHTS  # 权威权重，来自 core/config.py
 
 
 from core.data import load_and_build_panel
@@ -207,9 +207,9 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
     """
     from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value
     from core.account import check_take_profit, apply_holding_decay
-    from core.config import config
+    from core.config import TradingCosts
 
-    icap = initial_capital or config.costs.initial_capital
+    icap = initial_capital or TradingCosts().initial_capital
     dates = close_panel.index
 
     # ── 执行时序 ──
@@ -372,7 +372,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                             w = weights.get(c, 1.0 / len(top_stocks))
                             target_val = min(current_pv * w, current_pv * max_position)
                             from core.account import compute_buy_shares
-                            adj_p = ep * (1 + config.costs.slippage_rate)
+                            adj_p = ep * (1 + TradingCosts().slippage_rate)
                             shares = int(target_val / adj_p / 100) * 100
                             if shares > 0:
                                 state = buy(state, c, ep, date, shares=shares)
@@ -810,7 +810,7 @@ def main():
     print(f"\n[1/5] 加载数据... (exec_timing={args.exec_timing})")
     loaded, codes = load_and_build_panel(
         args.start, args.end, need_open=need_open, need_hl=need_hl,
-        market_filter=core_config.market,
+        market_filter=MarketFilter(),
     )
     close_panel  = loaded[0]
     volume_panel = loaded[1]

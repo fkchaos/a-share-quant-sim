@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from core.config import config
+from core.config import TradingCosts, RiskLimits
 
 
 # ── PortfolioState ──────────────────────────────────────────────────
@@ -54,7 +54,7 @@ def compute_buy_shares(
 
     Returns: (shares, cost, commission)
     """
-    costs = config.costs
+    costs = TradingCosts()
 
     if target_value is not None:
         # New mode: allocate based on provided target (from portfolio-level planning)
@@ -108,7 +108,7 @@ def buy(
     target_value : float, target market value for auto-compute.
                    If None, falls back to legacy cash-splitting logic.
     """
-    costs = config.costs
+    costs = TradingCosts()
     new_state = state.copy()
 
     adj_price = price * (1 + costs.slippage_rate)
@@ -173,7 +173,7 @@ def sell(
     reason: str = 'SELL',
 ) -> PortfolioState:
     """Execute a sell order.  Returns a NEW state."""
-    costs = config.costs
+    costs = TradingCosts()
     new_state = state.copy()
 
     if code not in new_state.holdings:
@@ -230,7 +230,7 @@ def partial_sell(
         # Sell everything if remainder would be < 1 lot
         return sell(new_state, code, price, date, reason=reason)
 
-    costs = config.costs
+    costs = TradingCosts()
     adj_price = price * (1 - costs.slippage_rate)
     revenue = sell_shares * adj_price
     commission = revenue * costs.commission_rate
@@ -269,9 +269,9 @@ def check_stop_loss(
       - fixed (default): stop when loss >= risk.stop_loss (e.g. 20%)
       - atr-based:      stop when loss >= K * ATR(14) / price
         Requires atr_data: Series of ATR values indexed by stock code.
-        K is controlled by config.risk.stop_loss_atr_k (default 6.0).
+        K defaults to 6.0 (RiskLimits.stop_loss_atr_k).
     """
-    risk = config.risk
+    risk = RiskLimits()
     new_state = state.copy()
     use_atr = atr_data is not None
     atr_k = getattr(risk, 'stop_loss_atr_k', 6.0)

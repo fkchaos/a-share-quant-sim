@@ -369,8 +369,133 @@ PROFILE_V10B_SMALL_MOM = StrategyConfig(
     },
 )
 
-STRATEGY_PROFILES["v10_small_cap"] = PROFILE_V10_SMALL_CAP
-STRATEGY_PROFILES["v10b_small_mom"] = PROFILE_V10B_SMALL_MOM
+# ── v10 系列：中证800 IC 最优因子 ──────────────────────────────────
+
+PROFILE_V10_ZZ800_TOP_IR = StrategyConfig(
+    label="v10_zz800_top_ir",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        # 按中证800 IC分析 IR 排序，选取 avg|IR| > 0.07 的因子
+        # high_low_range IR=0.168 → 最高权重
+        # vol_60 IR=0.128 → 第二（v6b系列没有，新增）
+        # vol_20 IR=0.083 → 第三
+        # mom_10/rev_10 IR=0.099 → 第四（配对）
+        # mom_20 IR=0.102 → 第五（三期限最稳定）
+        # mom_5/rev_5 IR=0.084 → 第六（配对）
+        # rsi_6 IR=0.071 → 第七
+        # rsi_14 IR=0.071 → 第八
+        # vol_10 IR=0.067 → 第九
+        # boll_pos_10 IR=0.053 → 第十
+        # boll_pos_20 IR=0.058 → 第十一
+        # 去掉 vol_ratio_20(0.045), amount_ratio(0.042), vol_ratio_5(0.027)
+        'high_low_range': 0.16,
+        'vol_60':         0.13,
+        'mom_20':         0.10,
+        'mom_10':         0.10,
+        'rev_10':         0.10,
+        'vol_20':         0.08,
+        'mom_5':          0.08,
+        'rev_5':          0.08,
+        'rsi_6':          0.07,
+        'rsi_14':         0.05,
+        'vol_10':         0.03,
+        'boll_pos_10':    0.01,
+        'boll_pos_20':    0.01,
+    },
+)
+
+# v10b: 纯高IR因子（去掉低IR的boll/vol_10，集中权重）
+PROFILE_V10B_ZZ800_CORE = StrategyConfig(
+    label="v10b_zz800_core",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        # 只保留 avg|IR| > 0.08 的核心因子
+        'high_low_range': 0.20,
+        'vol_60':         0.16,
+        'mom_20':         0.13,
+        'mom_10':         0.13,
+        'rev_10':         0.13,
+        'vol_20':         0.10,
+        'mom_5':          0.08,
+        'rev_5':          0.07,
+    },
+)
+
+# v10c: 降低vol_60权重（与hlr相关性0.43），增加反转因子
+PROFILE_V10C_ZZ800_BALANCED = StrategyConfig(
+    label="v10c_zz800_balanced",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        # vol_60权重从0.13降到0.08（与hlr冗余）
+        # 释放的权重加到反转因子（负IC但低相关性）
+        'high_low_range': 0.18,
+        'mom_20':         0.12,
+        'mom_10':         0.12,
+        'rev_10':         0.12,
+        'vol_60':         0.08,
+        'vol_20':         0.08,
+        'mom_5':          0.08,
+        'rev_5':          0.08,
+        'rsi_6':          0.06,
+        'rsi_14':         0.04,
+        'vol_10':         0.02,
+        'boll_pos_10':    0.01,
+        'boll_pos_20':    0.01,
+    },
+)
+
+# v10d: 纯动量+波动率（去掉反转因子，测试方向性）
+PROFILE_V10D_ZZ800_MOM = StrategyConfig(
+    label="v10d_zz800_mom",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        # 纯动量+波动率方向（中证800上IC>0的因子）
+        'high_low_range': 0.20,
+        'vol_60':         0.15,
+        'mom_20':         0.15,
+        'mom_10':         0.12,
+        'vol_20':         0.10,
+        'mom_5':          0.10,
+        'rsi_6':          0.08,
+        'rsi_14':         0.05,
+        'vol_10':         0.03,
+        'boll_pos_10':    0.01,
+        'boll_pos_20':    0.01,
+    },
+)
+
+STRATEGY_PROFILES["v10_zz800_top_ir"] = PROFILE_V10_ZZ800_TOP_IR
+STRATEGY_PROFILES["v10b_zz800_core"] = PROFILE_V10B_ZZ800_CORE
+STRATEGY_PROFILES["v10c_zz800_balanced"] = PROFILE_V10C_ZZ800_BALANCED
+STRATEGY_PROFILES["v10d_zz800_mom"] = PROFILE_V10D_ZZ800_MOM
 
 
 @dataclass

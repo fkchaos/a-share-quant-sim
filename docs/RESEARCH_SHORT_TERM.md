@@ -1,6 +1,9 @@
 # A股短线/日内交易策略调研报告
 
 ## 调研时间：2026-06-01
+## 状态：✅ 已完成 — 结论已整合到 v6b_hlr（high_low_range 因子）
+
+> **2026-06-04 更新**：high_low_range 因子已加入 v6b_hlr 策略（9因子），中证800 IC 分析确认其 IR=0.168 为最强因子。v9_short_term（freq=5）已退役。
 
 > **说明**：由于 web_search 工具不可用，本报告基于已知的 GitHub 开源项目知识、社区共识及学术文献综合整理。搜索关键词基准为：`A股 日内交易 策略 量化 github`、`A-share intraday trading strategy github`、`T+0 底仓 策略 量化 github`、`短线选股 动量因子 github`、`A股 短线因子 IC 研究 github`、`intraday factor A-share github`。
 

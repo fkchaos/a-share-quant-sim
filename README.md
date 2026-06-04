@@ -36,8 +36,8 @@
 ## 特性
 
 - **盘中双阶段模式**: 11:35 上午出信号 → 13:00 下午开盘执行 → 15:30 收盘报告
-- **多因子策略**: 29 个技术因子，支持等权 / IC_IR 加权 / Markowitz 优化
-- **8 个预置策略**: v4_baseline / v5_tp_decay / v6a_12f_icir / v6b_8f_pos_ic（默认）/ v7a/b/c / v8_all_icir
+- **多因子策略**: 40 个技术因子，支持等权 / IC_IR 加权 / Markowitz 优化
+- **10+ 预置策略**: v4~v10 系列，详见 [docs/STRATEGY_REGISTRY.md](docs/STRATEGY_REGISTRY.md)
 - **共享交易逻辑**: 模拟盘和回测共用 `core/account.py`，杜绝回测 / 实盘不一致
 - **回测执行时序**: `--exec-timing close`（收盘价，理想情况）/ `--exec-timing open`（开盘价，接近实盘）
 - **风控**: 止损 -20% / 分级止盈(10%/20%/30%) / 持有期衰减 / 行业 ≤25% / 换手率 ≤30%
@@ -46,17 +46,19 @@
 
 ## 当前最优策略
 
-**v6b_hlr** — 9 因子（v6b_8f + high_low_range），日内振幅因子
+**v10c_zz800_balanced** — 中证800 IC 最优因子策略（2026-06-04 更新）
 
-| 指标 | close 执行（理想） |
-|------|-------------------|
-| 年化收益 | 23.81% |
-| 夏普比率 | 1.34 |
-| 最大回撤 | -21.14% |
-| Calmar | 1.13 |
+| 指标 | close 执行（理想） | Walk-Forward（样本外） |
+|------|-------------------|----------------------|
+| 年化收益 | 38.59% | 32.9%（16 folds 平均） |
+| 夏普比率 | 1.34 | 0.61 |
+| 最大回撤 | -27.86% | — |
+| Calmar | 1.39 | — |
+| 正收益 fold | — | 7/16 (44%) |
 
-> 数据：沪深 300 成分股 ~280 只，2021-01 ~ 2026-05，初始资金 20 万
-> 模拟盘默认策略（sim_daily_v7）
+> 数据：中证800 成分股 674 只，2021-01 ~ 2026-06，初始资金 20 万
+> 选股池从沪深300（280只）扩大到中证800（730只）
+> 模拟盘默认策略：ml_hybrid80（80%ML+20%v6b）
 
 ## 快速开始
 
@@ -70,20 +72,18 @@ pip install -r requirements.txt
 python scripts/update_daily_data.py
 
 # 3. 验证：回测最优策略
-python scripts/run_backtest.py --strategy v6b_8f_pos_ic
+python scripts/run_backtest.py --strategy v10c_zz800_balanced
 
-# 4. 模拟盘（盘中双阶段需要配置 cron）
-python scripts/sim_daily_v7.py intraday_signal   # 上午信号
-python scripts/sim_daily_v7.py intraday_execute  # 下午执行
-python scripts/sim_daily_v7.py day_end           # 收盘报告
+# 4. Walk-Forward 过拟合检测
+python scripts/run_backtest.py --strategy v10c_zz800_balanced --walk-forward
 ```
 
 ## 回测命令速查
 
 ```bash
 python scripts/run_backtest.py                                    # 全策略回测（close执行）
-python scripts/run_backtest.py --strategy v6b_8f_pos_ic          # 指定策略
-python scripts/run_backtest.py --strategy v6b --exec-timing open # 开盘执行回测
+python scripts/run_backtest.py --strategy v10c_zz800_balanced         # 当前最优策略
+python scripts/run_backtest.py --strategy v10c --exec-timing open    # 开盘执行回测
 python scripts/run_backtest.py --scan                            # 参数网格扫描
 python scripts/run_backtest.py --walk-forward                    # Walk-Forward 过拟合检测
 python scripts/run_backtest.py --ic-analysis                     # IC 因子分析
@@ -111,31 +111,30 @@ a-share-quant-sim/
 │   └── sim_logging.py         # 日志配置
 ├── config.yaml                # ⭐ 所有可调参数
 ├── data/
-│   ├── daily/                 # 日K线 CSV (~280只)
+│   ├── daily/                 # 日K线 CSV (中证800, ~730只)
 │   ├── portfolio/             # 账户状态 (account.json)
 │   └── signals/               # 信号缓存
 ├── docs/
 │   ├── architecture.md        # 架构详解
 │   ├── DEPLOY.md              # 部署文档
 │   ├── RESULTS_LOG.md         # 回测结果记录
-│   └── BACKLOG.md             # 待办事项
+│   ├── STRATEGY_REGISTRY.md   # 策略注册表（所有策略参数+回测）
+│   ├── BACKLOG.md             # 待办事项
+│   └── HISTORY.md             # 已解决问题
 └── requirements.txt
 ```
 
-## 策略对比（2021-01 ~ 2026-05，取整修复后）
+## 策略对比（2021-01 ~ 2026-06，中证800 选股池）
 
-| 策略 | close年化 | close夏普 | open年化 | open夏普 |
-|------|---------|---------|---------|---------|
-| **v6b_hlr** ⚡ | **23.81%** | **1.34** | — | — |
-| v6b_8f_pos_ic | 23.81% | 1.33 | 17.52% | 1.05 |
-| v8_all_icir | 21.49% | 1.25 | 16.98% | 0.99 |
-| v4_baseline | 22.19% | 1.06 | 10.58% | 0.57 |
-| v5_tp_decay | 18.55% | 1.14 | 11.57% | 0.79 |
-| v4_industry_cap | 21.64% | 1.06 | 8.45% | 0.49 |
+| 策略 | close年化 | close夏普 | WF年化 | WF夏普 | 状态 |
+|------|---------|---------|--------|--------|------|
+| **v10c_zz800_balanced** ⚡ | **38.59%** | **1.34** | **32.9%** | **0.61** | ✅ 当前最优 |
+| v6b_hlr | 22.64% | 1.23 | 10.5% | 0.41 | ✅ 基准 |
+| ml_hybrid80 | 25.87% | 1.19 | — | — | ✅ 模拟盘 |
+| v10_zz800_top_ir | 35.45% | 1.26 | — | — | 回撤大 |
 
-> v6b_hlr = v6b_8f + high_low_range（日内振幅因子，IC +0.02~0.06）
-> open 模式 = T-1 日信号 → T 日开盘执行，更接近实盘
-> v9_short_term (freq=5): RETIRED — A股 T+1 + 交易成本下短线不可行
+> v10c = 中证800 IC 最优因子（13因子），WF = 16 folds 样本外
+> 完整策略列表见 [docs/STRATEGY_REGISTRY.md](docs/STRATEGY_REGISTRY.md)
 
 ## 配置
 

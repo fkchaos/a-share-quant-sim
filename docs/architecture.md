@@ -12,7 +12,7 @@
   │  config.py                                                      │
   │    DEFAULT_FACTOR_WEIGHTS (40因子权重, sum=1.0)                  │
   │    StrategyConfig dataclass (所有策略参数)                        │
-  │    STRATEGY_PROFILES dict (预定义策略: v4/v5/v6b/v8/v10)          │
+  │    STRATEGY_PROFILES dict (预定义策略: v4/v5/v6/v7/v8/v10, 当前最优 v10c)          │
   │    TradingCosts + RiskLimits dataclass                          │
   │  factors.py    calc_factors_panel() / calc_factors_single()     │
   │                40 技术因子计算                                    │

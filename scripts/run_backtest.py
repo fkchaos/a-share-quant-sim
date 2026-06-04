@@ -190,7 +190,8 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                  use_take_profit=False, tp_tiers=None,
                  use_holding_decay=False,
                  exec_timing='close',
-                 open_panel=None):
+                 open_panel=None,
+                 warmup_days=120):
     """
     完整回测引擎。
 
@@ -245,7 +246,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
         atr_panel = atr_norm * close_panel  # absolute ATR value
 
     for i, date in enumerate(dates):
-        if i < 120:
+        if i < warmup_days:
             nav_list.append(icap)
             continue
         if date not in close_panel.index:
@@ -287,10 +288,10 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
         # open 模式: 评分滞后 1 天（T 日上午用 T-1 日收盘数据算的信号，T 日开盘执行）
         # close 模式: 当日评分当日执行（T 日收盘价执行）
         sig_date = date
-        if exec_timing == 'open' and i > 120:
+        if exec_timing == 'open' and i > warmup_days:
             sig_date = dates[i - 1]  # T-1 日的评分
 
-        if (i - 120) % rebalance_freq == 0 and sig_date in score.index:
+        if (i - warmup_days) % rebalance_freq == 0 and sig_date in score.index:
             rebal_count += 1
             day_score = score.loc[sig_date].dropna()
             valid_idx = day_score.index.isin(price_data.dropna().index)
@@ -381,13 +382,19 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
 
     # 绩效指标
     nav = pd.Series(nav_list, index=dates[:len(nav_list)])
-    rets = nav.pct_change().dropna()
-    years = max(len(nav) / 252, 0.01)
-    total_ret = nav.iloc[-1] / nav.iloc[0] - 1
+    # 只取 warmup 之后的数据计算绩效（WF 场景下跳过训练期）
+    eval_start = min(warmup_days, len(nav) - 1)
+    eval_nav = nav.iloc[eval_start:]
+    if len(eval_nav) < 5:
+        # 数据太少，用全部数据
+        eval_nav = nav
+    rets = eval_nav.pct_change().dropna()
+    years = max(len(eval_nav) / 252, 0.01)
+    total_ret = eval_nav.iloc[-1] / eval_nav.iloc[0] - 1
     ann_ret = (1 + total_ret) ** (1 / years) - 1
     ann_vol = rets.std() * np.sqrt(252)
     sharpe = ann_ret / ann_vol if ann_vol > 0 else 0
-    max_dd = ((nav.cummax() - nav) / nav.cummax()).max()
+    max_dd = ((eval_nav.cummax() - eval_nav) / eval_nav.cummax()).max()
     calmar = ann_ret / max_dd if max_dd > 0 else 0
     win_rate = (rets > 0).sum() / len(rets) if len(rets) > 0 else 0
     # Sortino ratio: 只计下行波动
@@ -478,17 +485,43 @@ def param_scan(close_panel, score, param_grid=None):
 # ============================================================
 def walk_forward(close_panel, train_days=252, test_days=63,
                  step_days=63, top_n=12, rebalance_freq=20,
-                 stop_loss=0.20, **kwargs):
+                 stop_loss=0.20, score=None, label='wf',
+                 factor_weights=None,
+                 volume_panel=None, amount_panel=None,
+                 high_panel=None, low_panel=None,
+                 **kwargs):
     """Walk-Forward 过拟合检测。
 
     将时间轴上滑动窗口：训练期(约1年) → 测试期(约1季度)
     每一轮回测独立进行，最终拼接样本外净值曲线。
+
+    score: 预计算的评分矩阵 (DataFrame dates×stocks)，如果提供则直接使用
+    factor_weights: 策略因子权重 dict，用于构建评分函数
+    volume_panel/amount_panel/high_panel/low_panel: 完整的面板数据（用于 WF 切片）
     """
     dates = close_panel.index
     n = len(dates)
     fold_results = []
     fold_navs = []
     fold = 0
+
+    # 构建评分函数
+    from core.scoring import composite_score
+    if factor_weights is not None:
+        def _make_score(factors, weights=factor_weights):
+            return composite_score(
+                {k: v for k, v in factors.items() if k in weights},
+                weights
+            )
+        score_fn = _make_score
+    else:
+        score_fn = lambda factors, w=None: composite_score(factors)
+
+    # volume/amount/high/low 面板切片辅助函数
+    def _slice_panel(panel, idx):
+        if panel is not None:
+            return panel.loc[idx]
+        return None
 
     train_end = train_days
     while train_end + test_days <= n:
@@ -497,22 +530,35 @@ def walk_forward(close_panel, train_days=252, test_days=63,
         test_start = train_end
         test_end = min(n, train_end + test_days)
 
-        # 重新计算该窗口内的因子和评分
-        sub_close = close_panel.loc[dates[train_start:test_end]]
+        # 切片窗口
+        window_dates = dates[train_start:test_end]
+        sub_close = close_panel.loc[window_dates]
+        sub_volume = _slice_panel(volume_panel, window_dates)
+        sub_amount = _slice_panel(amount_panel, window_dates)
+        sub_high = _slice_panel(high_panel, window_dates)
+        sub_low = _slice_panel(low_panel, window_dates)
+
+        # 计算因子（用真实 volume/amount/high/low）
         from core.factors import calc_factors_panel
-        from core.config import config as cfg
-        sub_factors = calc_factors_panel(sub_close)
-        sub_score = composite_score(sub_factors)
+        sub_factors = calc_factors_panel(
+            sub_close, sub_volume, sub_amount,
+            high_panel=sub_high, low_panel=sub_low,
+        )
+        sub_score = score_fn(sub_factors)
 
         # 截取测试期评分
         test_dates = dates[test_start:test_end]
         sub_score_test = sub_score.loc[test_dates]
         sub_close_test = sub_close.loc[test_dates]
 
+        # 跑回测：传入 train+test 数据，用 warmup_days 跳过训练期
+        # warmup_days 是相对于 sub_close 起始的偏移 = 训练期长度
+        _warmup = train_end - train_start
         m, nav, _ = run_backtest(
-            sub_close_test, sub_score_test,
+            sub_close, sub_score,
             top_n=top_n, rebalance_freq=rebalance_freq,
-            stop_loss=stop_loss, label=f'wf_fold{fold}',
+            stop_loss=stop_loss, label=f'{label}_fold{fold}',
+            warmup_days=_warmup,
         )
 
         fold_results.append({
@@ -529,7 +575,7 @@ def walk_forward(close_panel, train_days=252, test_days=63,
 
         print(f"  WF Fold {fold}: {fold_results[-1]['test']} | "
               f"Ret={m['annual_return']:.1%} Sharpe={m['sharpe_ratio']:.2f} "
-              f"DD={m['max_dd']:.1%}")
+              f"DD={m['max_drawdown']:.1%}")
 
         train_end += step_days
 
@@ -883,17 +929,25 @@ def main():
         top_n = args.top_n or 12
         rebal_freq = args.rebalance_freq or 20
         sl = args.stop_loss or 0.20
-        wf_results, wf_nav = walk_forward(
-            close_panel,
-            top_n=top_n, rebalance_freq=rebal_freq, stop_loss=sl,
-        )
-        if wf_results:
-            print(f"\n  Walk-Forward 汇总 ({len(wf_results)} folds):")
-            avg_sharpe = np.mean([r['sharpe'] for r in wf_results])
-            avg_ret = np.mean([r['ann_return'] for r in wf_results])
-            print(f"    平均年化: {avg_ret:.1%} | 平均夏普: {avg_sharpe:.2f}")
-            positive_folds = sum(1 for r in wf_results if r['ann_return'] > 0)
-            print(f"    正收益fold: {positive_folds}/{len(wf_results)}")
+        # 对每个策略分别跑 WF
+        for cfg in configs:
+            profile = STRATEGY_PROFILES.get(cfg['label'])
+            fw = profile.factor_weights if profile else None
+            print(f"\n  --- WF: {cfg['label']} ---")
+            wf_results, wf_nav = walk_forward(
+                close_panel,
+                top_n=top_n, rebalance_freq=rebal_freq, stop_loss=sl,
+                factor_weights=fw, label=cfg['label'],
+                volume_panel=volume_panel, amount_panel=amount_panel,
+                high_panel=high_panel, low_panel=low_panel,
+            )
+            if wf_results:
+                print(f"\n  Walk-Forward 汇总 {cfg['label']} ({len(wf_results)} folds):")
+                avg_sharpe = np.mean([r['sharpe'] for r in wf_results])
+                avg_ret = np.mean([r['ann_return'] for r in wf_results])
+                print(f"    平均年化: {avg_ret:.1%} | 平均夏普: {avg_sharpe:.2f}")
+                positive_folds = sum(1 for r in wf_results if r['ann_return'] > 0)
+                print(f"    正收益fold: {positive_folds}/{len(wf_results)}")
 
     # 7. 输出
     elapsed = time.time() - t0

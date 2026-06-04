@@ -43,7 +43,7 @@ backtest:
 python scripts/update_daily_data.py
 ```
 
-- 默认下载沪深 300 成分股（~280 只），约 2-3 分钟
+- 默认下载中证 800 成分股（~730 只），约 3-5 分钟
 - 数据保存在 `data/daily/{code}.csv`
 - 每天收盘后运行一次更新
 
@@ -51,10 +51,13 @@ python scripts/update_daily_data.py
 
 ```bash
 # 回测最优策略（close 模式，理想情况）
-python scripts/run_backtest.py --strategy v6b_8f_pos_ic
+python scripts/run_backtest.py --strategy v10c_zz800_balanced
 
 # 回测（open 模式，接近实盘）
-python scripts/run_backtest.py --strategy v6b_8f_pos_ic --exec-timing open
+python scripts/run_backtest.py --strategy v10c_zz800_balanced --exec-timing open
+
+# Walk-Forward 过拟合检测
+python scripts/run_backtest.py --strategy v10c_zz800_balanced --walk-forward
 ```
 
 ## 模拟盘（盘中双阶段）
@@ -129,7 +132,7 @@ data/
   "mode": "hybrid",        // factor | ml | hybrid
   "hybrid_alpha": 0.8,     // ML 权重（仅 hybrid 模式）
   "model_dir": "/root/data/ml_models",
-  "profile": "v6b_8f_pos_ic"
+  "profile": "v10c_zz800_balanced"
 }
 ```
 
@@ -163,7 +166,7 @@ python scripts/train_ml_model.py
 A: 腾讯接口偶尔不稳定，重试即可。检查网络是否能访问 `http://web.ifzq.gtimg.cn`。
 
 **Q: 回测结果跟 README 里不一样？**
-A: 数据区间和股票池不同会导致结果差异。README 用的是 2021-01 ~ 2026-05，255~280 只股票。
+A: 数据区间和股票池不同会导致结果差异。当前基准用中证800（674只），2021-01 ~ 2026-06。详见 [docs/STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md)。
 
 **Q: 模拟盘初始资金对不上？**
 A: 检查 `config.yaml` 的 `costs.initial_capital`。如果已有 `data/portfolio/account.json`，删掉让它重新初始化。

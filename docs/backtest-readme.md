@@ -21,19 +21,18 @@
 
 ## 策略列表
 
-8 个预置策略，参数在 `core/config.py` STRATEGY_PROFILES 中定义：
+10+ 预置策略，参数在 `core/config.py` STRATEGY_PROFILES 中定义。
 
-| 策略 | 因子 | 权重方法 | top_n | 行业限制 |
-|------|------|---------|-------|---------|
-| v4_baseline | 29 | equal | 12 | 无 |
-| v4_industry_cap | 29 | equal | 12 | ≤25% |
-| v5_tp_decay | 29 | equal | 12 | ≤25% |
-| v6a_12f_icir | 12 | ic_ir | 12 | ≤25% |
-| **v6b_8f_pos_ic** ⚡ | 8 | equal | 12 | ≤25% |
-| v7a_8f_ind40 | 8 | equal | 12 | ≤40% |
-| v7b_8f_ind50 | 8 | equal | 12 | ≤50% |
-| v7c_8f_no_ind | 8 | equal | 12 | 无 |
-| v8_all_icir | 18 | ic_ir | 12 | 无 |
+**当前重点策略：**
+
+| 策略 | 因子 | 权重方法 | top_n | 行业限制 | 状态 |
+|------|------|---------|-------|---------|------|
+| **v10c_zz800_balanced** ⚡ | 13 | equal | 12 | ≤25% | 当前最优 |
+| v6b_hlr | 9 | equal | 12 | ≤25% | 基准 |
+| v10_zz800_top_ir | 13 | equal | 12 | ≤25% | 回撤偏大 |
+| ml_hybrid80 | ML+因子 | hybrid | 12 | ≤25% | 模拟盘 |
+
+完整策略列表+回测结果见 [STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md)。
 
 ## 快速验证
 
@@ -48,10 +47,13 @@ python scripts/update_daily_data.py
 python -m pytest tests/test_golden.py -v -k "not slow"
 
 # 回测最优策略
-python scripts/run_backtest.py --strategy v6b_8f_pos_ic
+python scripts/run_backtest.py --strategy v10c_zz800_balanced
+
+# Walk-Forward 过拟合检测
+python scripts/run_backtest.py --strategy v10c_zz800_balanced --walk-forward
 
 # 开盘执行模式（接近实盘）
-python scripts/run_backtest.py --strategy v6b_8f_pos_ic --exec-timing open
+python scripts/run_backtest.py --strategy v10c_zz800_balanced --exec-timing open
 ```
 
 ## 与模拟盘一致性

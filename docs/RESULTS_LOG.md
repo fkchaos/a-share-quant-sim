@@ -29,7 +29,7 @@
 **有效增强**：多周期融合(5d+20d) > EWMA权重 > 精简enhanced特征
 **无效增强**：分组stacking / regime switching / 60d标签
 
-## 当前策略（2026-06-03 更新）
+## 当前策略（2026-06-04 更新）
 
 ### 模拟盘：ml_hybrid (StrategyEngine hybrid 模式)
 - **模型**：LGB + XGB + Ridge 三模型 ensemble
@@ -39,6 +39,13 @@
 - **hybrid_alpha**：0.8（80% ML + 20% v6b因子）
 - **配置文件**：`config/strategy_config.json`
 - **自动训练**：每周一 06:00 cron
+
+### 选股池：中证800（~730只）
+- 从沪深300（280只）扩大到中证800（730只）
+- 构建脚本：`scripts/stock_pool.py`
+- 财务过滤：`scripts/financial_filter.py`（预缓存）
+- 缺口填充：`scripts/fill_daily_gaps.py`
+- IC分析：`scripts/ic_analysis_zz800.py`
 
 ### Walk-Forward 过测回测基准：v6b_8f_pos_ic
 - 8正IC因子等权，全区间 Sharpe 1.40，MaxDD -18.17%

@@ -821,12 +821,14 @@ def step_report(state, date, price_data, names, mode="day_end"):
         prev_nav = state.nav_history[-1].get('nav', state.nav_history[-1].get('portfolio_value', final_pv))
         daily_ret = (final_pv / prev_nav) - 1 if prev_nav > 0 else 0
 
-    state.nav_history.append({
-        'date': str(date),
-        'nav': final_pv,
-        'daily_return': daily_ret,
-        'total_return': final_ret,
-    })
+    # Only modify nav_history in non-report_only mode
+    if mode != "report_only":
+        state.nav_history.append({
+            'date': str(date),
+            'nav': final_pv,
+            'daily_return': daily_ret,
+            'total_return': final_ret,
+        })
 
     logger.info(f"📊 收盘报告 ({mode})")
     logger.info(f"  日期: {date}")
@@ -908,7 +910,7 @@ def run_intraday_signal():
     names = {}
     try:
         zz800 = pd.read_csv("/root/zz800_constituents.csv")
-        names = dict(zip(zz800['品种代码'].astype(str).str.zfill(6), zz800['品种名称']))
+        names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
 
@@ -986,7 +988,7 @@ def run_intraday_execute():
     names = {}
     try:
         zz800 = pd.read_csv("/root/zz800_constituents.csv")
-        names = dict(zip(zz800['品种代码'].astype(str).str.zfill(6), zz800['品种名称']))
+        names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
 
@@ -1064,7 +1066,7 @@ def run_day_end(report_only=False):
         names = {}
         try:
             zz800 = pd.read_csv("/root/zz800_constituents.csv")
-            names = dict(zip(zz800['品种代码'].astype(str).str.zfill(6), zz800['品种名称']))
+            names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
         except Exception:
             pass
 
@@ -1089,7 +1091,7 @@ def run_day_end(report_only=False):
     names = {}
     try:
         zz800 = pd.read_csv("/root/zz800_constituents.csv")
-        names = dict(zip(zz800['品种代码'].astype(str).str.zfill(6), zz800['品种名称']))
+        names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
 

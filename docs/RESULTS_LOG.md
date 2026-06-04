@@ -150,8 +150,9 @@
 ### 结论
 - **v11b 通过 WF 验证**：正收益 fold 69% ≥ 60%，Sharpe 1.70 >> 0.5
 - **v11b 为当前最优策略**：WF 年化 63.7%，远超 v10c 的 32.9%
-- **下一步**：考虑切换模拟盘到 v11b
+- **模拟盘已切换 v11b**：`strategy_config.json` → `{"mode": "ensemble", "profile": "v11b_zz800_union"}`
+- **下一步**：观察模拟盘实盘表现，探索进一步优化
 
 ## 已舍弃方向
 
-新闻情感因子 / IC-IR 加权(v8全集) / 系统择时(MA60/120) / 短线高频交易(v9 freq=5) / 简单多策略并行 / ML分组stacking / ML regime switching / ML 因子权重预测 / 小市值因子(v10_small_cap, 仅2025年有效) / vol_ratio_20+amount_ratio(v6b原始因子, 中证800上IR<0.05) / 自适应因子权重(v10g) / 趋势filter(MA60) / 评分加权(线性/指数) / 换手率控制
+新闻情感因子 / IC-IR 加权(v8全集) / 系统择时(MA60/120) / 短线高频交易(v9 freq=5) / 简单多策略并行 / ML分组stacking / ML regime switching / ML 因子权重预测 / ML hybrid(样本外IC≈0) / 小市值因子(v10_small_cap, 仅2025年有效) / vol_ratio_20+amount_ratio(v6b原始因子, 中证800上IR<0.05) / 自适应因子权重(v10g) / 趋势filter(MA60) / 评分加权(线性/指数) / 换手率控制 / 收盘报告做完整流程(应纯只读)

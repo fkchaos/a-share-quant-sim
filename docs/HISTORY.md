@@ -256,3 +256,58 @@ load_state 时自动补 `tp_taken: []`。
 ### 补充教训（2026-06-03 选股池扩大过程中）
 4. **财务数据源不可靠时的工程决策**：AKShare stock_financial_report_sina 接口在并发下被限流到 ~9只/s，批量获取 2838 只财务数据不可行。此时不应阻塞系统开发，而应采用备选方案（中证500+沪深300成分股 632 只）作为 fallback，财务过滤后续迭代。
 5. **PE 作为质量过滤的代理指标**：PE<0 近似亏损股（533/2838≈19%），PE>200 近似异常估值（256/2838≈9%）。在无法获取完整财务数据时，0<PE≤100 可有效排除大部分垃圾股，但会误伤周期性行业暂时亏损的优质公司。
+
+---
+
+## 2026-06-05: 统一评分引擎重构
+
+### 改动
+- `core/scoring.py`: 加 `ensemble_union_score()` (panel) + `ensemble_union_score_single()` (单股)
+- `core/strategy.py`: `StrategyEngine` 支持 factor/ensemble/ml/hybrid 四种模式
+- `core/config.py`: `StrategyConfig` 加 `ensemble_groups` + `ensemble_group_top_n`
+- `run_backtest.py`: 评分构建统一走 `StrategyEngine.score_panel()`，WF 支持 `ensemble_groups`
+- `core/__init__.py`: 导出新函数
+
+### 结果
+- v11b WF 验证通过：年化 63.7%, Sharpe 1.70, 正收益 11/16 (69%)
+- 回测和模拟盘共用同一评分入口，消除不一致
+
+---
+
+## 2026-06-05: 收盘报告改为纯只读模式
+
+### 背景
+cron 收盘 job 调用 `run_day_end()` 执行完整流程（止损/止盈/decay/调仓），导致下午已执行的操作重复执行。
+
+### 修复
+- `run_day_end(report_only=True)`: 只加载账户 + 读本地价格 → 出报告，不修改 state
+- CLI 新增 `report_only` 模式
+- cron 收盘 job: `day_end` → `report_only`
+- `step_report` 中 `nav_history.append()` 加 `if mode != "report_only"` guard
+
+### 踩坑
+1. 函数体重写用 `str.replace()` 多次替换容易遗漏旧代码 → 用 `re.DOTALL` 匹配整个函数体一次性替换
+2. `step_update_data()` 在 report_only 分支被无条件调用 → 715只股票拉 API 卡死 → report_only 跳过数据更新
+3. `zz800_constituents.csv` 列名是 `code`/`name`，不是 `品种代码`/`品种名称` → 股票名称全部显示为代码
+
+### 教训
+**大函数重构用完整替换，不零散 patch。report_only 模式不更新数据（用本地价格，净值误差一天可接受）。**
+
+---
+
+## 2026-06-05: 脚本归档清理
+
+### 改动
+- `scripts/`: 50 → 16 核心脚本
+- 34 个临时研究脚本归档到 `scripts/archive/`（分 research/tune/wf/v11b_explore 子目录）
+- `core/small_cap_timer.py` → `core/archive/`（小市值择时模块，已弃用）
+- 修复 `log_backtest_result.py` 引用路径
+
+---
+
+## 2026-06-05: 远端分支清理
+
+### 改动
+- 删除远端 `feature/ml-rolling` 分支（功能已在 main 中）
+- 删除本地 `dev-tmp`、`intraday-sim`、`unify-core-engine` 旧分支
+- `release/default` 与 `main` 同步

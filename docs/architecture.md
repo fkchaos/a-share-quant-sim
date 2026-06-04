@@ -257,22 +257,23 @@ class StrategyEngine:
 
 ## 三、调度层：sim_daily_v7.py
 
-### 三阶段 Pipeline
+### 三阶段 Pipeline（2026-06-05 最终版）
 
 ```
-intraday_signal (11:35) — 策略决策，不修改 state：
-  ① update_data → ② load_account → ③ data_quality
-  → ④ 风控：止损/止盈/decay（修改 state，写入 risk_sell）
+intraday_signal (11:35) — 策略决策，生成 plan：
+  ① update_data(腾讯API) → ② load_account → ③ data_quality
+  → ④ 风控：止损/止盈/decay → risk_sell
   → ⑤ 调仓：StrategyEngine.score_single() + filter_stocks()
   → ⑥ 生成 plan（sell_plan/hold_plan/buy_plan），保存 state
 
 intraday_execute (13:00) — 纯执行，不做策略判断：
   ⑦ load trade_plan + 开盘价
   ⑧ 执行 plan：sell → hold(add) → buy
-  ⑨ 保存 state + 报告
+  ⑨ 保存 state + 执行报告
 
-day_end (15:30) — 收盘报告：
-  ⑩ 读取 account.json + exec_report.json → 输出报告
+report_only (15:30) — 纯只读报告，零副作用：
+  ⑩ load_account + 本地价格 → 输出报告
+  （不更新数据/不调仓/不修改 state）
 ```
 
 ### Plan 结构
@@ -415,13 +416,14 @@ tests/test_sim_trading.py — 39 个模拟盘执行测试（< 1s）
 四、异常/注意事项
 ```
 
-### 收盘报告
+### 收盘报告（report_only 模式）
 ```
-一、今日操作汇总
-二、当前持仓
-三、净值
+一、净值概况（总净值/今日收益/总收益率/持仓数/现金占比）
+二、持仓明细（代码/名称/股数/市值/权重/盈亏）
+三、行业分布
 四、指数概况
 ```
+注意：report_only 模式不更新数据，用本地已有价格（净值可能有 1 天误差）
 
 ---
 

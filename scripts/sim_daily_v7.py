@@ -1253,9 +1253,9 @@ def run_day_end():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="v7 模拟交易 — 支持盘中双阶段")
-    parser.add_argument('mode', choices=['intraday_signal', 'intraday_execute', 'day_end'],
+    parser.add_argument('mode', choices=['intraday_signal', 'intraday_execute', 'day_end', 'report_only'],
                         default='day_end', nargs='?',
-                        help='运行模式: intraday_signal=上午出信号, intraday_execute=下午执行, day_end=日终')
+                        help='运行模式: intraday_signal=上午出信号, intraday_execute=下午执行, day_end=日终(含风控调仓), report_only=纯报告')
     args = parser.parse_args()
 
     try:
@@ -1263,8 +1263,10 @@ if __name__ == "__main__":
             report = run_intraday_signal()
         elif args.mode == 'intraday_execute':
             report = run_intraday_execute()
+        elif args.mode == 'report_only':
+            report = run_day_end(report_only=True)
         else:
-            report = run_day_end()
+            report = run_day_end(report_only=False)
 
         if report:
             nav = report.get('nav', None)

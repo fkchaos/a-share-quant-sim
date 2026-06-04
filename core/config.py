@@ -494,7 +494,68 @@ PROFILE_V10D_ZZ800_MOM = StrategyConfig(
 
 STRATEGY_PROFILES["v10_zz800_top_ir"] = PROFILE_V10_ZZ800_TOP_IR
 STRATEGY_PROFILES["v10b_zz800_core"] = PROFILE_V10B_ZZ800_CORE
+# v10e: 降低vol_60权重(熊市放大亏损), 提高反转因子权重
+PROFILE_V10E_ZZ800_DEF = StrategyConfig(
+    label="v10e_zz800_def",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        # vol_60从0.08降到0.04(高波动因子在熊市放大亏损)
+        # 释放的权重加到反转因子(熊市反转效应更强)
+        'high_low_range': 0.16,
+        'rev_10':         0.14,  # 提高反转权重
+        'rev_5':          0.12,  # 提高反转权重
+        'mom_20':         0.12,
+        'mom_10':         0.10,
+        'vol_20':         0.08,
+        'mom_5':          0.08,
+        'rsi_6':          0.06,
+        'vol_60':         0.04,  # 降低高波动因子
+        'rsi_14':         0.04,
+        'vol_10':         0.02,
+        'boll_pos_10':    0.02,
+        'boll_pos_20':    0.02,
+    },
+)
+
 STRATEGY_PROFILES["v10c_zz800_balanced"] = PROFILE_V10C_ZZ800_BALANCED
+# v10f: v10c + 换手率控制(熊市频繁调仓增加成本)
+PROFILE_V10F_ZZ800_TURNOVER = StrategyConfig(
+    label="v10f_zz800_turnover",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    max_daily_turnover=0.20,  # 限制单日换手率≤20%
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights={
+        'high_low_range': 0.18,
+        'mom_20':         0.12,
+        'mom_10':         0.12,
+        'rev_10':         0.12,
+        'vol_20':         0.08,
+        'mom_5':          0.08,
+        'rev_5':          0.08,
+        'rsi_6':          0.06,
+        'vol_60':         0.08,
+        'rsi_14':         0.04,
+        'vol_10':         0.02,
+        'boll_pos_10':    0.01,
+        'boll_pos_20':    0.01,
+    },
+)
+
+STRATEGY_PROFILES["v10e_zz800_def"] = PROFILE_V10E_ZZ800_DEF
+STRATEGY_PROFILES["v10f_zz800_turnover"] = PROFILE_V10F_ZZ800_TURNOVER
 STRATEGY_PROFILES["v10d_zz800_mom"] = PROFILE_V10D_ZZ800_MOM
 
 

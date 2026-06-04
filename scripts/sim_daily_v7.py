@@ -173,8 +173,12 @@ def fetch_tencent_spot_batch(codes, timeout=15):
 # Pipeline 步骤函数（复用 v6 + 增强）
 # ═══════════════════════════════════════════════════════════════════
 
-def step_update_data():
-    """Step 0: 更新行情数据 (复用项目目录的 update_daily_data.py)"""
+def step_update_data(quick=False):
+    """Step 0: 更新行情数据 (复用项目目录的 update_daily_data.py)
+
+    quick=True: 快速模式（report_only 用），超时 60s，失败不阻塞
+    quick=False: 完整模式（日终用），超时 300s
+    """
     logger.info("📥 更新行情数据...")
     import subprocess
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -183,20 +187,25 @@ def step_update_data():
     # 确保子进程也使用相同的数据目录
     if "BACKTEST_DATA_DIR" in os.environ:
         env["BACKTEST_DATA_DIR"] = os.environ["BACKTEST_DATA_DIR"]
-    result = subprocess.run(
-        [sys.executable, update_script],
-        capture_output=True, text=True, timeout=300,
-        cwd=os.path.dirname(script_dir),  # 在项目根目录运行
-        env=env
-    )
-    for line in result.stdout.split('\n'):
-        if any(k in line for k in ['📋', '📅', '✅', '🔄', '📊', '最新', '失败', '新增', '⚠️']):
-            logger.info(f"  {line.strip()}")
-    if result.returncode != 0:
-        logger.warning(f"数据更新可能有问题: {result.stderr[:200]}")
-    else:
-        logger.info("数据更新完成")
-    return result.returncode == 0
+    timeout = 60 if quick else 300
+    try:
+        result = subprocess.run(
+            [sys.executable, update_script],
+            capture_output=True, text=True, timeout=timeout,
+            cwd=os.path.dirname(script_dir),  # 在项目根目录运行
+            env=env
+        )
+        for line in result.stdout.split('\n'):
+            if any(k in line for k in ['📋', '📅', '✅', '🔄', '📊', '最新', '失败', '新增', '⚠️']):
+                logger.info(f"  {line.strip()}")
+        if result.returncode != 0:
+            logger.warning(f"数据更新可能有问题: {result.stderr[:200]}")
+        else:
+            logger.info("数据更新完成")
+        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        logger.warning(f"数据更新超时 ({timeout}s)，使用本地已有数据")
+        return False
 
 
 def step_load_account():
@@ -1021,15 +1030,49 @@ def run_intraday_execute():
     return report
 
 
-def run_day_end():
+def run_day_end(report_only=False):
     """
-    日终模式 (18:00) — 与 v6 逻辑一致
-    ── 收盘后拉日频数据 → 完整流程 → 日终报告 ──
+    日终模式 — 双阶段模式下只做报告，不做任何操作。
+
+    report_only=True: 纯报告模式（cron 收盘报告用）
+      → 加载账户 + 价格 → 出报告，不修改 state
+    report_only=False: 完整日终模式（兼容旧行为）
+      → 更新数据 → 风控 → 调仓 → 报告
     """
     logger.info("=" * 70)
-    logger.info(f"v7 模拟交易 — 日终 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
+    if report_only:
+        logger.info(f"v7 模拟交易 — 收盘报告 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
+    else:
+        logger.info(f"v7 模拟交易 — 日终 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
     logger.info("=" * 70)
 
+    if report_only:
+        # ── 纯报告模式：只读状态，不做任何修改 ──
+        # Step 1: 加载账户
+        state, loaded = step_load_account()
+        if not loaded:
+            logger.warning("账户不存在，无法生成报告")
+            return None
+
+        # Step 2: 加载价格 (本地CSV, 日终)
+        result = step_load_prices(intraday=False)
+        if result[0] is None:
+            return None
+        latest_date, price_data, code_dataframes, files = result
+
+        # 股票名称
+        names = {}
+        try:
+            zz800 = pd.read_csv("/root/zz800_constituents.csv")
+            names = dict(zip(zz800['品种代码'].astype(str).str.zfill(6), zz800['品种名称']))
+        except Exception:
+            pass
+
+        # Step 7: 收盘报告（不修改 state）
+        report = step_report(state, latest_date, price_data, names, mode="report_only")
+        return report
+
+    # ── 完整日终模式（旧行为，兼容用）──
     # Step 0: 更新数据
     step_update_data()
 
@@ -1065,7 +1108,6 @@ def run_day_end():
     quality_blocked = step_data_quality(files, latest_date)
 
     # Step 5: 调仓 (日终模式直接执行)
-    # 复用 v6 的调仓逻辑 (直接 buy/sell)
     trade_count_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")
     trade_count = 0
     if os.path.exists(trade_count_file):
@@ -1075,7 +1117,6 @@ def run_day_end():
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
     current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
 
-    # 合并风控卖出到 sell_plan（风控优先）
     sell_plan = list(risk_sell or [])
 
     if not need_rebalance:
@@ -1093,7 +1134,6 @@ def run_day_end():
             if len(df) > 120:
                 all_factors[code] = calc_factors_single(df)
 
-        # ── 评分 + 选股过滤（通过 Strategy Engine）──
         _dynamic_weights = None
         if 'small_cap' in _strategy_profile.factor_weights and _engine_mode == "factor":
             _small_cap_base_w = _strategy_profile.factor_weights['small_cap']
@@ -1110,7 +1150,6 @@ def run_day_end():
                 _dynamic_weights = {
                     'small_cap': lambda base_w, factors, tw=_timed_w: tw
                 }
-                logger.debug(f"小市值择时：dispersion={_dispersion:.3f} adj={_adj:.2f} {_small_cap_base_w:.3f}→{_timed_w:.3f}")
 
         scores = _strategy_engine.score_single(all_factors)
 
@@ -1124,18 +1163,6 @@ def run_day_end():
             get_industry_fn=get_industry,
         )
 
-        logger.info(f"选股过滤: {len(scores)} → {len(top_stocks)} 只 "
-                    f"(排除板块不符 + 流动性 + 行业分散)")
-        top_stocks = top_stocks  # already a list
-
-        logger.info(f"目标持仓 (Top {TOP_N}):")
-        for i, code in enumerate(top_stocks):
-            name = names.get(code, '—')
-            s = scores.get(code, 0)
-            p = price_data.get(code, 0)
-            logger.info(f"  {i+1}. {code} {name:<10} 评分={s:.3f} 价格={p:.2f}")
-
-        # 构建 trade context
         trade_contexts = {}
         for code in top_stocks:
             if code in code_dataframes:
@@ -1143,11 +1170,9 @@ def run_day_end():
                 if ctx:
                     trade_contexts[code] = ctx
 
-        # 卖出非目标
         to_sell = [c for c in list(state.holdings.keys()) if c not in top_stocks]
         sell_blocked_codes = []
         if to_sell:
-            logger.info(f"卖出 {len(to_sell)} 只:")
             for code in to_sell:
                 if code in price_data.index:
                     p = price_data[code]
@@ -1158,18 +1183,12 @@ def run_day_end():
                         if ctx:
                             blocked, reason = ctx.is_sell_blocked()
                             if blocked:
-                                logger.info(f"  ⏭️  {code} {names.get(code, code)} 【{reason}】暂无法卖出")
                                 sell_blocked_codes.append(code)
                                 continue
                         old_shares = state.holdings.get(code, {}).get('shares', 0)
                         state = sell(state, code, p, latest_date, 'SELL')
-                        sold = old_shares > 0 and code not in state.holdings
-                        if sold:
-                            logger.info(f"  ❌ {code} {names.get(code, code)} 已卖出")
 
-        # 权重分配 — 等权，不用 vol_inverse（避免与 hlr 因子矛盾）
         weight_per_stock = 1.0 / TOP_N
-
         current_pv = portfolio_value(state, latest_date, price_data)
         price_dict = price_data.to_dict()
 
@@ -1186,7 +1205,6 @@ def run_day_end():
         REBALANCE_THRESHOLD = 0.8
         MIN_ADD_AMOUNT = 10000
 
-        # 补仓
         for code in top_stocks:
             if code in state.holdings and code in price_data.index:
                 p = price_data[code]
@@ -1204,9 +1222,7 @@ def run_day_end():
                         add_shares = int(add_mv / adj_p / 100) * 100
                         if add_shares > 0:
                             state = buy(state, code, p, latest_date, shares=add_shares)
-                            logger.info(f"  🔺 {code} {names.get(code, code)} 补仓 {add_shares} 股")
 
-        # 买入新股票
         new_targets = [c for c in top_stocks if c not in state.holdings and c not in sell_blocked_codes]
         for code in new_targets:
             if code in price_data.index:
@@ -1216,20 +1232,13 @@ def run_day_end():
                     if ctx:
                         blocked, reason = ctx.is_buy_blocked()
                         if blocked:
-                            logger.info(f"  ⏭️  {code} {names.get(code, code)} 【{reason}】无法买入")
                             continue
                     old_holdings = set(state.holdings.keys())
-                    # 用等权目标金额买入
                     target_mv = current_pv * weight_per_stock
                     _min_target = p * 100 * (1 + SLIPPAGE_RATE)
                     if target_mv < _min_target:
-                        logger.info(f"  ⏭️  {code} {names.get(code, code)} 目标¥{target_mv:,.0f} < 最低¥{_min_target:,.0f}(100股)，跳过")
                         continue
                     state = buy(state, code, p, latest_date, target_value=target_mv)
-                    if code in state.holdings and code not in old_holdings:
-                        logger.info(f"  ✅ {code} {names.get(code, code)} 买入 @ {p:.2f}")
-                    else:
-                        logger.info(f"  ⏭️  {code} {names.get(code, code)} 资金不足跳过")
 
         trade_count_final = trade_count + 1
 

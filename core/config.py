@@ -5,6 +5,32 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
+# ── 可调配置（改这里即可，无需动代码） ──────────────────────────────
+CONFIG = dict(
+    # ── 交易成本 ──
+    initial_capital   = 200_000,   # 初始资金
+    commission_rate   = 0.0003,    # 佣金率（万3）
+    stamp_tax_rate    = 0.001,     # 印花税（千1，卖出收）
+    slippage_rate     = 0.001,     # 滑点（千1）
+
+    # ── 风控参数 ──
+    stop_loss         = 0.20,      # 止损比例（20%）
+    stop_loss_atr_k   = 6.0,       # ATR 动态止损 K 值
+    top_n             = 12,        # 持仓数量
+    rebalance_freq    = 20,        # 调仓频率（交易日）
+    max_single_weight = 0.15,      # 单只最大仓位占比
+    max_daily_turnover= 0.30,      # 单日最大换手率
+    min_rebalance_interval = 3,    # 最小调仓间隔（交易日）
+
+    # ── 选股参数 ──
+    max_position      = 0.10,      # 单只最大仓位占比（策略级）
+    max_industry_weight = 0.0,     # 行业仓位上限（0=不限制）
+
+    # ── 波动率缩放 ──
+    vol_target        = 0.20,      # 目标年化波动率
+)
+
+
 # ── Default values (fallback when config.yaml is absent) ──────────────
 
 DEFAULT_FACTOR_WEIGHTS = {
@@ -25,10 +51,10 @@ DEFAULT_FACTOR_WEIGHTS = {
 
 @dataclass
 class TradingCosts:
-    initial_capital: float = 200_000
-    commission_rate: float = 0.0003
-    stamp_tax_rate: float = 0.001
-    slippage_rate: float = 0.001
+    initial_capital: float = field(default_factory=lambda: CONFIG["initial_capital"])
+    commission_rate: float = field(default_factory=lambda: CONFIG["commission_rate"])
+    stamp_tax_rate: float = field(default_factory=lambda: CONFIG["stamp_tax_rate"])
+    slippage_rate: float = field(default_factory=lambda: CONFIG["slippage_rate"])
 
 
 @dataclass
@@ -57,13 +83,13 @@ class MarketFilter:
 
 @dataclass
 class RiskLimits:
-    stop_loss: float = 0.20
-    stop_loss_atr_k: float = 6.0        # K for ATR-based dynamic stop-loss (close-to-close ATR typically ~3-5%)
-    top_n: int = 12
-    rebalance_freq: int = 20
-    max_single_weight: float = 0.15
-    max_daily_turnover: float = 0.30
-    min_rebalance_interval: int = 3
+    stop_loss: float = field(default_factory=lambda: CONFIG["stop_loss"])
+    stop_loss_atr_k: float = field(default_factory=lambda: CONFIG["stop_loss_atr_k"])
+    top_n: int = field(default_factory=lambda: CONFIG["top_n"])
+    rebalance_freq: int = field(default_factory=lambda: CONFIG["rebalance_freq"])
+    max_single_weight: float = field(default_factory=lambda: CONFIG["max_single_weight"])
+    max_daily_turnover: float = field(default_factory=lambda: CONFIG["max_daily_turnover"])
+    min_rebalance_interval: int = field(default_factory=lambda: CONFIG["min_rebalance_interval"])
 
 
 @dataclass
@@ -73,19 +99,19 @@ class StrategyConfig:
 
     # ── 选股参数 ──────────────────────────────────────────────
     weight_method: str = "equal"          # equal | ic_ir | markowitz
-    top_n: int = 12
-    rebalance_freq: int = 20
+    top_n: int = field(default_factory=lambda: CONFIG["top_n"])
+    rebalance_freq: int = field(default_factory=lambda: CONFIG["rebalance_freq"])
     factor_weights: Optional[Dict[str, float]] = None  # None = 用 DEFAULT_FACTOR_WEIGHTS
 
     # ── 风控参数 ──────────────────────────────────────────────
-    stop_loss: float = 0.20
-    max_position: float = 0.10             # 单只最大仓位占比
-    max_industry_weight: float = 0.0       # 0 = 不限制
-    max_daily_turnover: float = 0          # 0 = 不限制
+    stop_loss: float = field(default_factory=lambda: CONFIG["stop_loss"])
+    max_position: float = field(default_factory=lambda: CONFIG["max_position"])
+    max_industry_weight: float = field(default_factory=lambda: CONFIG["max_industry_weight"])
+    max_daily_turnover: float = 0          # 0 = 不限制（策略级覆盖）
 
     # ── 波动率缩放 ────────────────────────────────────────────
     use_vol_scaling: bool = True
-    vol_target: float = 0.20
+    vol_target: float = field(default_factory=lambda: CONFIG["vol_target"])
 
     # ── 止盈 ──────────────────────────────────────────────────
     use_take_profit: bool = False
@@ -96,7 +122,7 @@ class StrategyConfig:
 
     # ── ATR 止损 ──────────────────────────────────────────────
     use_atr_stop: bool = False
-    atr_k: float = 6.0
+    atr_k: float = field(default_factory=lambda: CONFIG["stop_loss_atr_k"])
 
     # ── 优化用 ────────────────────────────────────────────────
     risk_aversion: float = 1.0

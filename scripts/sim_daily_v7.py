@@ -485,8 +485,8 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             }
             logger.info(f"小市值择时：dispersion={_dispersion:.3f} adj={_adj:.2f} weight={_timed_w:.3f}")
 
-    # 用 engine 评分（factor 模式传 dynamic_weights，ml/hybrid 模式忽略）
-    if _engine_mode == "factor":
+    # 用 engine 评分（factor/multi 模式传 dynamic_weights，ml/hybrid 模式忽略）
+    if _engine_mode in ("factor", "multi"):
         scores = _strategy_engine.score_single(all_factors)
     else:
         # ml / hybrid 模式：engine 内部处理，dynamic_weights 不传（ML 不需要）

@@ -131,6 +131,11 @@ class StrategyConfig:
     ensemble_groups: Optional[Dict[str, Dict[str, float]]] = None
     ensemble_group_top_n: int = 4
 
+    # ── 多策略并行 ────────────────────────────────────────────
+    multi_strategy: Optional[Dict] = None
+    # 格式: {"strategies": [{"profile": "v11b_zz800_union", "mode": "ensemble", "weight": 0.5}, ...]}
+    # 最终评分 = Σ weight_i × zscore(strategy_i_scores)
+
 
 # ============================================================
 # 预定义策略 Profiles
@@ -628,3 +633,28 @@ PROFILE_V11B_ZZ800_UNION = StrategyConfig(
 )
 
 STRATEGY_PROFILES["v11b_zz800_union"] = PROFILE_V11B_ZZ800_UNION
+
+# ── v12: 多策略并行 ──────────────────────────────────────────
+# v11b (ensemble) + v10c (因子) + v6b_hlr (稳定) 三策略混合
+# 权重：v11b=0.5, v10c=0.3, v6b=0.2
+PROFILE_V12_MULTI = StrategyConfig(
+    label="v12_multi",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    use_holding_decay=True,
+    factor_weights=None,
+    multi_strategy={
+        "strategies": [
+            {"profile": "v11b_zz800_union", "mode": "ensemble", "weight": 0.5},
+            {"profile": "v10c_zz800_balanced", "mode": "factor", "weight": 0.3},
+            {"profile": "v6b_hlr", "mode": "factor", "weight": 0.2},
+        ]
+    },
+)
+
+STRATEGY_PROFILES["v12_multi"] = PROFILE_V12_MULTI

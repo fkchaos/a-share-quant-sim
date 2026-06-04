@@ -877,9 +877,12 @@ def main():
             kw['open_panel'] = open_panel
         return {'label': profile.label, 'score': score, 'kwargs': kw}
 
-    # Score building: unified via StrategyEngine (supports factor + ensemble)
+    # Score building: unified via StrategyEngine (supports factor + ensemble + multi)
     def _build_score_for_profile(profile):
-        if profile.ensemble_groups:
+        if profile.multi_strategy:
+            engine = StrategyEngine(profile=profile.label, mode="multi")
+            return engine.score_panel(factors)
+        elif profile.ensemble_groups:
             engine = StrategyEngine(profile=profile.label, mode="ensemble")
             return engine.score_panel(factors)
         elif profile.factor_weights:

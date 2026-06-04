@@ -7,6 +7,7 @@ Strategy Engine — 统一选股评分入口
   2. ML 预测（MLPredictor）
   3. Hybrid：α × ML + (1-α) × 因子加权
   4. Ensemble 多组选股（ensemble_union_score）
+  5. Multi-Strategy 多策略并行（多个策略评分加权混合）
 
 设计原则：
   - 策略名称（profile）即配置，不硬编码
@@ -19,6 +20,17 @@ Strategy Engine — 统一选股评分入口
   - mode = "ml"         → 纯 ML 推理
   - mode = "hybrid"     → ML + 因子加权混合
   - mode = "ensemble"   → 多组 Ensemble 选股
+  - mode = "multi"      → 多策略并行（多个策略评分加权混合）
+
+Multi-Strategy 配置（StrategyConfig.multi_strategy）：
+  {
+    "strategies": [
+      {"profile": "v11b_zz800_union", "mode": "ensemble", "weight": 0.5},
+      {"profile": "v10c_zz800_balanced", "mode": "factor", "weight": 0.3},
+      {"profile": "v6b_hlr", "mode": "factor", "weight": 0.2},
+    ]
+  }
+  最终评分 = Σ weight_i × zscore(strategy_i_scores)
 
 Usage (回测):
     from core.strategy import StrategyEngine
@@ -109,15 +121,17 @@ class StrategyEngine:
             return self._score_panel_factor(factors_panel)
         elif self.mode == "ensemble":
             return self._score_panel_ensemble(factors_panel)
+        elif self.mode == "multi":
+            return self._score_panel_multi(factors_panel)
         elif self.mode == "ml":
             raise NotImplementedError(
                 "ML panel 模式用 ml_rolling_train.py 的 run_ml_pipeline()，"
-                "本引擎仅支持 panel 模式的纯因子/ensemble 评分"
+                "本引擎仅支持 panel 模式的纯因子/ensemble/multi 评分"
             )
         elif self.mode == "hybrid":
             raise NotImplementedError(
                 "Hybrid panel 模式用 ml_rolling_train.py --hybrid-alpha，"
-                "本引擎仅支持 panel 模式的纯因子/ensemble 评分"
+                "本引擎仅支持 panel 模式的纯因子/ensemble/multi 评分"
             )
         else:
             raise ValueError(f"未知模式: {self.mode}")
@@ -139,6 +153,61 @@ class StrategyEngine:
             )
         group_top_n = self.prof.ensemble_group_top_n
         return ensemble_union_score(factors_panel, groups, group_top_n)
+
+    def _score_panel_multi(self, factors_panel: dict) -> pd.DataFrame:
+        """多策略并行评分（面板模式）。
+
+        运行多个子策略，各自评分后 z-score 标准化，按权重加权混合。
+        不同策略的评分量纲不同，必须标准化后再混合。
+        """
+        multi_cfg = self.prof.multi_strategy
+        if not multi_cfg or "strategies" not in multi_cfg:
+            raise ValueError(
+                f"策略 {self.profile_name} 的 mode=multi 但 multi_strategy 未配置"
+            )
+
+        sub_strategies = multi_cfg["strategies"]
+        total_weight = sum(s.get("weight", 0) for s in sub_strategies)
+        if total_weight <= 0:
+            raise ValueError("multi_strategy 权重总和必须 > 0")
+
+        # 收集所有子策略的评分
+        all_scores = []  # list of (weight, score_df)
+        for sub in sub_strategies:
+            sub_profile_name = sub["profile"]
+            sub_mode = sub.get("mode", "factor")
+            sub_weight = sub.get("weight", 0) / total_weight  # 归一化
+
+            if sub_profile_name not in STRATEGY_PROFILES:
+                raise ValueError(f"multi_strategy 引用了未知策略: {sub_profile_name}")
+
+            sub_engine = StrategyEngine(profile=sub_profile_name, mode=sub_mode)
+            sub_score = sub_engine.score_panel(factors_panel)
+            all_scores.append((sub_weight, sub_score))
+
+        # 对齐日期和股票
+        first_score = all_scores[0][1]
+        dates = first_score.index
+        stocks = first_score.columns
+        blended = pd.DataFrame(0.0, index=dates, columns=stocks)
+
+        for weight, score_df in all_scores:
+            # 对齐
+            aligned = score_df.reindex(index=dates, columns=stocks).fillna(0.0)
+            # 截面 z-score 标准化
+            for date in dates:
+                day_vals = aligned.loc[date]
+                valid = day_vals[day_vals != 0]
+                if len(valid) < 10:
+                    continue
+                mean = valid.mean()
+                std = valid.std()
+                if std < 1e-10:
+                    continue
+                z = (day_vals - mean) / std
+                blended.loc[date] += weight * z
+
+        return blended
 
     # ── Single-Stock 模式（模拟盘用）──────────────────────────
 
@@ -163,6 +232,8 @@ class StrategyEngine:
             return self._score_single_factor(all_factors)
         elif self.mode == "ensemble":
             return self._score_single_ensemble(all_factors)
+        elif self.mode == "multi":
+            return self._score_single_multi(all_factors)
         elif self.mode == "ml":
             return self._score_single_ml(all_factors)
         elif self.mode == "hybrid":
@@ -188,6 +259,51 @@ class StrategyEngine:
             )
         group_top_n = self.prof.ensemble_group_top_n
         return ensemble_union_score_single(all_factors, groups, group_top_n)
+
+    def _score_single_multi(
+        self, all_factors: Dict[str, Dict[str, float]]
+    ) -> Dict[str, float]:
+        """多策略并行评分（单股模式）。
+
+        运行多个子策略，各自评分后 z-score 标准化，按权重加权混合。
+        """
+        multi_cfg = self.prof.multi_strategy
+        if not multi_cfg or "strategies" not in multi_cfg:
+            raise ValueError(
+                f"策略 {self.profile_name} 的 mode=multi 但 multi_strategy 未配置"
+            )
+
+        sub_strategies = multi_cfg["strategies"]
+        total_weight = sum(s.get("weight", 0) for s in sub_strategies)
+        if total_weight <= 0:
+            raise ValueError("multi_strategy 权重总和必须 > 0")
+
+        all_codes = set(all_factors.keys())
+        blended = {c: 0.0 for c in all_codes}
+
+        for sub in sub_strategies:
+            sub_profile_name = sub["profile"]
+            sub_mode = sub.get("mode", "factor")
+            sub_weight = sub.get("weight", 0) / total_weight
+
+            if sub_profile_name not in STRATEGY_PROFILES:
+                raise ValueError(f"multi_strategy 引用了未知策略: {sub_profile_name}")
+
+            sub_engine = StrategyEngine(profile=sub_profile_name, mode=sub_mode)
+            sub_scores = sub_engine.score_single(all_factors)
+
+            if not sub_scores:
+                continue
+
+            # z-score 标准化
+            vals = np.array(list(sub_scores.values()))
+            mean = vals.mean()
+            std = vals.std() + 1e-10
+            for code in all_codes:
+                z = (sub_scores.get(code, 0.0) - mean) / std
+                blended[code] += sub_weight * z
+
+        return blended
 
     def _score_single_ml(
         self, all_factors: Dict[str, Dict[str, float]]

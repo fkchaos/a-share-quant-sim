@@ -8,12 +8,12 @@ from typing import Dict, Optional
 # ── 可调配置（改这里即可，无需动代码） ──────────────────────────────
 CONFIG = dict(
     # ── 交易成本 ──
-    initial_capital   = 200_000,   # 初始资金
+    initial_capital   = 200000,    # 初始资金
     commission_rate   = 0.0003,    # 佣金率（万3）
     stamp_tax_rate    = 0.001,     # 印花税（千1，卖出收）
     slippage_rate     = 0.001,     # 滑点（千1）
 
-    # ── 风控参数 ──
+    # ── 风控参数（v11b 最优值）──
     stop_loss         = 0.20,      # 止损比例（20%）
     stop_loss_atr_k   = 6.0,       # ATR 动态止损 K 值
     top_n             = 12,        # 持仓数量
@@ -22,11 +22,11 @@ CONFIG = dict(
     max_daily_turnover= 0.30,      # 单日最大换手率
     min_rebalance_interval = 3,    # 最小调仓间隔（交易日）
 
-    # ── 选股参数 ──
-    max_position      = 0.10,      # 单只最大仓位占比（策略级）
-    max_industry_weight = 0.0,     # 行业仓位上限（0=不限制）
+    # ── 选股参数（v11b 最优值）──
+    max_position      = 0.10,      # 单只最大仓位占比
+    max_industry_weight = 0.25,    # 行业仓位上限（25%，v11b WF 最优）
 
-    # ── 波动率缩放 ──
+    # ── 波动率缩放（v11b 最优值）──
     vol_target        = 0.20,      # 目标年化波动率
 )
 

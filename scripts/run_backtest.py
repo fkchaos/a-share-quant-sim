@@ -486,19 +486,18 @@ def param_scan(close_panel, score, param_grid=None):
 # ============================================================
 def walk_forward(close_panel, train_days=252, test_days=63,
                  step_days=63, top_n=12, rebalance_freq=20,
-                 stop_loss=0.20, score=None, label='wf',
-                 factor_weights=None,
-                 ensemble_groups=None, ensemble_group_top_n=4,
+                 stop_loss=0.20, label='wf',
+                 score_fn=None,
                  volume_panel=None, amount_panel=None,
                  high_panel=None, low_panel=None,
+                 run_kwargs=None,
                  **kwargs):
     """Walk-Forward 过拟合检测。
 
     将时间轴上滑动窗口：训练期(约1年) → 测试期(约1季度)
     每一轮回测独立进行，最终拼接样本外净值曲线。
 
-    score: 预计算的评分矩阵 (DataFrame dates×stocks)，如果提供则直接使用
-    factor_weights: 策略因子权重 dict，用于构建评分函数
+    score_fn: 评分函数 fn(factors_panel) -> score_df，必须提供
     volume_panel/amount_panel/high_panel/low_panel: 完整的面板数据（用于 WF 切片）
     """
     dates = close_panel.index
@@ -507,21 +506,10 @@ def walk_forward(close_panel, train_days=252, test_days=63,
     fold_navs = []
     fold = 0
 
-    # 构建评分函数 (supports factor_weights and ensemble_groups)
-    from core.scoring import composite_score, ensemble_union_score
-    if ensemble_groups is not None:
-        _eg = ensemble_groups
-        _egn = ensemble_group_top_n
-        score_fn = lambda factors, w=None: ensemble_union_score(factors, _eg, _egn)
-    elif factor_weights is not None:
-        def _make_score(factors, weights=factor_weights):
-            return composite_score(
-                {k: v for k, v in factors.items() if k in weights},
-                weights
-            )
-        score_fn = _make_score
-    else:
-        score_fn = lambda factors, w=None: composite_score(factors)
+    if score_fn is None:
+        raise ValueError("walk_forward 必须提供 score_fn 参数")
+    if run_kwargs is None:
+        run_kwargs = {}
 
     # volume/amount/high/low 面板切片辅助函数
     def _slice_panel(panel, idx):
@@ -565,6 +553,7 @@ def walk_forward(close_panel, train_days=252, test_days=63,
             top_n=top_n, rebalance_freq=rebalance_freq,
             stop_loss=stop_loss, label=f'{label}_fold{fold}',
             warmup_days=_warmup,
+            **run_kwargs,
         )
 
         fold_results.append({
@@ -891,6 +880,12 @@ def main():
         else:
             return score_equal
 
+    def _mode_for_profile(profile):
+        if profile.multi_strategy: return "multi"
+        if profile.ensemble_groups: return "ensemble"
+        if profile.factor_weights: return "factor"
+        return "factor"
+
     if run_all:
         for name, profile in sorted(STRATEGY_PROFILES.items()):
             score = _build_score_for_profile(profile)
@@ -942,17 +937,20 @@ def main():
         # 对每个策略分别跑 WF
         for cfg in configs:
             profile = STRATEGY_PROFILES.get(cfg['label'])
-            fw = profile.factor_weights if profile else None
-            eg = profile.ensemble_groups if profile else None
-            egn = profile.ensemble_group_top_n if profile else 4
+            # 用 StrategyEngine 构建统一的评分函数（支持 factor/ensemble/multi）
+            _engine = StrategyEngine(profile=cfg['label'], mode=_mode_for_profile(profile))
+            score_fn = lambda factors, eng=_engine: eng.score_panel(factors)
             print(f"\n  --- WF: {cfg['label']} ---")
+            # 从 cfg 提取 run_backtest 的风控参数（止盈/衰减/行业限制等）
+            _rk = {k: v for k, v in cfg['kwargs'].items()
+                   if k not in ('top_n', 'rebalance_freq', 'stop_loss', 'label', 'score', 'exec_timing', 'open_panel')}
             wf_results, wf_nav = walk_forward(
                 close_panel,
                 top_n=top_n, rebalance_freq=rebal_freq, stop_loss=sl,
-                factor_weights=fw, label=cfg['label'],
-                ensemble_groups=eg, ensemble_group_top_n=egn,
+                label=cfg['label'], score_fn=score_fn,
                 volume_panel=volume_panel, amount_panel=amount_panel,
                 high_panel=high_panel, low_panel=low_panel,
+                run_kwargs=_rk,
             )
             if wf_results:
                 print(f"\n  Walk-Forward 汇总 {cfg['label']} ({len(wf_results)} folds):")

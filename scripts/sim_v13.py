@@ -430,7 +430,8 @@ def run_intraday_signal():
         "buy_plan": buy_plan,
     }
 
-    with open(V13_PLAN_FILE, "w") as f:
+    plan_file = os.path.join(PORTFOLIO_DIR, "trade_plan_v13.json")
+    with open(plan_file, "w") as f:
         json.dump(plan, f, indent=2, default=str, ensure_ascii=False)
 
     logger.info(f"✅ 计划已保存: 卖{len(sell_plan)} 买{len(buy_plan)} 持{len(hold_plan)}")

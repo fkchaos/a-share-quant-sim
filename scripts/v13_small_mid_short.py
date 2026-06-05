@@ -30,22 +30,22 @@ REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 # ============================================================
 class V13Config:
     # 选股池（用流动性近似）
-    min_liquidity = 500     # 最小日均成交额 500万
-    max_liquidity = 5000    # 最大日均成交额 5000万
+    min_liquidity = 300     # 最小日均成交额 300万（放宽）
+    max_liquidity = 10000   # 最大日均成交额 1亿（放宽）
     exclude_st = True             # 排除 ST
     exclude_new_ipo_days = 60     # 排除上市 60 天内的新股
 
     # 因子参数
     rev_lookback = 5              # 短期反转回看天数
     vol_lookback = 10             # 量能回看天数
-    rev_threshold = -0.03         # 反转阈值（5日跌幅 > 3%）
-    vol_ratio_threshold = 1.5     # 放量阈值（当日量 / 10日均量）
+    rev_threshold = -0.02         # 反转阈值（5日跌幅 > 2%，放宽）
+    vol_ratio_threshold = 1.3     # 放量阈值（当日量 / 10日均量，放宽）
 
     # 择时参数
-    market_rev_threshold = -0.02   # 市场 5 日跌幅 > 2% 才选股
-    max_daily_buy = 5              # 每日最多买 5 只
-    max_holdings = 8               # 最大持仓 8 只
-    max_position = 0.20           # 单只最大仓位 20%
+    market_rev_threshold = -0.01   # 市场 5 日跌幅 > 1% 才选股（放宽）
+    max_daily_buy = 8              # 每日最多买 8 只（增加）
+    max_holdings = 10              # 最大持仓 10 只（增加）
+    max_position = 0.15           # 单只最大仓位 15%（降低，分散风险）
     hold_days_max = 5             # 最大持仓天数（反转效应需要 3-5 天）
     hold_days_min = 2             # 最小持仓天数
 
@@ -86,11 +86,9 @@ def load_small_cap_panel(start_date='2021-01-01', end_date='2026-05-31'):
     # 用 20 日平均成交额近似流动性（单位：万元）
     avg_amount = amount_panel.rolling(20).mean() / 1e4
 
-    # 筛选流动性适中的股票（日均成交额 500万-5000万）
-    # 太小：流动性差，冲击成本高
-    # 太大：不是小市值
-    min_liquidity = 500    # 500万
-    max_liquidity = 5000   # 5000万
+    # 筛选流动性适中的股票
+    min_liquidity = V13Config.min_liquidity
+    max_liquidity = V13Config.max_liquidity
 
     valid_count = 0
     for date in close_panel.index:
@@ -154,7 +152,7 @@ def select_stocks(factors, date, close_panel, volume_panel, amount_panel, curren
     avg_amount = amount_panel.rolling(20).mean() / 1e4  # 万元
     if date in avg_amount.index:
         day_amount = avg_amount.loc[date]
-        liquid_mask = (day_amount > 500) & (day_amount < 5000)
+        liquid_mask = (day_amount > V13Config.min_liquidity) & (day_amount < V13Config.max_liquidity)
         liquid_stocks = set(day_amount[liquid_mask].dropna().index)
     else:
         liquid_stocks = set(close_panel.columns)
@@ -306,60 +304,51 @@ def run_v13_backtest():
         # 3. 选股
         candidates = select_stocks(factors, date, close_panel, volume_panel, amount_panel, holdings)
 
-        # 4. 买入（择时：市场超跌时才买，且持仓未满）
+        # 4. 买入（持仓未满才买，择时已通过选股因子隐式控制：反转因子天然是跌了才买）
         if candidates and cash > initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
-            # 择时：检查市场是否超跌
-            if i > 5:
-                market_5d_rev = close_panel.iloc[i] / close_panel.iloc[i-5] - 1
-                # 用全市场 5 日跌幅近似
-                avg_market_rev = market_5d_rev.mean()
-                if avg_market_rev > cfg.market_rev_threshold:
-                    # 市场没有超跌，不买
-                    pass
-                else:
-                    # 执行买入
-                    available_cash = cash - initial_capital * 0.1
-                    per_stock = min(available_cash / min(len(candidates), V13Config.max_daily_buy), initial_capital * cfg.max_position)
+            # 执行买入
+            available_cash = cash - initial_capital * 0.1
+            per_stock = min(available_cash / min(len(candidates), V13Config.max_daily_buy), initial_capital * cfg.max_position)
 
-                    for code in candidates[:V13Config.max_daily_buy]:
-                        if code not in price_data.index:
-                            continue
-                        buy_price = open_data[code] if code in open_data.index else price_data[code]
-                        if pd.isna(buy_price) or buy_price <= 0:
-                            continue
+            for code in candidates[:V13Config.max_daily_buy]:
+                if code not in price_data.index:
+                    continue
+                buy_price = open_data[code] if code in open_data.index else price_data[code]
+                if pd.isna(buy_price) or buy_price <= 0:
+                    continue
 
-                        # 涨跌停检查：如果涨停则不买（买不到）
-                        if i > 0:
-                            prev_close = close_panel.iloc[i-1][code] if code in close_panel.columns else None
-                            if prev_close and not pd.isna(prev_close) and prev_close > 0:
-                                limit_up = prev_close * 1.10
-                                if buy_price >= limit_up * 0.99:
-                                    continue
-
-                        # 计算可买股数（100 股整数倍）
-                        adj_price = buy_price * (1 + cfg.commission_rate + cfg.slippage_rate)
-                        shares = int(per_stock / adj_price / 100) * 100
-                        if shares <= 0:
+                # 涨跌停检查：如果涨停则不买（买不到）
+                if i > 0:
+                    prev_close = close_panel.iloc[i-1][code] if code in close_panel.columns else None
+                    if prev_close and not pd.isna(prev_close) and prev_close > 0:
+                        limit_up = prev_close * 1.10
+                        if buy_price >= limit_up * 0.99:
                             continue
 
-                        cost = shares * adj_price
-                        if cost > cash:
-                            continue
+                # 计算可买股数（100 股整数倍）
+                adj_price = buy_price * (1 + cfg.commission_rate + cfg.slippage_rate)
+                shares = int(per_stock / adj_price / 100) * 100
+                if shares <= 0:
+                    continue
 
-                        cash -= cost
-                        holdings[code] = {
-                            'shares': shares,
-                            'cost': buy_price,
-                            'hold_days': 0,
-                        }
-                        trade_log.append({
-                            'date': str(date.date()),
-                            'code': code,
-                            'action': 'buy',
-                            'price': round(buy_price, 2),
-                            'shares': shares,
-                            'value': round(cost, 2),
-                        })
+                cost = shares * adj_price
+                if cost > cash:
+                    continue
+
+                cash -= cost
+                holdings[code] = {
+                    'shares': shares,
+                    'cost': buy_price,
+                    'hold_days': 0,
+                }
+                trade_log.append({
+                    'date': str(date.date()),
+                    'code': code,
+                    'action': 'buy',
+                    'price': round(buy_price, 2),
+                    'shares': shares,
+                    'value': round(cost, 2),
+                })
 
         # 5. 计算 NAV
         portfolio_value = cash

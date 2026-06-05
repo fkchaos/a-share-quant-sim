@@ -99,41 +99,37 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         # 3. 选股
         candidates = _select_stocks_inline(factors, date, close_panel, volume_panel, amount_panel, holdings)
 
-        # 4. 买入
+        # 4. 买入（择时已通过选股因子隐式控制）
         if candidates and cash > initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
-            if i > 5:
-                market_5d_rev = close_panel.iloc[i] / close_panel.iloc[i-5] - 1
-                avg_market_rev = market_5d_rev.mean()
-                if avg_market_rev <= cfg.market_rev_threshold:
-                    available_cash = cash - initial_capital * 0.1
-                    per_stock = min(available_cash / min(len(candidates), cfg.max_daily_buy),
-                                    initial_capital * cfg.max_position)
-                    for code in candidates[:cfg.max_daily_buy]:
-                        if code not in price_data.index:
+            available_cash = cash - initial_capital * 0.1
+            per_stock = min(available_cash / min(len(candidates), cfg.max_daily_buy),
+                            initial_capital * cfg.max_position)
+            for code in candidates[:cfg.max_daily_buy]:
+                if code not in price_data.index:
+                    continue
+                buy_price = open_data.get(code, price_data.get(code, None))
+                if buy_price is None or pd.isna(buy_price) or buy_price <= 0:
+                    continue
+                # 涨停检查
+                if i > 0:
+                    prev_close = close_panel.iloc[i-1].get(code, None)
+                    if prev_close and not pd.isna(prev_close) and prev_close > 0:
+                        limit_up = prev_close * 1.10
+                        if buy_price >= limit_up * 0.99:
                             continue
-                        buy_price = open_data.get(code, price_data.get(code, None))
-                        if buy_price is None or pd.isna(buy_price) or buy_price <= 0:
-                            continue
-                        # 涨停检查
-                        if i > 0:
-                            prev_close = close_panel.iloc[i-1].get(code, None)
-                            if prev_close and not pd.isna(prev_close) and prev_close > 0:
-                                limit_up = prev_close * 1.10
-                                if buy_price >= limit_up * 0.99:
-                                    continue
-                        adj_price = buy_price * (1 + cfg.commission_rate + cfg.slippage_rate)
-                        shares = int(per_stock / adj_price / 100) * 100
-                        if shares <= 0:
-                            continue
-                        cost = shares * adj_price
-                        if cost > cash:
-                            continue
-                        cash -= cost
-                        holdings[code] = {'shares': shares, 'cost': buy_price, 'hold_days': 0}
-                        trade_log.append({
-                            'date': str(date.date()), 'code': code, 'action': 'buy',
-                            'price': round(buy_price, 2), 'shares': shares,
-                        })
+                adj_price = buy_price * (1 + cfg.commission_rate + cfg.slippage_rate)
+                shares = int(per_stock / adj_price / 100) * 100
+                if shares <= 0:
+                    continue
+                cost = shares * adj_price
+                if cost > cash:
+                    continue
+                cash -= cost
+                holdings[code] = {'shares': shares, 'cost': buy_price, 'hold_days': 0}
+                trade_log.append({
+                    'date': str(date.date()), 'code': code, 'action': 'buy',
+                    'price': round(buy_price, 2), 'shares': shares,
+                })
 
         # 5. NAV
         portfolio_value = cash
@@ -156,7 +152,7 @@ def _select_stocks_inline(factors, date, close_panel, volume_panel, amount_panel
     avg_amount = amount_panel.rolling(20).mean() / 1e4
     if date in avg_amount.index:
         day_amount = avg_amount.loc[date]
-        liquid_mask = (day_amount > 500) & (day_amount < 5000)
+        liquid_mask = (day_amount > V13Config.min_liquidity) & (day_amount < V13Config.max_liquidity)
         liquid_stocks = set(day_amount[liquid_mask].dropna().index)
     else:
         liquid_stocks = set(close_panel.columns)

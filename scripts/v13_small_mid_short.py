@@ -43,9 +43,9 @@ class V13Config:
 
     # 择时参数
     market_rev_threshold = -0.01   # 市场 5 日跌幅 > 1% 才选股（放宽）
-    max_daily_buy = 8              # 每日最多买 8 只（增加）
-    max_holdings = 10              # 最大持仓 10 只（增加）
-    max_position = 0.15           # 单只最大仓位 15%（降低，分散风险）
+    max_daily_buy = 6              # 每日最多买 6 只
+    max_holdings = 8               # 最大持仓 8 只
+    max_position = 0.20            # 单只最大仓位 20%
     hold_days_max = 5             # 最大持仓天数（反转效应需要 3-5 天）
     hold_days_min = 2             # 最小持仓天数
 
@@ -53,7 +53,7 @@ class V13Config:
     stop_loss = -0.05             # 个股止损 -5%
     stop_profit = 0.05            # 个股止盈 5%
     daily_max_dd = -0.03          # 单日最大回撤 -3% 清仓
-    initial_capital = 500000      # 初始资金 50万
+    initial_capital = 200000      # 初始资金 20万
 
     # 交易成本（小资金费率更高）
     commission_rate = 0.0003      # 佣金万三

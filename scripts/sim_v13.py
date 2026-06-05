@@ -26,9 +26,14 @@ from indices import get_index_trends
 
 # ── Config ─────────────────────────────────────────────────────────
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
-PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio_v13")
+PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
+
+# v13 使用独立的 account 文件，避免与 v7 (v11b) 冲突
+V13_ACCOUNT_FILE = os.path.join(PORTFOLIO_DIR, "account_v13.json")
+V13_TRADE_COUNT_FILE = os.path.join(PORTFOLIO_DIR, "trade_count_v13.txt")
+V13_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v13.json")
 
 # v13 策略参数
 INITIAL_CAPITAL = 200000
@@ -54,9 +59,8 @@ logger = logging.getLogger("sim_v13")
 # ── 账户操作 ──────────────────────────────────────────────────────
 def load_account():
     """加载账户状态"""
-    account_file = os.path.join(PORTFOLIO_DIR, "account.json")
-    if os.path.exists(account_file):
-        with open(account_file) as f:
+    if os.path.exists(V13_ACCOUNT_FILE):
+        with open(V13_ACCOUNT_FILE) as f:
             data = json.load(f)
         state = PortfolioState(
             cash=data.get("cash", INITIAL_CAPITAL),
@@ -70,14 +74,13 @@ def load_account():
 
 def save_account(state):
     """保存账户状态"""
-    account_file = os.path.join(PORTFOLIO_DIR, "account.json")
     data = {
         "cash": state.cash,
         "initial_capital": state.initial_capital,
         "holdings": state.holdings,
         "trade_log": state.trade_log,
     }
-    with open(account_file, "w") as f:
+    with open(V13_ACCOUNT_FILE, "w") as f:
         json.dump(data, f, indent=2, default=str, ensure_ascii=False)
 
 
@@ -427,8 +430,7 @@ def run_intraday_signal():
         "buy_plan": buy_plan,
     }
 
-    plan_file = os.path.join(PORTFOLIO_DIR, "trade_plan.json")
-    with open(plan_file, "w") as f:
+    with open(V13_PLAN_FILE, "w") as f:
         json.dump(plan, f, indent=2, default=str, ensure_ascii=False)
 
     logger.info(f"✅ 计划已保存: 卖{len(sell_plan)} 买{len(buy_plan)} 持{len(hold_plan)}")
@@ -447,12 +449,11 @@ def run_intraday_execute():
     logger.info(f"现金: ¥{state.cash:,.0f}, 持仓: {len(state.holdings)} 只")
 
     # 加载 plan
-    plan_file = os.path.join(PORTFOLIO_DIR, "trade_plan.json")
-    if not os.path.exists(plan_file):
+    if not os.path.exists(V13_PLAN_FILE):
         logger.error("没有找到操作计划，请先运行上午信号")
         return None
 
-    with open(plan_file) as f:
+    with open(V13_PLAN_FILE) as f:
         plan = json.load(f)
 
     # 日期校验

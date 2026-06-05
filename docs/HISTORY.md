@@ -311,3 +311,52 @@ cron 收盘 job 调用 `run_day_end()` 执行完整流程（止损/止盈/decay/
 - 删除远端 `feature/ml-rolling` 分支（功能已在 main 中）
 - 删除本地 `dev-tmp`、`intraday-sim`、`unify-core-engine` 旧分支
 - `release/default` 与 `main` 同步
+
+---
+
+## 2026-06-10~11: v13 小市值中短线策略开发
+
+### 背景
+在 v11b 中线策略之外，建立一套独立的中短线策略，捕捉小市值股票的超跌反弹机会。
+
+### 架构决策
+- **独立脚本**：`sim_v13.py`（不复用 sim_daily_v7.py），避免耦合
+- **独立账户**：`account_v13.json`（v11b 用 `account.json`）
+- **独立 cron**：v13 三阶段 cron job 与 v11b 并行运行
+- **路径可配置**：`DATA_DIR` 和 `PORTFOLIO_DIR` 通过环境变量覆盖
+
+### 关键 bug 修复
+1. **market cap 估算错误**：`close*volume = 成交额 ≠ 市值`，改用流动性（成交额）过滤
+2. **硬择时导致空闲**：市场跌2%才买 → 72% 空闲时间，移除
+3. **趋势择时无效**：20MA/60MA 仓位缩放降低 Sharpe 1.03→0.74，回退
+4. **路径不统一**：v13 和 v7 账户路径不一致，统一到 `/root/data/portfolio/`
+5. **account 格式不标准**：holdings 缺少 `entry_date`，补充标准化格式
+
+### account 格式标准化
+```json
+{
+  "cash": 200000.0,
+  "initial_capital": 200000,
+  "holdings": {
+    "600522": {
+      "shares": 300,
+      "cost_price": 42.25,
+      "entry_date": "2026-06-05",
+      "hold_days": 3
+    }
+  }
+}
+```
+- `entry_date`：YYYY-MM-DD 格式
+- `hold_days`：由 `entry_date` 自动计算，不手动递增
+- 兼容旧格式（load 时自动补全）
+
+### WF 结果
+- 平均年化 13.2%，Sharpe 1.03，正收益 fold 15/16 (94%)
+- 弱周期：2023、2024Q1-Q2、2025Q1（震荡市）
+
+### 教训
+1. **新策略独立脚本优于复用**：避免改坏已有策略
+2. **路径必须可配置**：硬编码路径在环境迁移时会出问题
+3. **account 格式要标准化**：entry_date + hold_days 自动计算比手动递增可靠
+4. **趋势择时在小市值中短线无效**：A 股小市值反转策略自带择时属性

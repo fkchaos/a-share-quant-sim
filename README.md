@@ -47,31 +47,31 @@
 - **交易成本**: 佣金 0.03% / 印花税 0.1%(卖出) / 滑点 0.1% / 100 股整数倍
 - **数据质量**: 过期/空值/异常涨跌/复权跳变四维检查
 
-## 当前最优策略
+## 当前策略
 
-**v11b_zz800_union** — Ensemble 多组选股策略（2026-06-05 更新）
+### 模拟盘 A：v11b_zz800_union（中线）
+- **模式**：Ensemble 多组选股（3组×4因子，并集）
+- **选股池**：中证800（715只）
+- **WF 验证**：✅ 63.7% / 1.70 / 69%
+- **脚本**：`scripts/sim_daily_v7.py`
 
-| 指标 | 全量回测 | Walk-Forward（样本外） |
-|------|---------|----------------------|
-| 年化收益 | 26.25% | 63.7%（16 folds 平均） |
-| 夏普比率 | 1.05 | 1.70 |
-| 最大回撤 | -25.97% | — |
-| 正收益 fold | — | 11/16 (69%) |
+### 模拟盘 B：v13_small_mid_short（中短线）
+- **模式**：规则化因子选股（5日反转 + 量价异动 + 振幅收窄）
+- **选股池**：中证800 + 流动性过滤（300万-1亿）
+- **WF 验证**：✅ 13.2% / 1.03 / 94%
+- **脚本**：`scripts/sim_v13.py`
+- **初始资金**：20万，独立账户 `account_v13.json`
 
-**因子组配置**：
-- Momentum(4): mom_20, mom_10, rsi_14, high_low_range
-- Volatility(4): vol_60, vol_20, vol_10, boll_width_20
-- Reversal(4): rev_10, rev_5, rsi_6, boll_pos_10
-
-> 数据：中证800 成分股 715 只，2021-01 ~ 2026-06，初始资金 20 万
+> 数据：中证800 成分股 715 只，2021-01 ~ 2026-06
 
 ## 策略对比（2021-01 ~ 2026-06，中证800 选股池）
 
 | 策略 | 全量年化 | 全量夏普 | WF年化 | WF夏普 | 正收益fold | 状态 |
 |------|---------|---------|--------|--------|-----------|------|
-| **v11b_zz800_union** | 26.25% | 1.05 | **63.7%** | **1.70** | **11/16 (69%)** | ⭐ 当前最优 |
+| **v11b_zz800_union** | 26.25% | 1.05 | **63.7%** | **1.70** | **11/16 (69%)** | ⭐ 中线最优 |
 | v10c_zz800_balanced | 37.33% | 1.30 | 32.9% | 0.61 | 7/16 (44%) | WF未通过 |
 | v6b_hlr | 22.64% | 1.23 | 10.5% | 0.41 | 11/16 (69%) | 稳定基准 |
+| **v13_small_mid_short** | — | — | **13.2%** | **1.03** | **15/16 (94%)** | ✅ 中短线 |
 
 > 完整策略列表见 [docs/STRATEGY_REGISTRY.md](docs/STRATEGY_REGISTRY.md)
 
@@ -89,10 +89,15 @@ BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data.py
 # 回测最优策略 + Walk-Forward 验证
 BACKTEST_DATA_DIR=/root/data python scripts/run_backtest.py --strategy v11b_zz800_union --walk-forward
 
-# 模拟盘三阶段
+# 模拟盘三阶段（v11b 中线）
 BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_signal   # 上午信号
 BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_execute  # 下午执行
 BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py report_only       # 收盘报告
+
+# 模拟盘三阶段（v13 中短线）
+BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_signal   # 上午信号
+BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_execute  # 下午执行
+BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py report_only       # 收盘报告
 
 # 测试
 python -m pytest tests/test_sim_trading.py tests/test_ensemble.py -v  # 58 tests
@@ -113,9 +118,12 @@ a-share-quant-sim/
 │   ├── ml.py                   # ML 训练/预测（Walk-Forward 回测用）
 │   └── ml_predictor.py         # ML 离线训练 + 在线推理
 ├── scripts/
-│   ├── sim_daily_v7.py         # ⭐ 每日模拟盘（三阶段）
+│   ├── sim_daily_v7.py         # ⭐ 每日模拟盘 A（v11b 中线，三阶段）
+│   ├── sim_v13.py              # ⭐ 每日模拟盘 B（v13 中短线，三阶段）
 │   ├── run_backtest.py         # 统一回测引擎（含 WF）
 │   ├── update_daily_data.py    # 数据更新：腾讯 API → CSV
+│   ├── v13_small_mid_short.py  # v13 回测脚本
+│   ├── v13_walk_forward.py     # v13 WF 检测
 │   ├── ic_analysis_zz800.py    # 中证800 IC/IR 分析
 │   ├── init_zz800_data.py      # 数据初始化
 │   ├── fill_daily_gaps.py      # 缺口填充

@@ -663,8 +663,8 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
         plan = json.load(f)
 
     # 校验：trade_plan 必须是今天生成的（防止执行过期计划）
-    plan_date = str(plan.get('date', '')).split('_')[0]
-    today_str = str(date).split('_')[0]
+    plan_date = str(plan.get('date', '')).split(' ')[0].split('_')[0]
+    today_str = str(date).split(' ')[0].split('_')[0]
     if plan_date != today_str:
         logger.warning(f"trade_plan.json 日期 ({plan.get('date')}) 与当前日期 ({date}) 不符，跳过执行")
         return state, plan
@@ -918,57 +918,76 @@ def run_intraday_signal():
     # Step 3: 数据质量
     quality_blocked = step_data_quality(files, date)
 
-    # Step 4: 风控检查（止损/止盈/decay），结果记录到 risk_sell/risk_hold
+    # Step 4: 风控检查（止损/止盈/decay）— 只生成信号，不修改 state
+    # 所有风控操作在下午执行时统一处理（考虑跌停等执行失败情况）
     risk_sell = []  # [{code, name, shares, price, reason}]
-    risk_hold = []  # [{code, name, current_shares, new_shares, price, reason}]
     if not quality_blocked:
-        # 止损检查
-        prev_holdings = set(state.holdings.keys())
-        state, stopped = step_check_stop_loss(state, date, price_data, names)
-        for code in stopped:
-            p = price_data.get(code, 0)
-            risk_sell.append({'code': code, 'name': names.get(code, code),
-                              'shares': 'all', 'price': float(p) if p > 0 else 0,
-                              'reason': '止损'})
-        # 分级止盈
+        # 止损检查（不修改 state，只记录信号）
+        for code, h in state.holdings.items():
+            if code not in price_data.index:
+                continue
+            p = price_data[code]
+            if pd.isna(p) or p <= 0:
+                continue
+            pnl_pct = (p - h['cost_price']) / h['cost_price']
+            if pnl_pct <= -0.20:  # 20% 止损线
+                risk_sell.append({'code': code, 'name': names.get(code, code),
+                                  'shares': 'all', 'price': float(p),
+                                  'reason': '止损'})
+
+        # 分级止盈（不修改 state，只记录信号）
         if _strategy_profile.use_take_profit:
-            prev_shares = {c: h['shares'] for c, h in state.holdings.items()}
-            state = step_check_take_profit(state, date, price_data, names)
-            for code in prev_shares:
-                if code in state.holdings and state.holdings[code]['shares'] < prev_shares[code]:
-                    p = price_data.get(code, 0)
-                    sell_shares = prev_shares[code] - state.holdings[code]['shares']
-                    risk_sell.append({'code': code, 'name': names.get(code, code),
-                                      'shares': sell_shares, 'price': float(p) if p > 0 else 0,
-                                      'reason': '分级止盈'})
-                elif code not in state.holdings:
-                    p = price_data.get(code, 0)
-                    risk_sell.append({'code': code, 'name': names.get(code, code),
-                                      'shares': 'all', 'price': float(p) if p > 0 else 0,
-                                      'reason': '分级止盈清仓'})
-        # 持有期 decay
+            tp_tiers = _strategy_profile.tp_tiers or [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
+            for code, h in state.holdings.items():
+                if code not in price_data.index:
+                    continue
+                p = price_data[code]
+                if pd.isna(p) or p <= 0:
+                    continue
+                pnl_pct = (p - h['cost_price']) / h['cost_price']
+                # 检查是否触发止盈
+                for tier_pct, sell_ratio in tp_tiers:
+                    if pnl_pct >= tier_pct:
+                        # 检查该档位是否已经执行过
+                        tier_key = f"tp_{int(tier_pct*100)}"
+                        if tier_key not in h.get('tp_taken', []):
+                            sell_shares = int(h['shares'] * sell_ratio / 100) * 100
+                            if sell_shares > 0:
+                                risk_sell.append({'code': code, 'name': names.get(code, code),
+                                                  'shares': sell_shares, 'price': float(p),
+                                                  'reason': f'分级止盈{int(tier_pct*100)}%'})
+                            break
+
+        # 持有期 decay（不修改 state，只记录信号）
         if _strategy_profile.use_holding_decay:
-            prev_shares = {c: h['shares'] for c, h in state.holdings.items()}
-            state = step_holding_decay(state, date, price_data, names)
-            for code in prev_shares:
-                if code in state.holdings and state.holdings[code]['shares'] < prev_shares[code]:
-                    p = price_data.get(code, 0)
-                    sell_shares = prev_shares[code] - state.holdings[code]['shares']
-                    risk_sell.append({'code': code, 'name': names.get(code, code),
-                                      'shares': sell_shares, 'price': float(p) if p > 0 else 0,
-                                      'reason': '持有期decay'})
+            for code, h in state.holdings.items():
+                if code not in price_data.index:
+                    continue
+                p = price_data[code]
+                if pd.isna(p) or p <= 0:
+                    continue
+                # 计算持有天数
+                entry_date = h.get('entry_date', '')
+                if entry_date:
+                    try:
+                        entry = datetime.strptime(str(entry_date)[:10], '%Y-%m-%d')
+                        hold_days = (datetime.now() - entry).days
+                    except Exception:
+                        hold_days = 0
+                    # 超过 20 天开始 decay
+                    if hold_days > 20:
+                        decay_ratio = min((hold_days - 20) * 0.02, 0.5)  # 每天衰减 2%，最多 50%
+                        sell_shares = int(h['shares'] * decay_ratio / 100) * 100
+                        if sell_shares > 0:
+                            risk_sell.append({'code': code, 'name': names.get(code, code),
+                                              'shares': sell_shares, 'price': float(p),
+                                              'reason': '持有期decay'})
 
     # Step 5: 生成调仓信号
     plan = step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_sell)
 
-    # 保存风控+信号后的 state（含止损/止盈/decay 的持仓变化）
-    if risk_sell:
-        tc_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")
-        tc = 0
-        if os.path.exists(tc_file):
-            with open(tc_file) as f:
-                tc = int(f.read().strip())
-        step_save_state(state, tc)
+    # 上午信号不修改 account.json，所有操作在下午执行
+    # state 保持不变，下午执行时会重新加载 account.json
 
     return plan
 

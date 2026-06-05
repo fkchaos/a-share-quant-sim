@@ -234,25 +234,6 @@ def run_v13_backtest():
         price_data = close_panel.loc[date]
         open_data = open_panel.loc[date] if open_panel is not None else price_data
 
-        # 0. 市场趋势判断（用全市场 20 日/60 日均线）
-        if i >= 60:
-            market_20ma = close_panel.iloc[i-20:i].mean().mean()
-            market_60ma = close_panel.iloc[i-60:i].mean().mean()
-            # market_state: 'trend'（趋势市，20>60）, 'range'（震荡市，20≈60）, 'bear'（空头，20<60）
-            ma_ratio = market_20ma / market_60ma if market_60ma > 0 else 1.0
-            if ma_ratio > 1.02:
-                market_state = 'trend'   # 趋势市：满仓操作
-                position_scale = 1.0
-            elif ma_ratio > 0.98:
-                market_state = 'range'   # 震荡市：半仓操作
-                position_scale = 0.5
-            else:
-                market_state = 'bear'    # 空头市：轻仓操作
-                position_scale = 0.3
-        else:
-            market_state = 'trend'
-            position_scale = 1.0
-
         # 1. 更新持仓天数
         for code in holdings:
             holdings[code]['hold_days'] += 1
@@ -323,14 +304,11 @@ def run_v13_backtest():
         # 3. 选股
         candidates = select_stocks(factors, date, close_panel, volume_panel, amount_panel, holdings)
 
-        # 4. 买入（结合市场趋势调整仓位）
+        # 4. 买入（持仓未满才买，择时已通过选股因子隐式控制：反转因子天然是跌了才买）
         if candidates and cash > initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
-            if position_scale > 0:  # 空头市且 scale=0 时不买
-                # 执行买入
-                available_cash = cash - initial_capital * 0.1
-                # 用 position_scale 缩放仓位：趋势市满仓，震荡市半仓，空头市轻仓
-                max_pos = initial_capital * cfg.max_position * position_scale
-                per_stock = min(available_cash / min(len(candidates), V13Config.max_daily_buy), max_pos)
+            # 执行买入
+            available_cash = cash - initial_capital * 0.1
+            per_stock = min(available_cash / min(len(candidates), V13Config.max_daily_buy), initial_capital * cfg.max_position)
 
             for code in candidates[:V13Config.max_daily_buy]:
                 if code not in price_data.index:

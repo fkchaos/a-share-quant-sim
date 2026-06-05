@@ -49,20 +49,6 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         price_data = close_panel.loc[date]
         open_data = open_panel.loc[date] if open_panel is not None else price_data
 
-        # 0. 市场趋势判断
-        if i >= 60:
-            market_20ma = close_panel.iloc[i-20:i].mean().mean()
-            market_60ma = close_panel.iloc[i-60:i].mean().mean()
-            ma_ratio = market_20ma / market_60ma if market_60ma > 0 else 1.0
-            if ma_ratio > 1.02:
-                position_scale = 1.0
-            elif ma_ratio > 0.98:
-                position_scale = 0.5
-            else:
-                position_scale = 0.3
-        else:
-            position_scale = 1.0
-
         # 1. 更新持仓天数
         for code in holdings:
             holdings[code]['hold_days'] += 1
@@ -113,12 +99,11 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         # 3. 选股
         candidates = _select_stocks_inline(factors, date, close_panel, volume_panel, amount_panel, holdings)
 
-        # 4. 买入（结合市场趋势调整仓位）
+        # 4. 买入（择时已通过选股因子隐式控制）
         if candidates and cash > initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
-            if position_scale > 0:
-                available_cash = cash - initial_capital * 0.1
-                max_pos = initial_capital * cfg.max_position * position_scale
-                per_stock = min(available_cash / min(len(candidates), cfg.max_daily_buy), max_pos)
+            available_cash = cash - initial_capital * 0.1
+            per_stock = min(available_cash / min(len(candidates), cfg.max_daily_buy),
+                            initial_capital * cfg.max_position)
             for code in candidates[:cfg.max_daily_buy]:
                 if code not in price_data.index:
                     continue

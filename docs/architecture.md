@@ -2,7 +2,7 @@
 
 > 面向开发者的实现逻辑与框架说明
 >
-> 最后更新：2026-06-05（config.yaml 删除，配置统一到 core/config.py）
+> 最后更新：2026-06-05（StrategyEngine 新增 mode='multi' 多策略并行）
 
 ## 一、整体架构：共享引擎 + 策略 Profile 模式
 
@@ -69,7 +69,7 @@
 - `core/` 是纯数据结构和函数 — 无 I/O、无副作用
 - `STRATEGY_PROFILES` 是策略参数唯一权威来源（回测+模拟盘共用）
 - 因子权重唯一权威来源是 `core/config.py` 的 `DEFAULT_FACTOR_WEIGHTS`
-- **策略评分统一入口**：`StrategyEngine`（factor/ensemble/ml/hybrid 四种模式）
+- **策略评分统一入口**：`StrategyEngine`（factor/ensemble/ml/hybrid/multi 五种模式）
 - **ML 训练/推理分离**：`train_and_save()` 离线训练 → `MLPredictor` 在线推理
 - **上午信号 = 策略决策**（风控+调仓 → plan）；**下午执行 = 纯执行**（按 plan 买卖）
 
@@ -225,11 +225,11 @@ class MLPredictor:
 class StrategyEngine:
     """
     统一选股评分引擎。
-    支持 factor / ensemble / ml / hybrid 四种模式。
+    支持 factor / ensemble / ml / hybrid / multi 五种模式。
     通过 config/strategy_config.json 配置。
     """
     def __init__(self, profile, mode, hybrid_alpha, model_dir):
-        # mode: "factor" | "ensemble" | "ml" | "hybrid"
+        # mode: "factor" | "ensemble" | "ml" | "hybrid" | "multi"
 
     def score_panel(factors_panel, close_panel) -> DataFrame:
         """面板模式评分（回测用）"""
@@ -240,9 +240,22 @@ class StrategyEngine:
         # ml → MLPredictor.predict()
         # ensemble → 3组独立选股，并集得分
         # hybrid → α×ML_zscore + (1-α)×factor_zscore
+        # multi → 多子策略独立评分 → z-score 标准化 → 加权混合
 
     def filter_stocks(scores, price_data, portfolio_value, ...) -> (codes, scores):
         """统一选股过滤：板块 + 流动性 + 行业分散 → top_n"""
+```
+
+**Multi-Strategy 配置** (`StrategyConfig.multi_strategy`)：
+```python
+{
+    "strategies": [
+        {"profile": "v11b_zz800_union", "mode": "ensemble", "weight": 0.5},
+        {"profile": "v10c_zz800_balanced", "mode": "factor", "weight": 0.3},
+        {"profile": "v6b_hlr", "mode": "factor", "weight": 0.2},
+    ]
+}
+最终评分 = Σ weight_i × zscore(strategy_i_scores)
 ```
 
 **策略配置文件** (`config/strategy_config.json` 或 `$DATA_DIR/strategy_config.json`)：
@@ -331,8 +344,8 @@ run_backtest.py   ──▶ core.account.buy / sell / check_stop_loss / check_ta
 # Walk-Forward ML 回测
 python scripts/ml_rolling_train.py --hybrid-alpha 0.8 --start 2021-01-01
 
-# 纯因子回测
-python scripts/run_backtest.py --strategy v11b_zz800_union --walk-forward
+# 纯因子/ensemble/multi 回测
+python scripts/run_backtest.py --strategy v12_multi --walk-forward
 ```
 
 ### 防错机制
@@ -457,7 +470,8 @@ tests/test_sim_trading.py — 39 个模拟盘执行测试（< 1s）
 | ⭐ | 策略参数解耦 (STRATEGY_PROFILES) | ✅ 完成 | 2026-06-02 |
 | ⭐ | Golden Tests (12 tests) | ✅ 完成 | 2026-06-02 |
 | ⭐ | **ML Ensemble 训练/推理引擎** | ✅ 完成 | 2026-06-03 |
-| ⭐ | **StrategyEngine 统一策略入口** | ✅ 完成 | 2026-06-03 |
-| ⭐ | **ML hybrid 模拟盘上线** | ✅ 完成 | 2026-06-03 |
-| ⭐ | **ML 周度自动训练 cron** | ✅ 完成 | 2026-06-03 |
-| P4 🔵 | 生产监控（RankIC/基准对比） | 📋 待开始 | - |
+|| ⭐ | **StrategyEngine 统一策略入口** | ✅ 完成 | 2026-06-03 |
+|| ⭐ | **ML hybrid 模拟盘上线** | ✅ 完成 | 2026-06-03 |
+|| ⭐ | **ML 周度自动训练 cron** | ✅ 完成 | 2026-06-03 |
+|| ⭐ | **多策略并行框架 (mode=multi)** | ✅ 完成 | 2026-06-05 |
+|| P4 🔵 | 生产监控（RankIC/基准对比） | 📋 待开始 | - |

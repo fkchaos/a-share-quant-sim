@@ -31,12 +31,12 @@ DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 # v13 策略参数
-INITIAL_CAPITAL = 500000
+INITIAL_CAPITAL = 200000
 STOP_LOSS = -0.05
 TAKE_PROFIT = 0.05
-MAX_HOLDINGS = 10
-MAX_DAILY_BUY = 8
-MAX_POSITION = 0.15
+MAX_HOLDINGS = 8
+MAX_DAILY_BUY = 6
+MAX_POSITION = 0.20
 HOLD_DAYS_MAX = 5
 HOLD_DAYS_MIN = 2
 
@@ -334,9 +334,25 @@ def run_intraday_signal():
             logger.info(f"  {item['code']} {item['reason']} @ {item['price']:.2f}")
 
     # 选股
-    # 流动性筛选：用 20 日平均成交额
+    # 1. 加载中证 800 成分股
+    zz800_codes = set()
+    zz800_path = os.path.join(DATA_DIR, "zz800_constituents.csv")
+    if os.path.exists(zz800_path):
+        try:
+            zz800_df = pd.read_csv(zz800_path)
+            zz800_codes = set(zz800_df["code"].astype(str).str.zfill(6))
+            logger.info(f"中证 800 成分股: {len(zz800_codes)} 只")
+        except Exception as e:
+            logger.warning(f"中证 800 成分股加载失败: {e}，使用全市场")
+    else:
+        logger.warning(f"中证 800 成分股文件不存在: {zz800_path}，使用全市场")
+
+    # 2. 流动性筛选：用 20 日平均成交额（从中证 800 中筛选）
     liquid_stocks = []
     for code, df in code_dfs.items():
+        # 限定在中证 800 成分股
+        if zz800_codes and code not in zz800_codes:
+            continue
         if len(df) >= 20 and "amount" in df.columns:
             avg_amount = df["amount"].rolling(20).mean().iloc[-1]
             if 3000000 < avg_amount < 100000000:  # 300万-1亿

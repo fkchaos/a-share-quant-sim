@@ -288,4 +288,19 @@ v12_multi (多策略并行) ⏳
 | WF 平均 Sharpe | ≥ 0.5 | 样本外风险调整收益 |
 | 全量 vs WF 一致性 | 不矛盾 | 全量好但 WF 差 = 过拟合 |
 
-**v11b 是唯一通过 WF 验证的策略。v12_multi 待验证。**
+**v11b 是唯一通过 WF 验证的策略。v12_multi 权重扫描（5 种组合）均未通过。**
+
+---
+
+## 六、架构记录（2026-06-10）
+
+### walk_forward 重构
+
+**问题**：walk_forward 内部评分逻辑散落在 3 条分支（factor_weights / ensemble_groups / multi_strategy），与 main() 的 `_build_score_for_profile` 重复。
+
+**方案**：
+- walk_forward 改为接收 `score_fn` 回调 + `run_kwargs` 透传
+- 评分逻辑统一在 StrategyEngine 维护
+- walk_forward 只关心"切片窗口 + 跑回测"
+
+**新增**：`scripts/v12_weight_scan.py` — 多策略权重扫描工具

@@ -334,7 +334,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                 else:
                     # Delegate to core.account.allocate_weights (equal / vol_inverse / markowitz)
                     from core.account import allocate_weights
-                    _method_map = {'weighted': 'equal', 'equal': 'equal', 'vol_inverse': 'vol_inverse'}
+                    _method_map = {'weighted': 'equal', 'equal': 'equal', 'vol_inverse': 'vol_inverse', 'risk_parity': 'risk_parity'}
                     _method = _method_map.get(weight_method, 'equal')
                     weights = allocate_weights(top_stocks, price_data, method=_method,
                                                close_panel=close_panel, max_position=max_position)
@@ -556,6 +556,9 @@ def walk_forward(close_panel, train_days=252, test_days=63,
             **run_kwargs,
         )
 
+        # 只取 test 期 nav 片段用于拼接
+        test_nav = nav[test_dates] if nav is not None else None
+
         fold_results.append({
             'fold': fold,
             'train': f"{dates[train_start].date()}~{dates[test_start-1].date()}",
@@ -566,7 +569,8 @@ def walk_forward(close_panel, train_days=252, test_days=63,
             'sortino': m['sortino_ratio'],
             'trades': m['total_trades'],
         })
-        fold_navs.append(nav)
+        if test_nav is not None:
+            fold_navs.append(test_nav)
 
         print(f"  WF Fold {fold}: {fold_results[-1]['test']} | "
               f"Ret={m['annual_return']:.1%} Sharpe={m['sharpe_ratio']:.2f} "
@@ -575,11 +579,15 @@ def walk_forward(close_panel, train_days=252, test_days=63,
         train_end += step_days
 
     # 拼接样本外净值
+    # Bug 1 修复：按时间拼接 test 期切片，保留累计净值
     if fold_navs:
-        # 归一化每个 fold 的起始净值为1，然后连乘
-        combined_nav = fold_navs[0] / fold_navs[0].iloc[0]
-        for fnav in fold_navs[1:]:
-            combined_nav = combined_nav * (fnav / fnav.iloc[0])
+        combined_nav = None
+        for tnav in fold_navs:
+            if combined_nav is None:
+                combined_nav = tnav / tnav.iloc[0]
+            else:
+                # 用上一段末尾净值衔接，保留累计
+                combined_nav = pd.concat([combined_nav, tnav * (combined_nav.iloc[-1] / tnav.iloc[0])])
     else:
         combined_nav = None
 

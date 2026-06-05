@@ -142,6 +142,7 @@ def buy(
             'cost_price': total_cost / total_shares,
             'entry_date': old['entry_date'],
             'tp_taken': old.get('tp_taken', []),
+            'highest_profit': old.get('highest_profit', 0.0),
         }
     else:
         new_state.holdings[code] = {
@@ -149,6 +150,7 @@ def buy(
             'cost_price': price,
             'entry_date': str(date),
             'tp_taken': [],
+            'highest_profit': 0.0,
         }
 
     new_state.trade_log.append({
@@ -183,7 +185,7 @@ def sell(
     adj_price = price * (1 - costs.slippage_rate)
     revenue = info['shares'] * adj_price
     commission = revenue * costs.commission_rate
-    stamp_tax = revenue * costs.stamp_tax_rate if reason != 'STOP_LOSS' else 0.0
+    stamp_tax = revenue * costs.stamp_tax_rate
 
     new_state.cash += (revenue - commission - stamp_tax)
 
@@ -332,9 +334,12 @@ def check_take_profit(
         cost = info['cost_price']
         profit = (p - cost) / cost
         tp_taken = set(info.get('tp_taken', []))
+        # Bug 3 修复：记录历史最高 profit，按"曾到达"判断 tier
+        highest = max(profit, info.get('highest_profit', 0.0))
+        info['highest_profit'] = highest
 
         for threshold, sell_frac in tiers:
-            if profit >= threshold and threshold not in tp_taken:
+            if highest >= threshold and threshold not in tp_taken:
                 new_state = partial_sell(new_state, code, p, date,
                                          sell_fraction=sell_frac,
                                          reason='TAKE_PROFIT')
@@ -415,6 +420,71 @@ def apply_holding_decay(
     return new_state
 
 
+# ── Risk Parity ──────────────────────────────────────────────────────
+
+def _risk_parity_weights(cov, max_iter=100, tol=1e-6, max_position=0.10):
+    """Compute risk parity weights from covariance matrix.
+
+    Each stock contributes equally to portfolio volatility.
+    Uses iterative algorithm (spin/scenario approach).
+
+    Args:
+        cov: DataFrame (annualized covariance matrix), index=columns=stock codes
+        max_iter: maximum iterations
+        tol: convergence tolerance
+        max_position: cap per-stock weight
+
+    Returns:
+        Dict {stock_code: weight} summing to 1.0
+    """
+    stocks = list(cov.index)
+    n = len(stocks)
+    if n == 0:
+        return {}
+    if n == 1:
+        return {stocks[0]: 1.0}
+
+    w = np.ones(n) / n
+    cov_arr = cov.values.astype(float)
+
+    for _ in range(max_iter):
+        port_vol = np.sqrt(w @ cov_arr @ w)
+        if port_vol < 1e-10:
+            break
+        # Marginal risk contribution
+        marginal = (cov_arr @ w) / port_vol
+        # Risk contribution per stock
+        rc = w * marginal
+        # Target: equal risk contribution
+        target = port_vol / n
+        # Update weights proportional to target/RC ratio
+        ratio = target / np.maximum(rc, 1e-12)
+        w = w * ratio
+        w = np.maximum(w, 1e-8)
+        w /= w.sum()
+        # Check convergence
+        rc_new = w * (cov_arr @ w) / np.sqrt(w @ cov_arr @ w)
+        if np.std(rc_new) < tol:
+            break
+
+    # Apply max_position cap
+    capped = np.minimum(w, max_position)
+    # Redistribute excess to uncapped stocks
+    for _ in range(10):
+        excess = w.sum() - capped.sum()
+        if excess <= 0:
+            break
+        uncapped = capped < max_position - 1e-8
+        if not uncapped.any():
+            break
+        add_per = excess / uncapped.sum()
+        capped[uncapped] += add_per
+        capped = np.minimum(capped, max_position)
+
+    capped /= capped.sum()
+    return {stocks[i]: float(capped[i]) for i in range(n)}
+
+
 # ── Position sizing / weight allocation ─────────────────────────────
 
 def allocate_weights(
@@ -431,6 +501,7 @@ def allocate_weights(
     Methods:
         'equal'         : 1/N each
         'vol_inverse'   : inverse-volatility weighted (lower vol → higher weight)
+        'risk_parity'   : risk parity (equal risk contribution per stock)
         'markowitz'     : placeholder (caller should use markowitz_optimize directly)
 
     vol_series: pre-computed per-stock volatility (e.g. 20-day std of returns).
@@ -469,6 +540,29 @@ def allocate_weights(
             # Re-normalise to sum to 1.0
             s = sum(clamped.values())
             w = {c: v / s for c, v in clamped.items()} if s > 0 else {c: 1.0 / n for c in top_stocks}
+        else:
+            w = {c: 1.0 / n for c in top_stocks}
+
+    elif method == 'risk_parity':
+        # Risk parity: each stock contributes equally to portfolio volatility
+        # Requires close_panel for covariance estimation
+        if close_panel is not None and len(close_panel) >= 20:
+            available = [c for c in top_stocks if c in close_panel.columns]
+            if len(available) >= 2:
+                sub = close_panel[available]
+                ret = sub.pct_change().dropna()
+                if len(ret) >= 10:
+                    cov = ret.cov() * 252  # annualized covariance
+                    w = _risk_parity_weights(cov, max_position=max_position)
+                    # Map back to all top_stocks (missing ones get 0)
+                    w_full = {c: w.get(c, 0.0) for c in top_stocks}
+                    # Normalize
+                    s = sum(w_full.values())
+                    w = {c: v / s for c, v in w_full.items()} if s > 0 else {c: 1.0 / n for c in top_stocks}
+                else:
+                    w = {c: 1.0 / n for c in top_stocks}
+            else:
+                w = {c: 1.0 / n for c in top_stocks}
         else:
             w = {c: 1.0 / n for c in top_stocks}
 

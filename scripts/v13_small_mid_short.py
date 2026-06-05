@@ -46,12 +46,12 @@ class V13Config:
     max_daily_buy = 8              # 每日最多买 8 只（增加）
     max_holdings = 10              # 最大持仓 10 只（增加）
     max_position = 0.15           # 单只最大仓位 15%（降低，分散风险）
-    hold_days_max = 5             # 最大持仓天数（反转效应需要 3-5 天）
+    hold_days_max = 8             # 最大持仓天数（反转效应需要 5-8 天充分释放）
     hold_days_min = 2             # 最小持仓天数
 
     # 风控参数
-    stop_loss = -0.05             # 个股止损 -5%
-    stop_profit = 0.05            # 个股止盈 5%（小市值波动大，5% 更现实）
+    stop_loss = -0.08             # 个股止损 -8%（小市值波动大，放宽）
+    stop_profit = 0.08            # 个股止盈 8%
     daily_max_dd = -0.03          # 单日最大回撤 -3% 清仓
     initial_capital = 500000      # 初始资金 50万
 
@@ -164,26 +164,26 @@ def select_stocks(factors, date, close_panel, volume_panel, amount_panel, curren
     range_ratio = factors['range_ratio'].loc[date].dropna()
 
     # 条件筛选（在流动性池中）
-    # 条件1：5日跌幅 > 3%（超跌）
-    cond1 = rev_5[rev_5 < V13Config.rev_threshold].index
+    # 条件1：5日跌幅 > 2%（超跌）
+    cond1 = set(rev_5[rev_5 < V13Config.rev_threshold].index)
 
-    # 条件2：当日放量或缩量企稳
-    cond2_boost = vol_ratio[vol_ratio > V13Config.vol_ratio_threshold].index
-    cond2_shrink = vol_shrink[vol_shrink > 0.7].index
-    cond2 = set(cond2_boost) | set(cond2_shrink)
+    # 条件2：当日放量（量比 > 1.3）
+    cond2 = set(vol_ratio[vol_ratio > V13Config.vol_ratio_threshold].index)
 
-    # 条件3：振幅收窄
-    cond3 = range_ratio[range_ratio < 0.8].index
+    # 条件3：缩量企稳（量比 < 0.7 且跌幅收窄）
+    cond3 = set(vol_shrink[vol_shrink < 0.7].index)
 
-    # 综合：超跌 + (放量或缩量企稳 或 振幅收窄) + 流动性
-    candidates = set(cond1) & cond2 & liquid_stocks | \
-                 set(cond1) & set(cond3) & liquid_stocks
+    # 条件4：振幅收窄（当日振幅 < 5日均幅的 80%）
+    cond4 = set(range_ratio[range_ratio < 0.8].index)
+
+    # 综合：超跌 + (放量 或 缩量企稳 或 振幅收窄) + 流动性
+    candidates = cond1 & (cond2 | cond3 | cond4) & liquid_stocks
 
     # 排除当前持仓
     if current_holdings:
         candidates = candidates - set(current_holdings.keys())
 
-    # 按反转幅度排序
+    # 按反转幅度排序（跌幅最大的优先）
     candidates = sorted(candidates, key=lambda c: rev_5.get(c, 0))
 
     return candidates[:V13Config.max_holdings]
@@ -233,6 +233,25 @@ def run_v13_backtest():
 
         price_data = close_panel.loc[date]
         open_data = open_panel.loc[date] if open_panel is not None else price_data
+
+        # 0. 市场趋势判断（用全市场 20 日/60 日均线）
+        if i >= 60:
+            market_20ma = close_panel.iloc[i-20:i].mean().mean()
+            market_60ma = close_panel.iloc[i-60:i].mean().mean()
+            # market_state: 'trend'（趋势市，20>60）, 'range'（震荡市，20≈60）, 'bear'（空头，20<60）
+            ma_ratio = market_20ma / market_60ma if market_60ma > 0 else 1.0
+            if ma_ratio > 1.02:
+                market_state = 'trend'   # 趋势市：满仓操作
+                position_scale = 1.0
+            elif ma_ratio > 0.98:
+                market_state = 'range'   # 震荡市：半仓操作
+                position_scale = 0.5
+            else:
+                market_state = 'bear'    # 空头市：轻仓操作
+                position_scale = 0.3
+        else:
+            market_state = 'trend'
+            position_scale = 1.0
 
         # 1. 更新持仓天数
         for code in holdings:
@@ -304,11 +323,14 @@ def run_v13_backtest():
         # 3. 选股
         candidates = select_stocks(factors, date, close_panel, volume_panel, amount_panel, holdings)
 
-        # 4. 买入（持仓未满才买，择时已通过选股因子隐式控制：反转因子天然是跌了才买）
+        # 4. 买入（结合市场趋势调整仓位）
         if candidates and cash > initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
-            # 执行买入
-            available_cash = cash - initial_capital * 0.1
-            per_stock = min(available_cash / min(len(candidates), V13Config.max_daily_buy), initial_capital * cfg.max_position)
+            if position_scale > 0:  # 空头市且 scale=0 时不买
+                # 执行买入
+                available_cash = cash - initial_capital * 0.1
+                # 用 position_scale 缩放仓位：趋势市满仓，震荡市半仓，空头市轻仓
+                max_pos = initial_capital * cfg.max_position * position_scale
+                per_stock = min(available_cash / min(len(candidates), V13Config.max_daily_buy), max_pos)
 
             for code in candidates[:V13Config.max_daily_buy]:
                 if code not in price_data.index:

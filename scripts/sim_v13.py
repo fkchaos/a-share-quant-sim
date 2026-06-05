@@ -25,8 +25,8 @@ from constraints import build_trade_context
 from indices import get_index_trends
 
 # ── Config ─────────────────────────────────────────────────────────
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
-PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
@@ -57,15 +57,40 @@ logger = logging.getLogger("sim_v13")
 
 
 # ── 账户操作 ──────────────────────────────────────────────────────
+# account.json 标准格式:
+# {
+#   "cash": 200000.0,
+#   "initial_capital": 200000,
+#   "holdings": {
+#     "600522": {
+#       "shares": 300,          # 股数
+#       "cost_price": 42.25,    # 成本价
+#       "entry_date": "2026-06-02",  # 买入日期 (YYYY-MM-DD)
+#       "hold_days": 3,         # 已持仓天数
+#     }
+#   },
+#   "trade_log": [...],
+#   "meta": {"strategy": "v13", "created_at": "2026-06-05"}
+# }
+
 def load_account():
-    """加载账户状态"""
+    """加载账户状态，兼容旧格式（无 hold_days/entry_date 时自动补全）"""
     if os.path.exists(V13_ACCOUNT_FILE):
         with open(V13_ACCOUNT_FILE) as f:
             data = json.load(f)
+        # 标准化 holdings 字段
+        holdings = {}
+        for code, h in data.get("holdings", {}).items():
+            holdings[code] = {
+                "shares": h.get("shares", 0),
+                "cost_price": h.get("cost_price", 0),
+                "entry_date": h.get("entry_date", ""),
+                "hold_days": h.get("hold_days", 0),
+            }
         state = PortfolioState(
             cash=data.get("cash", INITIAL_CAPITAL),
             initial_capital=data.get("initial_capital", INITIAL_CAPITAL),
-            holdings=data.get("holdings", {}),
+            holdings=holdings,
             trade_log=data.get("trade_log", []),
         )
         return state
@@ -73,11 +98,21 @@ def load_account():
 
 
 def save_account(state):
-    """保存账户状态"""
+    """保存账户状态，holdings 字段标准化"""
+    # 标准化 holdings
+    holdings = {}
+    for code, h in state.holdings.items():
+        if isinstance(h, dict):
+            holdings[code] = {
+                "shares": h.get("shares", 0),
+                "cost_price": h.get("cost_price", 0),
+                "entry_date": h.get("entry_date", ""),
+                "hold_days": h.get("hold_days", 0),
+            }
     data = {
         "cash": state.cash,
         "initial_capital": state.initial_capital,
-        "holdings": state.holdings,
+        "holdings": holdings,
         "trade_log": state.trade_log,
     }
     with open(V13_ACCOUNT_FILE, "w") as f:
@@ -557,7 +592,7 @@ def run_intraday_execute():
         state.holdings[code] = {
             "shares": shares,
             "cost_price": buy_price,
-            "entry_date": str(datetime.now()),
+            "entry_date": str(datetime.now().date()),
             "hold_days": 0,
         }
         state.trade_log.append(
@@ -572,12 +607,18 @@ def run_intraday_execute():
         logger.info(f"  ✅ {code} 买入 {shares}股 @ {buy_price:.2f}")
         exec_results.append({"code": code, "action": "buy", "status": "done", "shares": shares, "price": float(buy_price)})
 
-    # 更新持仓天数
-    for code in state.holdings:
-        if "hold_days" in state.holdings[code]:
-            state.holdings[code]["hold_days"] = state.holdings[code].get("hold_days", 0) + 1
+    # 更新持仓天数（用 entry_date 自动计算）
+    today = datetime.now().date()
+    for code, h in state.holdings.items():
+        entry = h.get("entry_date", "")
+        if entry:
+            try:
+                entry_date = datetime.strptime(str(entry)[:10], "%Y-%m-%d").date()
+                h["hold_days"] = (today - entry_date).days
+            except Exception:
+                h["hold_days"] = h.get("hold_days", 0) + 1
         else:
-            state.holdings[code]["hold_days"] = 1
+            h["hold_days"] = h.get("hold_days", 0) + 1
 
     # 保存账户
     save_account(state)

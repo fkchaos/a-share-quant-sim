@@ -969,3 +969,84 @@ PROFILE_V12_MULTI = StrategyConfig(
 )
 
 STRATEGY_PROFILES["v12_multi"] = PROFILE_V12_MULTI
+
+# ── v13: 小市值中短线（独立脚本 sim_v13.py，此处仅作参考）──────────────────
+PROFILE_V13_SMALL_MID_SHORT = StrategyConfig(
+    label="v13_small_mid_short",
+    weight_method="equal",
+    top_n=8, rebalance_freq=5,
+    stop_loss=0.05, max_position=0.20,
+    use_vol_scaling=False, vol_target=0.20,
+    max_industry_weight=0,
+    use_take_profit=False,
+    use_holding_decay=False,
+    factor_weights={
+        'rev_3': 0.20, 'rev_5': 0.15, 'vol_10': 0.15,
+        'rsi_6': 0.15, 'amount_ratio': 0.15, 'mom_5': 0.10,
+        'boll_pos_10': 0.10,
+    },
+)
+STRATEGY_PROFILES["v13_small_mid_short"] = PROFILE_V13_SMALL_MID_SHORT
+
+# ── v14: 残差动量 ──────────────────────────────────────────────
+# 残差动量 = 个股收益 - 市场收益回归的残差
+# 独立于市场方向的纯 alpha 动量
+PROFILE_V14_RESID_MOM = StrategyConfig(
+    label="v14_resid_mom",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights={
+        'resid_mom': 0.30, 'mom_20': 0.15, 'rev_5': 0.15,
+        'vol_20': 0.10, 'rsi_14': 0.10, 'amount_ratio': 0.10,
+        'boll_pos_10': 0.10,
+    },
+)
+STRATEGY_PROFILES["v14_resid_mom"] = PROFILE_V14_RESID_MOM
+
+# ── v15: 质量因子 ──────────────────────────────────────────────
+# ROE/营收增速/毛利率/负债率 + 残差动量混合
+PROFILE_V15_QUALITY = StrategyConfig(
+    label="v15_quality",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights={
+        'quality_roe': 0.20, 'quality_rev_growth': 0.15,
+        'quality_gross_margin': 0.10, 'quality_leverage': -0.10,
+        'resid_mom': 0.20, 'mom_20': 0.15, 'vol_20': 0.10,
+        'rsi_14': 0.10, 'amount_ratio': 0.10,
+    },
+)
+STRATEGY_PROFILES["v15_quality"] = PROFILE_V15_QUALITY
+
+# ── v16: 行业轮动 ──────────────────────────────────────────────
+# 行业动量（20日）+ 行业反转（5日）选 top 5 行业
+# 在 top 行业内用 v13 量价因子选股
+PROFILE_V16_INDUSTRY_ROTATION = StrategyConfig(
+    label="v16_industry_rotation",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.30,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights={
+        'industry_rot': 0.25, 'rev_5': 0.15, 'mom_20': 0.15,
+        'vol_20': 0.10, 'rsi_14': 0.10, 'amount_ratio': 0.10,
+        'boll_pos_10': 0.10, 'high_low_range': 0.05,
+    },
+)
+STRATEGY_PROFILES["v16_industry_rotation"] = PROFILE_V16_INDUSTRY_ROTATION

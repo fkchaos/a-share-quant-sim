@@ -541,6 +541,7 @@ def walk_forward(close_panel, train_days=252, test_days=63,
                  volume_panel=None, amount_panel=None,
                  high_panel=None, low_panel=None,
                  run_kwargs=None,
+                 industry_map=None,
                  **kwargs):
     """Walk-Forward 过拟合检测。
 
@@ -594,6 +595,7 @@ def walk_forward(close_panel, train_days=252, test_days=63,
         sub_factors = calc_factors_panel(
             sub_close, sub_volume, sub_amount,
             high_panel=sub_high, low_panel=sub_low,
+            industry_map=industry_map,
         )
         sub_score = score_fn(sub_factors)
 
@@ -853,6 +855,18 @@ def main():
     # Load stock names for industry classification
     stock_names = _load_stock_names()
 
+    # ── 加载行业分类映射 ──────────────────────────────────────────
+    _industry_map = {}
+    _industry_cache = os.path.join(DATA_DIR, "industry_map.csv")
+    if os.path.exists(_industry_cache):
+        try:
+            import pandas as pd
+            _im_df = pd.read_csv(_industry_cache, dtype={"code": str})
+            _industry_map = dict(zip(_im_df["code"], _im_df["industry"]))
+            print(f"  行业分类: {len(_industry_map)} 只股票, {len(set(_industry_map.values()))} 个行业")
+        except Exception as _e:
+            print(f"  ⚠️ 行业分类加载失败: {_e}")
+
     print("=" * 60)
     print("A股量化回测系统  |  策略参数来源：core.config.STRATEGY_PROFILES")
     print("=" * 60)
@@ -884,6 +898,7 @@ def main():
     factors = calc_factors_panel(
         close_panel, volume_panel, amount_panel,
         open_panel=open_panel, high_panel=high_panel, low_panel=low_panel,
+        industry_map=_industry_map,
     )
     print(f"  共 {len(factors)} 个因子")
 
@@ -1057,6 +1072,7 @@ def main():
                 volume_panel=volume_panel, amount_panel=amount_panel,
                 high_panel=high_panel, low_panel=low_panel,
                 run_kwargs=_rk,
+                industry_map=_industry_map,
                 **_mf,
             )
             if wf_results:

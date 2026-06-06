@@ -228,6 +228,7 @@ def calc_factors_panel(
     open_panel: pd.DataFrame = None,
     high_panel: pd.DataFrame = None,
     low_panel: pd.DataFrame = None,
+    industry_map: dict = None,
 ) -> dict:
     """Calculate factor matrices for ALL stocks at ALL dates.
 
@@ -494,5 +495,19 @@ def calc_factors_panel(
         _resid_mom.loc[date] = _stock_resid.reindex(_resid_mom.columns).fillna(0)
 
     factors['resid_mom'] = _resid_mom
+
+    # ── 行业轮动因子（Industry Rotation）────────────────────────────────
+    # 需要 industry_map: {股票代码: 行业名称}
+    # 计算行业动量（20日）- 行业反转（5日），映射到个股
+    if industry_map:
+        try:
+            from core.industry_rotation import calc_industry_rotation_scores
+            factors['industry_rot'] = calc_industry_rotation_scores(
+                close_panel, industry_map, mom_window=20, rev_window=5
+            )
+        except Exception:
+            factors['industry_rot'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
+    else:
+        factors['industry_rot'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
 
     return factors

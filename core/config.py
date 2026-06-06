@@ -124,8 +124,11 @@ class StrategyConfig:
     use_atr_stop: bool = False
     atr_k: float = field(default_factory=lambda: CONFIG["stop_loss_atr_k"])
 
-    # ── 优化用 ────────────────────────────────────────────────
-    risk_aversion: float = 1.0
+    # ── 市场择时 filter（v11b熊市保护，opt-6）──────────────────────
+    use_market_filter: bool = False
+    market_filter_method: str = "ma_crossover"  # ma_crossover: MA20<MA60 时空仓
+    market_ma_short: int = 20
+    market_ma_long: int = 60
 
     # ── 多组 Ensemble 策略 ────────────────────────────────────
     ensemble_groups: Optional[Dict[str, Dict[str, float]]] = None

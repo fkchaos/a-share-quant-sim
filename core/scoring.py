@@ -153,12 +153,19 @@ def ensemble_union_score(
     min_groups: int = 1,
     crowd_threshold: float = 0.0,
     date=None,
+    group_weight_multiplier: dict = None,
+    date_weight_series: dict = None,
 ) -> pd.DataFrame:
     """多组 Ensemble 评分（面板模式，回测用）。
 
     每组独立评分选 top_n，最终 score = 选中该股票的组数 (0 ~ len(groups))。
     min_groups: 最少需要被多少组选中才计入最终评分（1=union, 2=intersection）
     crowd_threshold: 拥挤度过滤阈值（0=不过滤，0.9=排除综合拥挤度>90%的股票）
+    group_weight_multiplier: 各组权重乘数 {'momentum': 2.0, 'reversal': 0.5, ...}
+        全局乘数，所有日期统一应用
+    date_weight_series: 各组按日期的权重乘数 {'momentum': pd.Series(date_idx), ...}
+        用于 HMM 因子择时：不同日期（市场状态）用不同权重
+        优先级高于 group_weight_multiplier
     """
     if not ensemble_groups:
         first_key = list(factors.keys())[0]
@@ -201,7 +208,17 @@ def ensemble_union_score(
 
             for s in day_scores.nlargest(group_top_n).index:
                 if s in selection_count.columns:
-                    selection_count.loc[date, s] += 1.0
+                    _w = 1.0
+                    # 优先使用 per-date 权重
+                    if date_weight_series and group_name in date_weight_series:
+                        _ds = date_weight_series[group_name]
+                        if date in _ds.index:
+                            _w = _ds.loc[date]
+                        else:
+                            _w = 1.0
+                    elif group_weight_multiplier and group_name in group_weight_multiplier:
+                        _w = group_weight_multiplier[group_name]
+                    selection_count.loc[date, s] += _w
 
     # intersection: 只保留被 min_groups+ 组选中的
     if min_groups > 1:

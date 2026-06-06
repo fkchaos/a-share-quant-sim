@@ -197,6 +197,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                  market_filter_method='ma_crossover',
                  market_ma_short=20,
                  market_ma_long=60,
+                 use_hmm_position=False,
                  run_kwargs=None):
     """
     完整回测引擎。
@@ -250,6 +251,22 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
         ct = close_panel.rolling(2).max() - close_panel.rolling(2).min()
         atr_norm = ct.rolling(14).mean() / (close_panel + 1e-10)
         atr_panel = atr_norm * close_panel  # absolute ATR value
+
+    # ── HMM 仓位预计算 ──────────────────────────────────────────
+    _hmm_positions = None
+    if use_hmm_position:
+        try:
+            from core.hmm_timing import compute_hmm_positions_batch
+            _hmm_positions = compute_hmm_positions_batch(close_panel, min_lookback=60)
+            n_bear = (_hmm_positions < 0.5).sum() if _hmm_positions is not None else 0
+            n_total = len(_hmm_positions) if _hmm_positions is not None else 0
+            if label == 'default' or os.environ.get('BACKTEST_DEBUG'):
+                print(f"  📊 HMM 仓位: {n_bear}/{n_total} 天低仓位(<50%), "
+                      f"平均仓位={_hmm_positions.mean():.0%}")
+        except Exception as _e:
+            if label == 'default':
+                print(f"  ⚠️ HMM 预计算失败: {_e}, 回退满仓")
+            _hmm_positions = None
 
     for i, date in enumerate(dates):
         if i < warmup_days:
@@ -386,6 +403,14 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                         current_state=state,
                     )
 
+                # ── HMM 仓位管理 ────────────────────────────────────
+                _hmm_pos = 1.0
+                if use_hmm_position and _hmm_positions is not None:
+                    _hmm_pos = _hmm_positions.get(date, 1.0)
+                    # HMM 趋势下跌时，不做新买入（让现有持仓自然退出）
+                    if _hmm_pos < 0.5:
+                        day_score = pd.Series(dtype=float)
+
                 # 对目标持仓买入（用执行价）
                 for c in top_stocks:
                     if c not in state.holdings and c in price_data.index and not pd.isna(price_data[c]):
@@ -393,6 +418,9 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                         if ep > 0:
                             w = weights.get(c, 1.0 / len(top_stocks))
                             target_val = min(current_pv * w, current_pv * max_position)
+                            # HMM 仓位缩放
+                            if _hmm_pos < 1.0:
+                                target_val = target_val * _hmm_pos
                             from core.account import compute_buy_shares
                             adj_p = ep * (1 + TradingCosts().slippage_rate)
                             shares = int(target_val / adj_p / 100) * 100
@@ -903,6 +931,8 @@ def main():
             market_filter_method=profile.market_filter_method,
             market_ma_short=profile.market_ma_short,
             market_ma_long=profile.market_ma_long,
+            # HMM 仓位管理
+            use_hmm_position=profile.use_hmm_position,
         )
         if args.exec_timing == 'open':
             kw['open_panel'] = open_panel
@@ -915,7 +945,15 @@ def main():
             return engine.score_panel(factors)
         elif profile.ensemble_groups:
             engine = StrategyEngine(profile=profile.label, mode="ensemble")
-            return engine.score_panel(factors)
+            # HMM 因子择时：预计算 HMM 仓位序列
+            _hmm_pos = None
+            if getattr(profile, 'use_hmm_position', False):
+                try:
+                    from core.hmm_timing import compute_hmm_positions_batch
+                    _hmm_pos = compute_hmm_positions_batch(close_panel, min_lookback=60)
+                except Exception as _e:
+                    print(f"  ⚠️ HMM 预计算失败: {_e}")
+            return engine.score_panel(factors, hmm_positions=_hmm_pos)
         elif profile.factor_weights:
             engine = StrategyEngine(profile=profile.label, mode="factor")
             return engine.score_panel(factors)

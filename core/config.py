@@ -130,6 +130,9 @@ class StrategyConfig:
     market_ma_short: int = 20
     market_ma_long: int = 60
 
+    # ── HMM 仓位管理 ────────────────────────────────────────────
+    use_hmm_position: bool = False  # True 时根据 HMM 状态动态调整仓位
+
     # ── 多组 Ensemble 策略 ────────────────────────────────────
     ensemble_groups: Optional[Dict[str, Dict[str, float]]] = None
     ensemble_group_top_n: int = 4
@@ -742,6 +745,30 @@ PROFILE_V11B_CROWD = StrategyConfig(
     crowd_threshold=0.80,  # 排除综合拥挤度>80%的股票
 )
 STRATEGY_PROFILES["v11b_crowd"] = PROFILE_V11B_CROWD
+
+# ── v11b_hmm: v11b + HMM 仓位管理 ────────────────────────────
+# 用 HMM 识别市场状态（趋势上涨/震荡/趋势下跌），动态调整仓位
+# 趋势下跌时 25% 仓位，震荡时 60% 仓位，趋势上涨时满仓
+PROFILE_V11B_HMM = StrategyConfig(
+    label="v11b_hmm",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.30, 'vol_20': 0.25, 'vol_10': 0.25, 'boll_width_20': 0.20},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+    use_hmm_position=True,  # ← 核心差异：HMM 仓位管理
+)
+STRATEGY_PROFILES["v11b_hmm"] = PROFILE_V11B_HMM
 PROFILE_V11B_LOWVOL = StrategyConfig(
     label="v11b_lowvol",
     weight_method="equal",

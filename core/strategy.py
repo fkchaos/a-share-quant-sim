@@ -102,6 +102,7 @@ class StrategyEngine:
         self,
         factors_panel: dict,
         close_panel: pd.DataFrame = None,
+        hmm_positions: pd.Series = None,
     ) -> pd.DataFrame:
         """
         对因子面板做评分（回测用）。
@@ -112,6 +113,8 @@ class StrategyEngine:
             {factor_name: DataFrame (dates × stocks)}
         close_panel : DataFrame
             收盘价面板 (dates × stocks)，ensemble 模式需要
+        hmm_positions : pd.Series
+            HMM 仓位序列（indexed by date），用于 HMM 因子择时
 
         Returns
         -------
@@ -120,7 +123,7 @@ class StrategyEngine:
         if self.mode == "factor":
             return self._score_panel_factor(factors_panel)
         elif self.mode == "ensemble":
-            return self._score_panel_ensemble(factors_panel)
+            return self._score_panel_ensemble(factors_panel, hmm_positions=hmm_positions)
         elif self.mode == "multi":
             return self._score_panel_multi(factors_panel)
         elif self.mode == "ml":
@@ -144,8 +147,13 @@ class StrategyEngine:
             return composite_score(filtered, weights)
         return composite_score(factors_panel)
 
-    def _score_panel_ensemble(self, factors_panel: dict) -> pd.DataFrame:
-        """Ensemble 多组选股评分（面板模式）"""
+    def _score_panel_ensemble(self, factors_panel: dict,
+                              hmm_positions: pd.Series = None) -> pd.DataFrame:
+        """Ensemble 多组选股评分（面板模式）。
+
+        hmm_positions: HMM 仓位序列（indexed by date），
+            用于 HMM 因子择时：根据市场状态动态调整各组权重
+        """
         groups = self.prof.ensemble_groups
         if not groups:
             raise ValueError(
@@ -154,9 +162,35 @@ class StrategyEngine:
         group_top_n = self.prof.ensemble_group_top_n
         min_groups = getattr(self.prof, 'ensemble_min_groups', 1)
         crowd_threshold = getattr(self.prof, 'crowd_threshold', 0.0)
+
+        # HMM 因子择时：根据 HMM 状态构建 per-date 权重乘数
+        date_weight_series = None
+        if hmm_positions is not None and len(hmm_positions) > 0:
+            date_weight_series = {}
+            # HMM 仓位 < 0.5 (趋势下跌): reversal 组 ×2, momentum 组 ×0.5
+            # HMM 仓位 0.5~0.8 (震荡): 均衡
+            # HMM 仓位 > 0.8 (趋势上涨): momentum 组 ×2, reversal 组 ×0.5
+            for gname in groups:
+                if gname == 'momentum':
+                    # 趋势上涨时加大 momentum，趋势下跌时减小
+                    date_weight_series[gname] = hmm_positions.apply(
+                        lambda x: 2.0 if x > 0.8 else (0.5 if x < 0.5 else 1.0)
+                    )
+                elif gname == 'reversal':
+                    # 趋势下跌时加大 reversal（超跌反弹），趋势上涨时减小
+                    date_weight_series[gname] = hmm_positions.apply(
+                        lambda x: 2.0 if x < 0.5 else (0.5 if x > 0.8 else 1.0)
+                    )
+                elif gname == 'volatility':
+                    # 震荡市加大波动率组
+                    date_weight_series[gname] = hmm_positions.apply(
+                        lambda x: 1.5 if 0.4 <= x <= 0.8 else 1.0
+                    )
+
         return ensemble_union_score(
             factors_panel, groups, group_top_n,
             min_groups=min_groups, crowd_threshold=crowd_threshold,
+            date_weight_series=date_weight_series,
         )
 
     def _score_panel_multi(self, factors_panel: dict) -> pd.DataFrame:

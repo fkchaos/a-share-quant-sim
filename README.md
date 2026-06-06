@@ -163,21 +163,16 @@ a-share-quant-sim/
 └── core/config.py             # 策略参数 + 交易成本（唯一配置源）
 ```
 
-## 分支策略
+## 文档索引
 
-```
-main             主分支 — 唯一开发分支，cron job 从这里拉取执行
-release/default  发布分支 — 与 main 同步
-```
-
-## 注意事项
-
-- **仅供学习研究，不构成投资建议**
-- 数据源为腾讯行情接口，免费但可能有不稳定时段
-- 因子策略基于历史数据，不代表未来收益
-- open 模式回测更接近实盘，close 模式是理想上界
-- 收盘报告（report_only）用本地已有价格，净值可能有 1 天误差
-
-## License
-
-MIT License — 详见 [LICENSE](LICENSE)
+| 文档 | 内容 |
+|------|------|
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | 📖 完整使用说明（命令/参数/配置/工作流） |
+| [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md) | 配置参数详解 |
+| [docs/STRATEGY_REGISTRY.md](docs/STRATEGY_REGISTRY.md) | 策略注册表（参数+绩效+WF） |
+| [docs/STRATEGIES_DISCARDED.md](docs/STRATEGIES_DISCARDED.md) | 已证伪策略详细记录 |
+| [docs/architecture.md](docs/architecture.md) | 代码架构详解（面向开发者） |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | 部署指南（cron/环境配置） |
+| [docs/RESULTS_LOG.md](docs/RESULTS_LOG.md) | 回测结果记录 |
+| [docs/HISTORY.md](docs/HISTORY.md) | 已解决问题记录 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | 待办事项 |

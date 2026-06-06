@@ -43,14 +43,20 @@ python scripts/update_daily_data.py
 ## 验证安装
 
 ```bash
-# 回测最优策略（close 模式，理想情况）
+# 回测 v11b 中线策略（close 模式，理想情况）
 python scripts/run_backtest.py --strategy v11b_zz800_union
+
+# 回测 v13 中短线策略
+python scripts/run_backtest.py --strategy v13_small_mid_short
 
 # 回测（open 模式，接近实盘）
 python scripts/run_backtest.py --strategy v11b_zz800_union --exec-timing open
 
 # Walk-Forward 过拟合检测
-python scripts/run_backtest.py --strategy v11b_zz800_union --walk-forward
+python scripts/run_backtest.py --strategy v13_small_mid_short --walk-forward
+
+# 运行测试
+python -m pytest tests/ -v -k "not slow"
 ```
 
 ## 模拟盘（盘中双阶段）
@@ -61,7 +67,7 @@ v7 脚本支持三阶段模式，需要配置 3 个定时任务：
 |------|------|------|
 | 11:35 | `python scripts/sim_daily_v7.py intraday_signal` | 上午收盘出信号 |
 | 13:00 | `python scripts/sim_daily_v7.py intraday_execute` | 下午开盘执行 |
-| 15:30 | `python scripts/sim_daily_v7.py day_end` | 收盘报告 |
+| 15:30 | `python scripts/sim_daily_v7.py report_only` | 收盘报告（纯只读） |
 
 ### 方式一：crontab
 
@@ -72,10 +78,18 @@ crontab -e
 添加（替换 `/path/to/project` 为实际路径）：
 
 ```cron
-# A股模拟盘 — 盘中双阶段
-35 11 * * 1-5 cd /path/to/project && python scripts/sim_daily_v7.py intraday_signal
-0  13 * * 1-5 cd /path/to/project && python scripts/sim_daily_v7.py intraday_execute
-30 15 * * 1-5 cd /path/to/project && python scripts/sim_daily_v7.py day_end
+# A股模拟盘 — v11b 中线策略（工作日）
+35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_signal
+0  13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_execute
+30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py report_only
+
+# A股模拟盘 — v13 中短线策略（工作日）
+35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_signal
+0  13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_execute
+30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py report_only
+
+# 数据更新（每天 16:00）
+0 16 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/update_daily_data.py
 ```
 
 ### 方式二：Hermes cron

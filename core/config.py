@@ -168,7 +168,7 @@ PROFILE_V5_TP_DECAY = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
 )
 
@@ -182,7 +182,7 @@ PROFILE_V6A_12F_ICIR = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'mom_60': 0.2236, 'macd_12_26': 0.1979, 'mom_120': 0.1902,
@@ -200,7 +200,7 @@ PROFILE_V6B_8F_POS_IC = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
@@ -219,7 +219,7 @@ PROFILE_V6B_HLR = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'vol_ratio_20': 0.18, 'amount_ratio': 0.14, 'rsi_6': 0.14,
@@ -239,7 +239,7 @@ PROFILE_V7A_8F_IND40 = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.40,             # 放开到 40%
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
@@ -256,7 +256,7 @@ PROFILE_V7B_8F_IND50 = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.50,             # 放开到 50%
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
@@ -273,7 +273,7 @@ PROFILE_V7C_8F_NO_IND = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0,                # 完全不限制
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'vol_ratio_20': 0.20, 'amount_ratio': 0.15, 'rsi_6': 0.15,
@@ -303,7 +303,7 @@ PROFILE_V8_ALL_ICIR = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         # 去冗余后的 18 个因子，按 |IC_IR| 归一化，负 IC 因子取负权重
@@ -365,7 +365,7 @@ PROFILE_V10_SMALL_CAP = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         # 精简版：小市值 + 跳空比 + 5个强因子
@@ -388,7 +388,7 @@ PROFILE_V10B_SMALL_MOM = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'small_cap':       0.25,   # 小市值
@@ -412,7 +412,7 @@ PROFILE_V10_ZZ800_TOP_IR = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         # 按中证800 IC分析 IR 排序，选取 avg|IR| > 0.07 的因子
@@ -453,7 +453,7 @@ PROFILE_V10B_ZZ800_CORE = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         # 只保留 avg|IR| > 0.08 的核心因子
@@ -477,7 +477,7 @@ PROFILE_V10C_ZZ800_BALANCED = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         # vol_60权重从0.13降到0.08（与hlr冗余）
@@ -507,7 +507,7 @@ PROFILE_V10D_ZZ800_MOM = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         # 纯动量+波动率方向（中证800上IC>0的因子）
@@ -536,7 +536,7 @@ PROFILE_V10E_ZZ800_DEF = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         # vol_60从0.08降到0.04(高波动因子在熊市放大亏损)
@@ -568,7 +568,7 @@ PROFILE_V10F_ZZ800_TURNOVER = StrategyConfig(
     max_industry_weight=0.25,
     max_daily_turnover=0.20,  # 限制单日换手率≤20%
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
         'high_low_range': 0.18,
@@ -606,9 +606,9 @@ PROFILE_V11B_ZZ800_UNION = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
-    factor_weights=None,  # 不使用单一权重，用 ensemble_groups
+    factor_weights=None,
     ensemble_groups={
         'momentum': {
             'mom_20': 0.30,
@@ -632,7 +632,118 @@ PROFILE_V11B_ZZ800_UNION = StrategyConfig(
     ensemble_group_top_n=5,  # 每组选5只，WF 验证最优
 )
 
+# ── opt-3 结论：TP-incremental 止盈参数（采纳为默认）──────────
+# 原 [(0.10,0.30),(0.20,0.30),(0.30,1.00)] → 新 [(0.10,0.20),(0.20,0.30),(0.30,0.50)]
+# 全量回测: 30.43%/1.16/27.49% vs 26.03%/1.04/26.05%（收益+4.4pp，夏普+0.12）
 STRATEGY_PROFILES["v11b_zz800_union"] = PROFILE_V11B_ZZ800_UNION
+
+# ── v11b_style: v11b + 价格路径分布因子组（opt-1，未采纳）──────
+# 基准: [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
+
+# TP-v1: 更激进（早止盈，锁定利润更快）
+PROFILE_V11B_TP_AGGRESSIVE = StrategyConfig(
+    label="v11b_tp_aggressive",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.08, 0.40), (0.15, 0.30), (0.25, 1.00)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.30, 'vol_20': 0.25, 'vol_10': 0.25, 'boll_width_20': 0.20},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+)
+STRATEGY_PROFILES["v11b_tp_aggressive"] = PROFILE_V11B_TP_AGGRESSIVE
+
+# TP-v2: 更宽松（让利润奔跑）
+PROFILE_V11B_TP_RELAXED = StrategyConfig(
+    label="v11b_tp_relaxed",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.15, 0.25), (0.25, 0.35), (0.40, 1.00)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.30, 'vol_20': 0.25, 'vol_10': 0.25, 'boll_width_20': 0.20},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+)
+STRATEGY_PROFILES["v11b_tp_relaxed"] = PROFILE_V11B_TP_RELAXED
+
+# TP-v3: 递增比例（越涨越减）
+PROFILE_V11B_TP_INCREMENTAL = StrategyConfig(
+    label="v11b_tp_incremental",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.30, 'vol_20': 0.25, 'vol_10': 0.25, 'boll_width_20': 0.20},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+)
+STRATEGY_PROFILES["v11b_tp_incremental"] = PROFILE_V11B_TP_INCREMENTAL
+
+# ── v11b_style: v11b + 价格路径分布因子组 ──────────────────────
+# opt-1: 在v11b 3组基础上添加第4组 distribution
+# 因子：amplitude/vwap_mom/skew_20/kurt_20（收益分布+日内特征，与现有3组正交）
+# IC诊断（2025-06~2026-06）：amplitude=+0.0314/+0.223, vwap_mom=+0.0249/+0.144,
+#   skew_20=+0.0187/+0.285, kurt_20=-0.0111/-0.175
+# 注意：流动性因子(illiquidity/vol_ratio/amount_ratio)在当前窗口 IC≈0，已弃用
+PROFILE_V11B_ZZ800_UNION_STYLE = StrategyConfig(
+    label="v11b_zz800_union_style",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {
+            'mom_20': 0.30,
+            'mom_10': 0.25,
+            'rsi_14': 0.25,
+            'high_low_range': 0.20,
+        },
+        'volatility': {
+            'vol_60': 0.30,
+            'vol_20': 0.25,
+            'vol_10': 0.25,
+            'boll_width_20': 0.20,
+        },
+        'reversal': {
+            'rev_10': 0.30,
+            'rev_5': 0.25,
+            'rsi_6': 0.25,
+            'boll_pos_10': 0.20,
+        },
+    },
+    ensemble_group_top_n=5,  # 每组选5只，WF 验证最优
+)
+
+STRATEGY_PROFILES["v11b_zz800_union_style"] = PROFILE_V11B_ZZ800_UNION_STYLE
 
 # ── v12: 多策略并行 ──────────────────────────────────────────
 # v11b (ensemble) + v10c (因子) + v6b_hlr (稳定) 三策略混合
@@ -645,7 +756,7 @@ PROFILE_V12_MULTI = StrategyConfig(
     use_vol_scaling=True, vol_target=0.20,
     max_industry_weight=0.25,
     use_take_profit=True,
-    tp_tiers=[(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)],
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights=None,
     multi_strategy={

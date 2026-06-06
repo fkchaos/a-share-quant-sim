@@ -636,10 +636,40 @@ PROFILE_V11B_ZZ800_UNION = StrategyConfig(
     ensemble_group_top_n=5,  # 每组选5只，WF 验证最优
 )
 
+# ── v11b 变体: 去掉 Volatility 组 ──────────────────────────────
+PROFILE_V11B_ZZ800_NOVOL = StrategyConfig(
+    label="v11b_zz800_novol",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {
+            'mom_20': 0.30,
+            'mom_10': 0.25,
+            'rsi_14': 0.25,
+            'high_low_range': 0.20,
+        },
+        'reversal': {
+            'rev_10': 0.30,
+            'rev_5': 0.25,
+            'rsi_6': 0.25,
+            'boll_pos_10': 0.20,
+        },
+    },
+    ensemble_group_top_n=5,
+)
+
 # ── opt-3 结论：TP-incremental 止盈参数（采纳为默认）──────────
 # 原 [(0.10,0.30),(0.20,0.30),(0.30,1.00)] → 新 [(0.10,0.20),(0.20,0.30),(0.30,0.50)]
 # 全量回测: 30.43%/1.16/27.49% vs 26.03%/1.04/26.05%（收益+4.4pp，夏普+0.12）
 STRATEGY_PROFILES["v11b_zz800_union"] = PROFILE_V11B_ZZ800_UNION
+STRATEGY_PROFILES["v11b_zz800_novol"] = PROFILE_V11B_ZZ800_NOVOL
 
 # ── v11b_intersection: opt-5 分层 intersection（min_groups=2）─
 # 只保留被 2+ 组同时选中的股票，持仓更集中，质量更高
@@ -690,7 +720,27 @@ PROFILE_V11B_BEAR = StrategyConfig(
 )
 STRATEGY_PROFILES["v11b_bear"] = PROFILE_V11B_BEAR
 
-# ── v11b_style: v11b + 价格路径分布因子组（opt-1，未采纳）──────
+# ── v11b_lowvol: 降低 Volatility 组权重 ──────────────────────────
+PROFILE_V11B_LOWVOL = StrategyConfig(
+    label="v11b_lowvol",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.15, 'vol_20': 0.15, 'vol_10': 0.15, 'boll_width_20': 0.10},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+)
+STRATEGY_PROFILES["v11b_lowvol"] = PROFILE_V11B_LOWVOL
+
 # 基准: [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
 
 # TP-v1: 更激进（早止盈，锁定利润更快）

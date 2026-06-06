@@ -51,29 +51,37 @@
 
 ### 模拟盘 A：v11b_zz800_union（中线）
 - **模式**：Ensemble 多组选股（3组×4因子，并集）
-- **选股池**：中证800（715只）
-- **WF 验证**：✅ 63.7% / 1.70 / 69%
+- **选股池**：中证800（674只）
+- **全量回测**：30.43% / 1.16 / -27.49%（2021-01 ~ 2026-06）
+- **WF 验证**：12.4% / 0.52 / 37.5%（6/16 正收益 fold）— WF 不通过，但全量最优
 - **脚本**：`scripts/sim_daily_v7.py`
+- **状态**：⭐ 继续运行模拟盘
 
 ### 模拟盘 B：v13_small_mid_short（中短线）
-- **模式**：规则化因子选股（5日反转 + 量价异动 + 振幅收窄）
-- **选股池**：中证800 + 流动性过滤（300万-1亿）
-- **WF 验证**：✅ 13.2% / 1.03 / 94%
+- **模式**：评分排序选股（5日反转 + 量价因子）
+- **选股池**：中证800 + 流动性过滤（300万-1亿日均成交额）
+- **全量回测**：49.87% / 2.48 / -13.46%（2021-01 ~ 2026-05）
+- **WF 验证**：14.9% / 1.05 / 94%（15/16 正收益 fold）— ✅ 唯一 WF 通过
 - **脚本**：`scripts/sim_v13.py`
 - **初始资金**：20万，独立账户 `account_v13.json`
+- **状态**：✅ 模拟盘运行中
 
-> 数据：中证800 成分股 715 只，2021-01 ~ 2026-06
+> 数据：中证800 成分股，2021-01 ~ 2026-06
 
 ## 策略对比（2021-01 ~ 2026-06，中证800 选股池）
 
-| 策略 | 全量年化 | 全量夏普 | WF年化 | WF夏普 | 正收益fold | 状态 |
-|------|---------|---------|--------|--------|-----------|------|
-| **v11b_zz800_union** | 26.25% | 1.05 | **63.7%** | **1.70** | **11/16 (69%)** | ⭐ 中线最优 |
-| v10c_zz800_balanced | 37.33% | 1.30 | 32.9% | 0.61 | 7/16 (44%) | WF未通过 |
-| v6b_hlr | 22.64% | 1.23 | 10.5% | 0.41 | 11/16 (69%) | 稳定基准 |
-| **v13_small_mid_short** | — | — | **13.2%** | **1.03** | **15/16 (94%)** | ✅ 中短线 |
+| 策略 | 全量年化 | 全量夏普 | 全量回撤 | WF年化 | WF夏普 | 正收益fold | 状态 |
+|------|---------|---------|---------|--------|--------|-----------|------|
+| **v13_small_mid_short** | **49.87%** | **2.48** | **-13.46%** | **14.9%** | **1.05** | **15/16 (94%)** | ✅ 中短线，WF通过 |
+| **v11b_zz800_union** | 30.43% | 1.16 | -27.49% | 12.4% | 0.52 | 6/16 (37.5%) | ⭐ 中线全量最优 |
+| v10c_zz800_balanced | 37.33% | 1.30 | -27.86% | 32.9% | 0.61 | 7/16 (44%) | WF未通过 |
+| v6b_hlr | 22.64% | 1.23 | -19.63% | 10.5% | 0.41 | 11/16 (69%) | 稳定基准 |
+| v14_resid_mom | 28.54% | 1.28 | -26.18% | 6.4% | 0.17 | 8/16 (50%) | ❌ 熊市fold -69% |
+| v15_quality | 13.20% | 0.64 | -24.87% | — | — | — | ❌ 全量太差 |
+| v16_mom_rev_hybrid | 12.98% | 0.56 | -30.93% | — | — | — | ❌ 信号抵消 |
 
 > 完整策略列表见 [docs/STRATEGY_REGISTRY.md](docs/STRATEGY_REGISTRY.md)
+> 已证伪策略详细记录见 [docs/STRATEGIES_DISCARDED.md](docs/STRATEGIES_DISCARDED.md)
 
 ## 快速开始
 
@@ -109,14 +117,17 @@ python -m pytest tests/test_sim_trading.py tests/test_ensemble.py -v  # 58 tests
 a-share-quant-sim/
 ├── core/                       # 共享引擎（回测+模拟盘共用）
 │   ├── config.py               # STRATEGY_PROFILES + MarketFilter
-│   ├── factors.py              # 40 因子计算
+│   ├── factors.py              # 40+ 因子计算
 │   ├── scoring.py              # Z-score + Ensemble 多组选股
-│   ├── strategy.py             # StrategyEngine (factor/ensemble/ml/hybrid)
+│   ├── strategy.py             # StrategyEngine (factor/ensemble/ml/hybrid/multi)
 │   ├── account.py              # PortfolioState + 交易/风控 API
 │   ├── data.py                 # 数据加载 + 市场过滤
 │   ├── position.py             # Position 领域模型
-│   ├── ml.py                   # ML 训练/预测（Walk-Forward 回测用）
-│   └── ml_predictor.py         # ML 离线训练 + 在线推理
+│   ├── industry_rotation.py    # 行业轮动因子（待数据源就绪）
+│   ├── quality_data.py         # 质量因子数据获取
+│   ├── hmm_timing.py           # HMM 市场状态识别（已弃用）
+│   ├── ml.py                   # ML 训练/预测（已弃用）
+│   └── ml_predictor.py         # ML 离线训练 + 在线推理（已弃用）
 ├── scripts/
 │   ├── sim_daily_v7.py         # ⭐ 每日模拟盘 A（v11b 中线，三阶段）
 │   ├── sim_v13.py              # ⭐ 每日模拟盘 B（v13 中短线，三阶段）
@@ -127,7 +138,8 @@ a-share-quant-sim/
 │   ├── ic_analysis_zz800.py    # 中证800 IC/IR 分析
 │   ├── init_zz800_data.py      # 数据初始化
 │   ├── fill_daily_gaps.py      # 缺口填充
-│   ├── data_fetcher.py         # 多源数据获取
+│   ├── industry_data_v2.py      # 行业分类数据获取（国证，多线程）
+│   ├── quality_data.py          # 质量因子数据获取（AKShare THS）
 │   ├── train_ml_model.py       # ML 训练
 │   ├── ml_rolling_train.py     # ML Walk-Forward 回测
 │   ├── run_signal_skip_update.py # 应急信号脚本

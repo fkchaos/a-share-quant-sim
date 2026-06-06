@@ -1030,23 +1030,32 @@ PROFILE_V15_QUALITY = StrategyConfig(
 )
 STRATEGY_PROFILES["v15_quality"] = PROFILE_V15_QUALITY
 
-# ── v16: 行业轮动 ──────────────────────────────────────────────
-# 行业动量（20日）+ 行业反转（5日）选 top 5 行业
-# 在 top 行业内用 v13 量价因子选股
-PROFILE_V16_INDUSTRY_ROTATION = StrategyConfig(
-    label="v16_industry_rotation",
+# ── v16: 动量+反转混合策略 ──────────────────────────────────────
+# 短期反转（3-5日）+ 中期动量（20-60日）+ 长期趋势（120日）
+# 三周期复合评分，与 v13（纯反转）和 v11b（纯动量）都不同
+PROFILE_V16_MOM_REV_HYBRID = StrategyConfig(
+    label="v16_mom_rev_hybrid",
     weight_method="equal",
     top_n=12, rebalance_freq=20,
     stop_loss=0.20, max_position=0.10,
     use_vol_scaling=True, vol_target=0.20,
-    max_industry_weight=0.30,
+    max_industry_weight=0.25,
     use_take_profit=True,
     tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
     use_holding_decay=True,
     factor_weights={
-        'industry_rot': 0.25, 'rev_5': 0.15, 'mom_20': 0.15,
-        'vol_20': 0.10, 'rsi_14': 0.10, 'amount_ratio': 0.10,
-        'boll_pos_10': 0.10, 'high_low_range': 0.05,
+        # 反转因子（短期）
+        'rev_3': 0.15, 'rev_5': 0.12,
+        # 动量因子（中期）
+        'mom_20': 0.12, 'mom_60': 0.10,
+        # 趋势因子（长期）
+        'mom_120': 0.08,
+        # 量价因子
+        'vol_20': 0.08, 'rsi_14': 0.08, 'amount_ratio': 0.07,
+        # 短线因子
+        'high_low_range': 0.05, 'gap_ratio': 0.05,
+        # 波动率变化
+        'vol_change': 0.05, 'boll_pos_10': 0.05,
     },
 )
-STRATEGY_PROFILES["v16_industry_rotation"] = PROFILE_V16_INDUSTRY_ROTATION
+STRATEGY_PROFILES["v16_mom_rev_hybrid"] = PROFILE_V16_MOM_REV_HYBRID

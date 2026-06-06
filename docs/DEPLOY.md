@@ -65,9 +65,14 @@ v7 脚本支持三阶段模式，需要配置 3 个定时任务：
 
 | 时间 | 命令 | 说明 |
 |------|------|------|
-| 11:35 | `python scripts/sim_daily_v7.py intraday_signal` | 上午收盘出信号 |
-| 13:00 | `python scripts/sim_daily_v7.py intraday_execute` | 下午开盘执行 |
-| 15:30 | `python scripts/sim_daily_v7.py report_only` | 收盘报告（纯只读） |
+| **11:31** | `python scripts/update_daily_data.py` | 上午数据更新（上午收盘后） |
+| **12:00** | `python scripts/sim_daily_v7.py intraday_signal` | v11b 上午出信号 |
+| **12:00** | `python scripts/sim_v13.py intraday_signal` | v13 上午出信号 |
+| **13:00** | `python scripts/sim_daily_v7.py intraday_execute` | v11b 下午开盘执行 |
+| **13:00** | `python scripts/sim_v13.py intraday_execute` | v13 下午开盘执行 |
+| **15:01** | `python scripts/update_daily_data.py` | 下午数据更新（下午收盘后） |
+| **15:30** | `python scripts/sim_daily_v7.py report_only` | v11b 收盘报告（纯只读） |
+| **15:30** | `python scripts/sim_v13.py report_only` | v13 收盘报告（纯只读） |
 
 ### 方式一：crontab
 
@@ -78,18 +83,19 @@ crontab -e
 添加（替换 `/path/to/project` 为实际路径）：
 
 ```cron
+# 数据更新（上午收盘后 + 下午收盘后）
+31 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/update_daily_data.py
+1 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/update_daily_data.py
+
 # A股模拟盘 — v11b 中线策略（工作日）
-35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_signal
-0  13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_execute
+0 12 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_signal
+0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_execute
 30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py report_only
 
 # A股模拟盘 — v13 中短线策略（工作日）
-35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_signal
-0  13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_execute
+0 12 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_signal
+0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_execute
 30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py report_only
-
-# 数据更新（每天 16:00）
-0 16 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/update_daily_data.py
 ```
 
 ### 方式二：Hermes cron

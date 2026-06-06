@@ -194,7 +194,7 @@ data/backtest_results/20260606_210100/
 三阶段模式：上午信号 → 下午执行 → 收盘报告。
 
 ```bash
-# 阶段 1：上午信号（11:35）
+# 阶段 1：上午信号（12:00，上午收盘后 + 数据更新完成）
 python scripts/sim_daily_v7.py intraday_signal
 
 # 阶段 2：下午执行（13:00）
@@ -204,24 +204,10 @@ python scripts/sim_daily_v7.py intraday_execute
 python scripts/sim_daily_v7.py report_only
 ```
 
-**完整参数：**
-
-```bash
-python scripts/sim_daily_v7.py <mode> [--dry-run] [--skip-update]
-```
-
-| 参数 | 说明 |
-|------|------|
-| `intraday_signal` | 上午信号：更新数据 → 风控 → 调仓 → 生成 plan |
-| `intraday_execute` | 下午执行：加载 plan → 执行买卖 → 保存状态 |
-| `report_only` | 收盘报告：纯只读，不修改状态 |
-| `--dry-run` | 模拟执行，不保存状态 |
-| `--skip-update` | 跳过数据更新（应急模式） |
-
 ### v13 中短线策略（sim_v13.py）
 
 ```bash
-# 阶段 1：上午信号（11:35）
+# 阶段 1：上午信号（12:00）
 python scripts/sim_v13.py intraday_signal
 
 # 阶段 2：下午执行（13:00）
@@ -233,20 +219,22 @@ python scripts/sim_v13.py report_only
 
 ### Cron 配置
 
+数据更新独立运行，信号/执行/报告不更新数据，直接用本地 CSV。
+
 ```bash
-# crontab -e
+# 数据更新（上午收盘后 + 下午收盘后）
+31 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data.py
+1  15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data.py
+
 # v11b 中线策略（工作日）
-35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_signal
-0  13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_execute
+0 12 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_signal
+0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_execute
 30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py report_only
 
 # v13 中短线策略（工作日）
-35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_signal
-0  13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_execute
+0 12 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_signal
+0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_execute
 30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py report_only
-
-# 数据更新（每天 16:00）
-0 16 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data.py
 ```
 
 ---

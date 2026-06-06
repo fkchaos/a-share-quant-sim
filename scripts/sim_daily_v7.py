@@ -887,18 +887,16 @@ def step_report(state, date, price_data, names, mode="day_end"):
 
 def run_intraday_signal():
     """
-    上午收盘模式 (11:35)
-    ── 拉取实时快照(上半天) + 日K线历史数据 → 算因子 → 生成操作计划 ──
+    上午收盘模式 (12:00)
+    ── 加载本地CSV数据 → 拉实时快照 → 算因子 → 生成操作计划 ──
     不修改账户, 只输出 plan 文件
+    数据更新由独立 cron (11:31) 完成，此处不更新数据
     """
     logger.info("=" * 70)
     logger.info(f"v7 模拟交易 — 上午信号 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
     logger.info("=" * 70)
 
-    # Step 0: 更新日频数据 (盘中也可能有新数据)
-    step_update_data()
-
-    # Step 1: 加载账户
+    # Step 0: 加载账户
     state, loaded = step_load_account()
 
     # Step 2: 加载盘中价格 (实时快照 + 本地CSV)
@@ -1095,8 +1093,7 @@ def run_day_end(report_only=False):
         return report
 
     # ── 完整日终模式（旧行为，兼容用）──
-    # Step 0: 更新数据
-    step_update_data()
+    # 数据更新由独立 cron (15:01) 完成，此处不再更新
 
     # Step 1: 加载账户
     state, loaded = step_load_account()

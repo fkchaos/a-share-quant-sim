@@ -887,6 +887,25 @@ def main():
     )
     print(f"  共 {len(factors)} 个因子")
 
+    # ── 3.5 加载基本面质量因子 ──────────────────────────────────
+    _has_quality_profile = False
+    for _name in args.strategy:
+        if _name in STRATEGY_PROFILES:
+            _pf = STRATEGY_PROFILES[_name]
+            if _pf.factor_weights and any(k in _pf.factor_weights for k in ['roe', 'revenue_yoy', 'profit_yoy', 'gross_margin', 'debt_asset']):
+                _has_quality_profile = True
+                break
+
+    if _has_quality_profile:
+        print(f"  📊 加载基本面质量因子...")
+        try:
+            from scripts.quality_data import build_quality_factors
+            _quality = build_quality_factors(codes, close_panel.index, start_year="2019")
+            factors.update(_quality)
+            print(f"  ✅ 质量因子已加载（共 {len(factors)} 个因子）")
+        except Exception as _e:
+            print(f"  ⚠️ 质量因子加载失败: {_e}，回退为 NaN")
+
     # ── 3. IC 分析（可选） ────────────────────────────────────
     ic_results = None
     if args.ic_analysis:

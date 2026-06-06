@@ -181,6 +181,41 @@ def calc_factors_single(df: pd.DataFrame) -> dict:
     else:
         factors['resid_mom'] = np.nan
 
+    # 基本面质量因子（从缓存加载）
+    import os as _os
+    _cache = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "data", "quality_factors_cache.csv")
+    if _os.path.exists(_cache):
+        try:
+            _qc = pd.read_csv(_cache, parse_dates=["日期"], dtype={"code": str})
+            _code = df.index.name or "unknown"
+            # 从缓存中找该股票的最新质量因子
+            _stock_qc = _qc[_qc["code"] == _code].sort_values("日期")
+            if len(_stock_qc) > 0:
+                _latest = _stock_qc.iloc[-1]
+                factors["roe"] = _latest.get("roe", np.nan)
+                factors["revenue_yoy"] = _latest.get("revenue_yoy", np.nan)
+                factors["profit_yoy"] = _latest.get("profit_yoy", np.nan)
+                factors["gross_margin"] = _latest.get("gross_margin", np.nan)
+                factors["debt_asset"] = _latest.get("debt_asset", np.nan)
+            else:
+                factors["roe"] = np.nan
+                factors["revenue_yoy"] = np.nan
+                factors["profit_yoy"] = np.nan
+                factors["gross_margin"] = np.nan
+                factors["debt_asset"] = np.nan
+        except Exception:
+            factors["roe"] = np.nan
+            factors["revenue_yoy"] = np.nan
+            factors["profit_yoy"] = np.nan
+            factors["gross_margin"] = np.nan
+            factors["debt_asset"] = np.nan
+    else:
+        factors["roe"] = np.nan
+        factors["revenue_yoy"] = np.nan
+        factors["profit_yoy"] = np.nan
+        factors["gross_margin"] = np.nan
+        factors["debt_asset"] = np.nan
+
     return factors
 
 

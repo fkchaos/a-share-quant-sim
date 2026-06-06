@@ -793,6 +793,31 @@ PROFILE_V14_RESID = StrategyConfig(
     },
 )
 STRATEGY_PROFILES["v14_resid"] = PROFILE_V14_RESID
+
+# ── v15_quality: 基本面质量因子策略 ──────────────────────────────
+# 用 ROE/营收增速/净利增速/净利率/资产负债率构建质量评分
+# 与量价因子低相关，提供差异化 Alpha 来源
+# 质量因子预期：ROE 高 + 营收增速高 + 负债率低 = 高质量
+PROFILE_V15_QUALITY = StrategyConfig(
+    label="v15_quality",
+    weight_method="equal",
+    top_n=10, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights={
+        'roe': 0.25,          # ROE（净资产收益率）
+        'profit_yoy': 0.20,   # 净利润增速
+        'revenue_yoy': 0.15,  # 营收增速
+        'gross_margin': 0.15, # 销售净利率
+        'debt_asset': -0.10,  # 资产负债率（负向：负债率低更好）
+        'resid_mom': 0.15,    # 残差动量（辅助）
+    },
+)
+STRATEGY_PROFILES["v15_quality"] = PROFILE_V15_QUALITY
 PROFILE_V11B_LOWVOL = StrategyConfig(
     label="v11b_lowvol",
     weight_method="equal",

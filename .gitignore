@@ -27,3 +27,5 @@ venv/
 # ML backtest results
 data/backtest_results/
 data/cache/
+data/quality_factors_cache.csv
+data/*.csv

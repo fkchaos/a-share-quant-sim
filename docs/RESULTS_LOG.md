@@ -236,6 +236,51 @@
 
 ---
 
+## v11b 进一步优化（2026-06-12）
+
+### opt-1: 风格因子第4组（未采纳）
+- 加 distribution 第4组（amplitude/vwap_mom/skew_20/kurt_20）到 ensemble union
+- 持仓从 12.8 扩大到 15.5 只，但稀释了选股质量
+- 全量收益 14.96% < v11b 26.03%
+- **教训**：简单加组≠改善，需要分层 intersection 或改进组内因子
+
+### opt-3: 分级止盈参数（采纳 ✅）
+- 旧: (10%/30%, 20%/30%, 30%/100%) → 新: (10%/20%, 20%/30%, 30%/50%)
+- TP-incremental 全量回测: 30.43%/1.16/27.49% vs 旧 26.03%/1.04/26.05%
+- 收益+4.4pp，夏普+0.12，Calmar+0.11
+- **已全局更新所有策略 tp_tiers**（除3个TP变体外）
+
+### opt-4: 架构改进（采纳 ✅）
+- StrategyConfig 加 ensemble_min_groups 字段
+- scoring.py: ensemble_union_score 加 min_groups 参数（1=union, 2=intersection）
+- strategy.py: StrategyEngine 透传 ensemble_min_groups
+- 为后续熊市保护机制预留接口
+
+### opt-5: Intersection 验证（未采纳）
+- v11b_intersection: min_groups=2（至少2组同时选中）
+- 2024-01~2026-06: 3.52%/0.21 vs union 11.57%/0.49
+- **教训**：intersection 在震荡市选出的共识股=中庸股
+
+### opt-6: Market Filter 接口（预留）
+- StrategyConfig 加 use_market_filter / market_filter_method 字段
+- 默认关闭，后续可在 run_backtest 调仓逻辑里加 MA20<MA60 时空仓
+
+### WF 验证结果汇总
+
+| 策略 | WF 年化 | WF 夏普 | 正收益 fold | 状态 |
+|------|---------|---------|------------|------|
+| v11b（旧 TP） | 63.7% | 1.70 | 11/16 (69%) | ✅ 历史通过 |
+| v11b（新 TP） | 12.4% | 0.52 | 6/16 (37.5%) | ❌ WF 不通过 |
+| v13 | 13.2% | 1.03 | 15/16 (94%) | ✅ 通过 |
+
+### v11b WF 不通过根因分析
+- 截面因子在熊市 WF fold 反复失效（2022、2024 熊市 fold 大亏）
+- 10个负收益 fold 集中在熊市和震荡市
+- **不是止盈参数问题**（旧 TP 参数 WF 69%，新 TP 参数 WF 37.5%，差异来自 WF 窗口不同）
+- **需要熊市保护机制**：不是择时（已验证无效），而是在熊市降低仓位或禁止开仓
+
+---
+
 ## 已舍弃方向
 
 新闻情感因子 / IC-IR 加权(v8全集) / 系统择时(MA60/120) / 短线高频交易(v9 freq=5) / 简单多策略并行 / ML分组stacking / ML regime switching / ML 因子权重预测 / ML hybrid(样本外IC≈0) / 小市值因子(v10_small_cap, 仅2025年有效) / vol_ratio_20+amount_ratio(v6b原始因子, 中证800上IR<0.05) / 自适应因子权重(v10g) / 趋势filter(MA60) / 评分加权(线性/指数) / 换手率控制 / 收盘报告做完整流程(应纯只读)

@@ -144,11 +144,11 @@ def calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, 
 # 选股逻辑
 # ============================================================
 def select_stocks(factors, date, close_panel, volume_panel, amount_panel, current_holdings=None):
-    """每日选股"""
+    """每日选股 — 评分排序制"""
     if date not in factors['rev_5'].index:
         return []
 
-    # 流动性筛选（日均成交额 500万-5000万）
+    # 流动性筛选
     avg_amount = amount_panel.rolling(20).mean() / 1e4  # 万元
     if date in avg_amount.index:
         day_amount = avg_amount.loc[date]
@@ -163,28 +163,38 @@ def select_stocks(factors, date, close_panel, volume_panel, amount_panel, curren
     vol_shrink = factors['vol_shrink'].loc[date].dropna()
     range_ratio = factors['range_ratio'].loc[date].dropna()
 
-    # 条件筛选（在流动性池中）
-    # 条件1：5日跌幅 > 2%（超跌）
-    cond1 = set(rev_5[rev_5 < V13Config.rev_threshold].index)
+    # 在流动性池中，对每只股票计算综合评分
+    scores = {}
+    for code in liquid_stocks:
+        if code not in rev_5.index:
+            continue
+        score = 0.0
 
-    # 条件2：当日放量（量比 > 1.3）
-    cond2 = set(vol_ratio[vol_ratio > V13Config.vol_ratio_threshold].index)
+        # 反转因子（跌幅越大分越高，负值表示下跌）
+        r = rev_5.get(code, 0)
+        if r < V13Config.rev_threshold:  # 超跌至少要有 2% 跌幅
+            score += abs(r) * 100  # 跌幅的绝对值作为基础分
 
-    # 条件3：缩量企稳（量比 < 0.7 且跌幅收窄）
-    cond3 = set(vol_shrink[vol_shrink < 0.7].index)
+            # 量价辅助因子（加分项）
+            vr = vol_ratio.get(code, 1.0)
+            if vr > V13Config.vol_ratio_threshold:  # 放量
+                score += 0.5
+            vs = vol_shrink.get(code, 1.0)
+            if vs < 0.7:  # 缩量企稳
+                score += 0.3
+            rr = range_ratio.get(code, 1.0)
+            if rr < 0.8:  # 振幅收窄
+                score += 0.2
 
-    # 条件4：振幅收窄（当日振幅 < 5日均幅的 80%）
-    cond4 = set(range_ratio[range_ratio < 0.8].index)
-
-    # 综合：超跌 + (放量 或 缩量企稳 或 振幅收窄) + 流动性
-    candidates = cond1 & (cond2 | cond3 | cond4) & liquid_stocks
+        if score > 0:
+            scores[code] = score
 
     # 排除当前持仓
     if current_holdings:
-        candidates = candidates - set(current_holdings.keys())
+        scores = {c: s for c, s in scores.items() if c not in current_holdings}
 
-    # 按反转幅度排序（跌幅最大的优先）
-    candidates = sorted(candidates, key=lambda c: rev_5.get(c, 0))
+    # 按评分降序排列
+    candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
 
     return candidates[:V13Config.max_holdings]
 

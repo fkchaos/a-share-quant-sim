@@ -86,6 +86,7 @@ def load_account():
                 "cost_price": h.get("cost_price", 0),
                 "entry_date": h.get("entry_date", ""),
                 "hold_days": h.get("hold_days", 0),
+                "highest_profit": h.get("highest_profit", 0.0),
             }
         state = PortfolioState(
             cash=data.get("cash", INITIAL_CAPITAL),
@@ -108,6 +109,7 @@ def save_account(state):
                 "cost_price": h.get("cost_price", 0),
                 "entry_date": h.get("entry_date", ""),
                 "hold_days": h.get("hold_days", 0),
+                "highest_profit": h.get("highest_profit", 0.0),
             }
     data = {
         "cash": state.cash,
@@ -235,32 +237,32 @@ def calc_v13_factors(code_dfs, liquid_stocks):
 
 
 def select_stocks_v13(factors, holdings):
-    """v13 选股"""
+    """v13 选股 — 评分排序制"""
     rev_5 = factors["rev_5"]
     vol_ratio = factors["vol_ratio"]
     vol_shrink = factors["vol_shrink"]
     range_ratio = factors["range_ratio"]
 
-    # 条件1：5 日跌幅 > 2%（超跌）
-    cond1 = {c for c, v in rev_5.items() if v < -0.02}
-
-    # 条件2：放量（量比 > 1.3）或缩量企稳（量比 < 0.7）
-    cond2_boost = {c for c, v in vol_ratio.items() if v > 1.3}
-    cond2_shrink = {c for c, v in vol_shrink.items() if v < 0.7}
-    cond2 = cond2_boost | cond2_shrink
-
-    # 条件3：振幅收窄（振幅比 < 0.8）
-    cond3 = {c for c, v in range_ratio.items() if v < 0.8}
-
-    # 综合：超跌 + (放量或缩量企稳) 或 超跌 + 振幅收窄
-    candidates = (cond1 & cond2) | (cond1 & cond3)
+    scores = {}
+    for code in rev_5:
+        r = rev_5[code]
+        if r >= -0.02:  # 跌幅不够 2% 跳过
+            continue
+        score = abs(r) * 100  # 基础分：跌幅绝对值
+        if vol_ratio.get(code, 1.0) > 1.3:
+            score += 0.5
+        if vol_shrink.get(code, 1.0) < 0.7:
+            score += 0.3
+        if range_ratio.get(code, 1.0) < 0.8:
+            score += 0.2
+        scores[code] = score
 
     # 排除当前持仓
-    candidates -= set(holdings.keys())
+    for code in holdings:
+        scores.pop(code, None)
 
-    # 按反转幅度排序（跌幅最大的优先）
-    candidates = sorted(candidates, key=lambda c: rev_5.get(c, 0))
-
+    # 按评分降序
+    candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
     return candidates[:MAX_DAILY_BUY]
 
 

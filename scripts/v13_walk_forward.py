@@ -62,12 +62,21 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
             if pd.isna(current_price) or current_price <= 0:
                 continue
             pnl_pct = (current_price - h['cost']) / h['cost']
+
+            # 止损
             if pnl_pct <= cfg.stop_loss:
                 to_sell.append((code, 'stop_loss', pnl_pct))
-            elif pnl_pct >= cfg.stop_profit:
+                continue
+
+            # 止盈
+            if pnl_pct >= cfg.stop_profit:
                 to_sell.append((code, 'stop_profit', pnl_pct))
-            elif h['hold_days'] >= cfg.hold_days_max:
+                continue
+
+            # 超时
+            if h['hold_days'] >= cfg.hold_days_max:
                 to_sell.append((code, 'timeout', pnl_pct))
+                continue
 
         # 执行卖出
         sold_codes = set()
@@ -146,7 +155,7 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
 
 
 def _select_stocks_inline(factors, date, close_panel, volume_panel, amount_panel, holdings):
-    """内联选股（从 select_stocks 复制，避免循环导入）"""
+    """内联选股 — 评分排序制"""
     if date not in factors['rev_5'].index:
         return []
     avg_amount = amount_panel.rolling(20).mean() / 1e4
@@ -165,16 +174,29 @@ def _select_stocks_inline(factors, date, close_panel, volume_panel, amount_panel
     except KeyError:
         return []
 
-    cond1 = rev_5[rev_5 < V13Config.rev_threshold].index
-    cond2_boost = vol_ratio[vol_ratio > V13Config.vol_ratio_threshold].index
-    cond2_shrink = vol_shrink[vol_shrink > 0.7].index
-    cond2 = set(cond2_boost) | set(cond2_shrink)
-    cond3 = range_ratio[range_ratio < 0.8].index
+    scores = {}
+    for code in liquid_stocks:
+        if code not in rev_5.index:
+            continue
+        score = 0.0
+        r = rev_5.get(code, 0)
+        if r < V13Config.rev_threshold:
+            score += abs(r) * 100
+            vr = vol_ratio.get(code, 1.0)
+            if vr > V13Config.vol_ratio_threshold:
+                score += 0.5
+            vs = vol_shrink.get(code, 1.0)
+            if vs < 0.7:
+                score += 0.3
+            rr = range_ratio.get(code, 1.0)
+            if rr < 0.8:
+                score += 0.2
+        if score > 0:
+            scores[code] = score
 
-    candidates = (set(cond1) & cond2 & liquid_stocks) | (set(cond1) & set(cond3) & liquid_stocks)
     if holdings:
-        candidates = candidates - set(holdings.keys())
-    candidates = sorted(candidates, key=lambda c: rev_5.get(c, 0))
+        scores = {c: s for c, s in scores.items() if c not in holdings}
+    candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
     return candidates[:V13Config.max_holdings]
 
 

@@ -123,9 +123,10 @@ def save_account(state):
 
 # ── 数据加载 ──────────────────────────────────────────────────────
 def load_daily_data():
-    """加载日K线数据"""
+    """加载日K线数据，返回 {code: df} 并打印数据最后更新时间"""
     files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
     code_dfs = {}
+    latest_dates = {}
     for f in files:
         code = f.replace(".csv", "")
         try:
@@ -133,8 +134,19 @@ def load_daily_data():
             df = df[df["volume"] > 0]
             if len(df) > 20:
                 code_dfs[code] = df
+                latest_dates[code] = df.index[-1]
         except Exception:
             pass
+    # 打印数据最后更新时间
+    if latest_dates:
+        newest = max(latest_dates.values())
+        oldest = min(latest_dates.values())
+        today = datetime.now().date()
+        days_behind = (today - newest.date()).days
+        ts = newest.strftime("%Y-%m-%d %H:%M:%S") if hasattr(newest, 'strftime') else str(newest)
+        logger.info(f"📅 本地数据: {len(code_dfs)} 只 | 最新: {ts} | 最旧: {oldest.date()} | 滞后: {days_behind}天")
+    else:
+        logger.warning("📅 本地数据: 无有效 CSV 文件")
     return code_dfs
 
 

@@ -255,7 +255,9 @@ def step_load_prices(intraday=False):
         # ── 日终模式: 本地 CSV ──
         sample_df = pd.read_csv(os.path.join(DAILY_DIR, files[0]), index_col='date', parse_dates=True)
         latest_date = sample_df.index[-1]
-        logger.info(f"最新数据日期: {latest_date.date()}")
+        today = datetime.now().date()
+        days_behind = (today - latest_date.date()).days
+        logger.info(f"📅 本地数据: {len(files)} 只 | 最新: {latest_date.date()} | 滞后: {days_behind}天")
 
         price_data = pd.Series(dtype=float)
         code_dataframes = {}
@@ -295,13 +297,23 @@ def step_load_prices(intraday=False):
         logger.info(f"盘中数据时间: {now.strftime('%H:%M')}, 有效股票 {len(price_data)} 只")
 
         # 同时加载本地CSV供因子计算用(用的是历史数据，不受盘中影响)
+        latest_dates = {}
         for f in files:
             code = f.replace(".csv", "")
             try:
                 df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
                 code_dataframes[code] = df
+                if len(df) > 0:
+                    latest_dates[code] = df.index[-1]
             except Exception:
                 pass
+
+        # 打印本地数据最后更新时间
+        if latest_dates:
+            newest = max(latest_dates.values())
+            today = datetime.now().date()
+            days_behind = (today - newest.date()).days
+            logger.info(f"📅 本地数据: {len(latest_dates)} 只 | 最新: {newest.date()} | 滞后: {days_behind}天")
 
         return date_str, price_data, code_dataframes, files
 

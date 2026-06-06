@@ -192,7 +192,12 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
                  use_holding_decay=False,
                  exec_timing='close',
                  open_panel=None,
-                 warmup_days=120):
+                 warmup_days=120,
+                 use_market_filter=False,
+                 market_filter_method='ma_crossover',
+                 market_ma_short=20,
+                 market_ma_long=60,
+                 run_kwargs=None):
     """
     完整回测引擎。
 
@@ -297,6 +302,23 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
             day_score = score.loc[sig_date].dropna()
             valid_idx = day_score.index.isin(price_data.dropna().index)
             day_score = day_score[valid_idx]
+
+            # ── opt-6: 市场择时 filter ──────────────────────────
+            # 当 MA20 < MA60（空头排列）时，跳过买入操作
+            # ── opt-6: 市场择时 filter ──────────────────────────
+            _market_bear = False
+            if use_market_filter and i > market_ma_long:
+                _method = market_filter_method
+                _ma_s = market_ma_short
+                _ma_l = market_ma_long
+                if _method == 'ma_crossover':
+                    _market_proxy = close_panel.iloc[max(0, i-_ma_l):i].mean(axis=1)
+                    _ma_short_val = _market_proxy.rolling(_ma_s).mean().iloc[-1]
+                    _ma_long_val = _market_proxy.rolling(_ma_l).mean().iloc[-1]
+                    if not (np.isnan(_ma_short_val) or np.isnan(_ma_long_val)):
+                        _market_bear = _ma_short_val < _ma_long_val
+                        if _market_bear:
+                            day_score = pd.Series(dtype=float)
 
             if use_vol_scaling:
                 returns = close_panel.pct_change()
@@ -500,6 +522,13 @@ def walk_forward(close_panel, train_days=252, test_days=63,
     score_fn: 评分函数 fn(factors_panel) -> score_df，必须提供
     volume_panel/amount_panel/high_panel/low_panel: 完整的面板数据（用于 WF 切片）
     """
+    run_kwargs = run_kwargs or {}
+    # 提取 market_filter 参数（从 kwargs 或 run_kwargs）
+    _mf_keys = ('use_market_filter', 'market_filter_method', 'market_ma_short', 'market_ma_long')
+    for _k in _mf_keys:
+        if _k in kwargs:
+            run_kwargs[_k] = kwargs[_k]
+
     dates = close_panel.index
     n = len(dates)
     fold_results = []
@@ -869,6 +898,11 @@ def main():
             tp_tiers=profile.tp_tiers,
             use_holding_decay=profile.use_holding_decay,
             exec_timing=args.exec_timing,
+            # opt-6: market filter
+            use_market_filter=profile.use_market_filter,
+            market_filter_method=profile.market_filter_method,
+            market_ma_short=profile.market_ma_short,
+            market_ma_long=profile.market_ma_long,
         )
         if args.exec_timing == 'open':
             kw['open_panel'] = open_panel
@@ -951,7 +985,14 @@ def main():
             print(f"\n  --- WF: {cfg['label']} ---")
             # 从 cfg 提取 run_backtest 的风控参数（止盈/衰减/行业限制等）
             _rk = {k: v for k, v in cfg['kwargs'].items()
-                   if k not in ('top_n', 'rebalance_freq', 'stop_loss', 'label', 'score', 'exec_timing', 'open_panel')}
+                   if k not in ('top_n', 'rebalance_freq', 'stop_loss', 'label', 'score',
+                                'exec_timing', 'open_panel', 'stock_names',
+                                'use_market_filter', 'market_filter_method',
+                                'market_ma_short', 'market_ma_long')}
+            # 提取 market_filter 参数（WF 透传）
+            _mf = {k: cfg['kwargs'].get(k) for k in
+                   ('use_market_filter', 'market_filter_method', 'market_ma_short', 'market_ma_long')
+                   if k in cfg['kwargs']}
             wf_results, wf_nav = walk_forward(
                 close_panel,
                 top_n=top_n, rebalance_freq=rebal_freq, stop_loss=sl,
@@ -959,6 +1000,7 @@ def main():
                 volume_panel=volume_panel, amount_panel=amount_panel,
                 high_panel=high_panel, low_panel=low_panel,
                 run_kwargs=_rk,
+                **_mf,
             )
             if wf_results:
                 print(f"\n  Walk-Forward 汇总 {cfg['label']} ({len(wf_results)} folds):")

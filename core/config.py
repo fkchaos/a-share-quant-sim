@@ -664,6 +664,32 @@ PROFILE_V11B_INTERSECTION = StrategyConfig(
 )
 STRATEGY_PROFILES["v11b_intersection"] = PROFILE_V11B_INTERSECTION
 
+# ── v11b_bear: v11b + 熊市保护（MA20<MA60 禁止买入）──────────
+# opt-6: 在熊市 fold 里不买入（保持现金），减少熊市亏损
+PROFILE_V11B_BEAR = StrategyConfig(
+    label="v11b_bear",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.30, 'vol_20': 0.25, 'vol_10': 0.25, 'boll_width_20': 0.20},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+    use_market_filter=True,
+    market_filter_method="ma_crossover",
+    market_ma_short=20,
+    market_ma_long=60,
+)
+STRATEGY_PROFILES["v11b_bear"] = PROFILE_V11B_BEAR
+
 # ── v11b_style: v11b + 价格路径分布因子组（opt-1，未采纳）──────
 # 基准: [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]
 

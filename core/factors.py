@@ -329,4 +329,55 @@ def calc_factors_panel(
         factors['high_low_range'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
         factors['intraday_drift'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
 
+    # ── 拥挤度因子（Crowding）──────────────────────────────────────────
+    # 参考华泰金工行业拥挤度模型，个股层面：
+    # 1. 换手率分位数：当日换手率在近 250 日的分位数（越高越拥挤）
+    # 2. 短期涨幅分位数：近 5 日涨幅在近 250 日的分位数
+    # 3. 量比分位数：当日量比在近 250 日的分位数
+    # 4. 振幅分位数：当日振幅在近 250 日的分位数
+    #
+    # 使用 rolling quantile：计算每个窗口内当前值在窗口中的百分位排名
+    # 简化实现：用 rank(pct=True) 的最后一个值作为当前分位数
+
+    # 换手率（volume / 20日均量）
+    turnover = volume_panel / (volume_panel.rolling(20).mean() + eps)
+
+    # 滚动分位数：对每个股票独立计算 250 日窗口内当前值的百分位
+    def _rolling_pctrank(s):
+        """计算序列最后一个值在序列中的百分位"""
+        if len(s) < 1:
+            return 0.5
+        return pd.Series(s).rank(pct=True).iloc[-1]
+
+    factors['crowd_turnover_pct'] = turnover.rolling(250).apply(
+        _rolling_pctrank, raw=True
+    )
+
+    # 短期涨幅分位数（5日涨幅在近250日的分位数）
+    ret_5d = close_panel.pct_change(5)
+    factors['crowd_ret5d_pct'] = ret_5d.rolling(250).apply(
+        _rolling_pctrank, raw=True
+    )
+
+    # 量比分位数
+    vol_ratio = volume_panel / (volume_panel.rolling(10).mean() + eps)
+    factors['crowd_vr_pct'] = vol_ratio.rolling(250).apply(
+        _rolling_pctrank, raw=True
+    )
+
+    # 振幅分位数（high-low range）
+    if high_panel is not None and low_panel is not None:
+        amplitude = (high_panel - low_panel) / (close_panel + eps)
+        factors['crowd_amp_pct'] = amplitude.rolling(250).apply(
+            _rolling_pctrank, raw=True
+        )
+    else:
+        factors['crowd_amp_pct'] = pd.DataFrame(0.5, index=close_panel.index, columns=close_panel.columns)
+
+    # 综合拥挤度得分（4个指标等权平均，越高越拥挤）
+    factors['crowd_score'] = (
+        factors['crowd_turnover_pct'] + factors['crowd_ret5d_pct'] +
+        factors['crowd_vr_pct'] + factors['crowd_amp_pct']
+    ) / 4.0
+
     return factors

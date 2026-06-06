@@ -151,11 +151,14 @@ def ensemble_union_score(
     ensemble_groups: dict,
     group_top_n: int = 4,
     min_groups: int = 1,
+    crowd_threshold: float = 0.0,
+    date=None,
 ) -> pd.DataFrame:
     """多组 Ensemble 评分（面板模式，回测用）。
 
     每组独立评分选 top_n，最终 score = 选中该股票的组数 (0 ~ len(groups))。
     min_groups: 最少需要被多少组选中才计入最终评分（1=union, 2=intersection）
+    crowd_threshold: 拥挤度过滤阈值（0=不过滤，0.9=排除综合拥挤度>90%的股票）
     """
     if not ensemble_groups:
         first_key = list(factors.keys())[0]
@@ -167,6 +170,13 @@ def ensemble_union_score(
     stocks = template.columns
 
     selection_count = pd.DataFrame(0.0, index=dates, columns=stocks)
+
+    # 拥挤度过滤：获取 crowd_score 面板
+    crowd_mask = None
+    if crowd_threshold > 0 and 'crowd_score' in factors:
+        crowd_panel = factors['crowd_score']
+        # 拥挤度在阈值以下的股票通过
+        crowd_mask = crowd_panel <= crowd_threshold
 
     for group_name, weights in ensemble_groups.items():
         group_factors = {k: v for k, v in factors.items() if k in weights}
@@ -180,6 +190,15 @@ def ensemble_union_score(
             day_scores = group_score.loc[date].dropna()
             if len(day_scores) < group_top_n:
                 continue
+
+            # 拥挤度过滤：排除拥挤度过高的股票
+            if crowd_mask is not None and date in crowd_mask.index:
+                crowded = crowd_mask.loc[date]
+                day_scores = day_scores[~crowded.reindex(day_scores.index).fillna(False)]
+
+            if len(day_scores) < group_top_n:
+                continue
+
             for s in day_scores.nlargest(group_top_n).index:
                 if s in selection_count.columns:
                     selection_count.loc[date, s] += 1.0

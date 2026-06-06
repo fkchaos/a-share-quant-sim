@@ -153,7 +153,11 @@ class StrategyEngine:
             )
         group_top_n = self.prof.ensemble_group_top_n
         min_groups = getattr(self.prof, 'ensemble_min_groups', 1)
-        return ensemble_union_score(factors_panel, groups, group_top_n, min_groups=min_groups)
+        crowd_threshold = getattr(self.prof, 'crowd_threshold', 0.0)
+        return ensemble_union_score(
+            factors_panel, groups, group_top_n,
+            min_groups=min_groups, crowd_threshold=crowd_threshold,
+        )
 
     def _score_panel_multi(self, factors_panel: dict) -> pd.DataFrame:
         """多策略并行评分（面板模式）。

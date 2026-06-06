@@ -87,7 +87,7 @@ class TestFactorComputation:
         """因子输出维度正确"""
         close_panel, vol_panel, amt_panel = small_panel
         factors = calc_factors_panel(close_panel, vol_panel, amt_panel)
-        assert len(factors) == 40
+        assert len(factors) == 45
         for name, df in factors.items():
             assert df.shape == close_panel.shape, (
                 f"{name}: expected {close_panel.shape}, got {df.shape}"

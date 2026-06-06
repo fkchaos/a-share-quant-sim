@@ -134,6 +134,7 @@ class StrategyConfig:
     ensemble_groups: Optional[Dict[str, Dict[str, float]]] = None
     ensemble_group_top_n: int = 4
     ensemble_min_groups: int = 1   # 最少需要被多少组选中（1=union, 2=intersection）
+    crowd_threshold: float = 0.0   # 拥挤度过滤阈值（0=不过滤，0.9=排除拥挤度>90%的股票）
 
     # ── 多策略并行 ────────────────────────────────────────────
     multi_strategy: Optional[Dict] = None
@@ -720,7 +721,27 @@ PROFILE_V11B_BEAR = StrategyConfig(
 )
 STRATEGY_PROFILES["v11b_bear"] = PROFILE_V11B_BEAR
 
-# ── v11b_lowvol: 降低 Volatility 组权重 ──────────────────────────
+# ── v11b_crowd: v11b + 拥挤度过滤（排除综合拥挤度>80%的股票）──
+PROFILE_V11B_CROWD = StrategyConfig(
+    label="v11b_crowd",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.30, 'vol_20': 0.25, 'vol_10': 0.25, 'boll_width_20': 0.20},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+    crowd_threshold=0.80,  # 排除综合拥挤度>80%的股票
+)
+STRATEGY_PROFILES["v11b_crowd"] = PROFILE_V11B_CROWD
 PROFILE_V11B_LOWVOL = StrategyConfig(
     label="v11b_lowvol",
     weight_method="equal",

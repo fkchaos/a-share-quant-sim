@@ -130,6 +130,7 @@ class StrategyConfig:
     # ── 多组 Ensemble 策略 ────────────────────────────────────
     ensemble_groups: Optional[Dict[str, Dict[str, float]]] = None
     ensemble_group_top_n: int = 4
+    ensemble_min_groups: int = 1   # 最少需要被多少组选中（1=union, 2=intersection）
 
     # ── 多策略并行 ────────────────────────────────────────────
     multi_strategy: Optional[Dict] = None
@@ -636,6 +637,29 @@ PROFILE_V11B_ZZ800_UNION = StrategyConfig(
 # 原 [(0.10,0.30),(0.20,0.30),(0.30,1.00)] → 新 [(0.10,0.20),(0.20,0.30),(0.30,0.50)]
 # 全量回测: 30.43%/1.16/27.49% vs 26.03%/1.04/26.05%（收益+4.4pp，夏普+0.12）
 STRATEGY_PROFILES["v11b_zz800_union"] = PROFILE_V11B_ZZ800_UNION
+
+# ── v11b_intersection: opt-5 分层 intersection（min_groups=2）─
+# 只保留被 2+ 组同时选中的股票，持仓更集中，质量更高
+PROFILE_V11B_INTERSECTION = StrategyConfig(
+    label="v11b_intersection",
+    weight_method="equal",
+    top_n=12, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights=None,
+    ensemble_groups={
+        'momentum': {'mom_20': 0.30, 'mom_10': 0.25, 'rsi_14': 0.25, 'high_low_range': 0.20},
+        'volatility': {'vol_60': 0.30, 'vol_20': 0.25, 'vol_10': 0.25, 'boll_width_20': 0.20},
+        'reversal': {'rev_10': 0.30, 'rev_5': 0.25, 'rsi_6': 0.25, 'boll_pos_10': 0.20},
+    },
+    ensemble_group_top_n=5,
+    ensemble_min_groups=2,  # intersection: 至少被2组选中
+)
+STRATEGY_PROFILES["v11b_intersection"] = PROFILE_V11B_INTERSECTION
 
 # ── v11b_style: v11b + 价格路径分布因子组（opt-1，未采纳）──────
 # 基准: [(0.10, 0.30), (0.20, 0.30), (0.30, 1.00)]

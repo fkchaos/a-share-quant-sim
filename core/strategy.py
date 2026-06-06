@@ -152,7 +152,8 @@ class StrategyEngine:
                 f"策略 {self.profile_name} 的 mode=ensemble 但 ensemble_groups 未配置"
             )
         group_top_n = self.prof.ensemble_group_top_n
-        return ensemble_union_score(factors_panel, groups, group_top_n)
+        min_groups = getattr(self.prof, 'ensemble_min_groups', 1)
+        return ensemble_union_score(factors_panel, groups, group_top_n, min_groups=min_groups)
 
     def _score_panel_multi(self, factors_panel: dict) -> pd.DataFrame:
         """多策略并行评分（面板模式）。

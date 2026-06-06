@@ -167,6 +167,20 @@ def calc_factors_single(df: pd.DataFrame) -> dict:
         factors['high_low_range'] = np.nan
         factors['intraday_drift'] = np.nan
 
+    # 残差动量（single 版本：用时序回归残差）
+    # 用过去 20 日收益率对 size/vol/mom/liquidity 时序回归，取最新残差
+    if len(close) >= 20:
+        _ret = returns.iloc[-20:].values
+        _t = np.arange(20, dtype=float)
+        # 简化：用收益率对时间趋势回归，残差 = 去趋势后的收益
+        # 更准确的 Barra 风格回归需要截面数据，single 版本用近似
+        _t_norm = (_t - _t.mean()) / (_t.std() + eps)
+        _beta = np.dot(_t_norm, _ret) / (np.dot(_t_norm, _t_norm) + eps)
+        _resid = _ret - _beta * _t_norm
+        factors['resid_mom'] = _resid[-1]  # 最新残差
+    else:
+        factors['resid_mom'] = np.nan
+
     return factors
 
 
@@ -379,5 +393,71 @@ def calc_factors_panel(
         factors['crowd_turnover_pct'] + factors['crowd_ret5d_pct'] +
         factors['crowd_vr_pct'] + factors['crowd_amp_pct']
     ) / 4.0
+
+    # ── 残差动量（Residual Momentum）────────────────────────────────
+    # 华泰金工方法：用 Barra 风格因子截面回归，取残差做动量
+    # 风格因子：size(log市值), volatility, momentum, liquidity
+    # 残差 = 剥离风格暴露后的纯 Alpha
+
+    _n_days = 20  # 残差动量窗口
+    _min_stocks = 50  # 最少股票数做回归
+
+    # 构造风格因子截面（每个日期一个截面）
+    # size: log(close * volume) 作为流通市值代理
+    _size = np.log(close_panel * volume_panel + eps)
+    # volatility: 已实现波动率 vol_20
+    _vol = factors.get('vol_20', returns.rolling(20).std())
+    # momentum: mom_20
+    _mom = close_panel.pct_change(20)
+    # liquidity: amount_ratio (已计算)
+    _liq = factors.get('amount_ratio', amount_panel / (amount_panel.rolling(20).mean() + eps))
+
+    # 截面回归：r_i = α + β1*size_i + β2*vol_i + β3*mom_i + β4*liq_i + ε_i
+    # 残差 ε_i = r_i - (α + β1*size_i + β2*vol_i + β3*mom_i + β4*liq_i)
+    # 简化：用过去 _n_days 的残差均值作为残差动量因子
+
+    _resid_mom = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
+
+    for date in close_panel.index:
+        # 截面数据
+        _r = returns.loc[date] if date in returns.index else None
+        if _r is None:
+            continue
+        _s = _size.loc[date] if date in _size.index else None
+        _v = _vol.loc[date] if date in _vol.index else None
+        _m = _mom.loc[date] if date in _mom.index else None
+        _l = _liq.loc[date] if date in _liq.index else None
+
+        if _s is None or _v is None or _m is None or _l is None:
+            continue
+
+        # 合并截面数据
+        _df = pd.DataFrame({'r': _r, 'size': _s, 'vol': _v, 'mom': _m, 'liq': _l})
+        _df = _df.dropna()
+
+        if len(_df) < _min_stocks:
+            continue
+
+        # 标准化风格因子
+        for col in ['size', 'vol', 'mom', 'liq']:
+            _df[col] = (_df[col] - _df[col].mean()) / (_df[col].std() + eps)
+
+        # OLS 回归（截面）
+        X = _df[['size', 'vol', 'mom', 'liq']].values
+        y = _df['r'].values
+        try:
+            # β = (X'X)^(-1) X'y
+            XtX = X.T @ X
+            Xty = X.T @ y
+            beta = np.linalg.solve(XtX + np.eye(4) * 1e-6, Xty)
+            resid = y - X @ beta
+        except np.linalg.LinAlgError:
+            continue
+
+        # 残差动量 = 过去 _n_days 残差累计（简化：用当前残差近似）
+        _stock_resid = pd.Series(resid, index=_df.index)
+        _resid_mom.loc[date] = _stock_resid.reindex(_resid_mom.columns).fillna(0)
+
+    factors['resid_mom'] = _resid_mom
 
     return factors

@@ -769,6 +769,30 @@ PROFILE_V11B_HMM = StrategyConfig(
     use_hmm_position=True,  # ← 核心差异：HMM 仓位管理
 )
 STRATEGY_PROFILES["v11b_hmm"] = PROFILE_V11B_HMM
+
+# ── v14_resid: 残差动量策略 ──────────────────────────────────────
+# 华泰金工残差动量因子：截面回归剥离风格暴露后取残差动量
+# 与 v11b ensemble 低相关（残差动量是纯 Alpha，无风格暴露）
+# 选股：残差动量 + v11b ensemble 混合评分
+PROFILE_V14_RESID = StrategyConfig(
+    label="v14_resid",
+    weight_method="equal",
+    top_n=10, rebalance_freq=20,
+    stop_loss=0.20, max_position=0.10,
+    use_vol_scaling=True, vol_target=0.20,
+    max_industry_weight=0.25,
+    use_take_profit=True,
+    tp_tiers=[(0.10, 0.20), (0.20, 0.30), (0.30, 0.50)],
+    use_holding_decay=True,
+    factor_weights={
+        'resid_mom': 0.50,   # 残差动量（主因子）
+        'mom_20': 0.15,      # 趋势动量（辅助）
+        'rev_10': 0.15,      # 反转因子（辅助）
+        'vol_20': 0.10,      # 波动率过滤
+        'amount_ratio': 0.10, # 流动性
+    },
+)
+STRATEGY_PROFILES["v14_resid"] = PROFILE_V14_RESID
 PROFILE_V11B_LOWVOL = StrategyConfig(
     label="v11b_lowvol",
     weight_method="equal",

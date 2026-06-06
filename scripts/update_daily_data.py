@@ -165,13 +165,23 @@ def update_stock(code, days=5):
     更新单只股票的数据
     返回: (新增行数, 是否成功)
     """
+    csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
+
+    # 如果文件今天已被更新过（mtime >= 今天零点），跳过
+    if os.path.exists(csv_file):
+        mtime = os.path.getmtime(csv_file)
+        file_mtime = datetime.fromtimestamp(mtime)
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        if file_mtime >= today_start:
+            return 0, True
+
     local_latest = get_local_latest_date(code)
-    
+
     # 获取远程数据
     df = fetch_tencent_kline(code, days=days)
     if df is None or len(df) == 0:
         return 0, False
-    
+
     # 如果本地有数据，只保留本地没有的新数据
     if local_latest is not None:
         new_data = df[df.index > local_latest]
@@ -179,9 +189,7 @@ def update_stock(code, days=5):
             return 0, True  # 已经是最新
     else:
         new_data = df
-    
-    csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
-    
+
     if local_latest is not None:
         # 追加新数据
         old_df = pd.read_csv(csv_file, index_col='date', parse_dates=True)
@@ -192,7 +200,7 @@ def update_stock(code, days=5):
     else:
         # 新文件
         new_data.to_csv(csv_file)
-    
+
     return len(new_data), True
 
 def update_all_stocks(target_date=None):
@@ -231,34 +239,56 @@ def update_all_stocks(target_date=None):
     else:
         need_update_date = today
     
-    # 判断是否需要更新
+    # 判断是否需要更新，并筛选出需要更新的股票
+    need_update_codes = []
     if latest_dates:
-        up_to_date_count = sum(1 for d in latest_dates.values() if d.date() >= need_update_date)
-        if up_to_date_count == len(latest_dates):
-            print(f"\n✅ 所有 {len(latest_dates)} 只股票数据已经是最新 ({newest.date()})，无需更新")
+        newest = max(latest_dates.values())
+        oldest = min(latest_dates.values())
+        print(f"📅 本地数据范围: {oldest.date()} ~ {newest.date()}")
+
+        # 周末跳过（仅自动模式，--date 指定日期时不跳过）
+        if target_date is None:
+            today = datetime.now().date()
+            weekday = today.weekday()
+            if weekday >= 5:
+                friday = today - timedelta(days=(weekday - 4))
+                if newest.date() >= friday:
+                    print(f"✅ 周末无需更新 (最新: {newest.date()})")
+                    return True
+
+        # 筛选：本地最新日期 < 需要更新日期
+        for code in stocks:
+            d = latest_dates.get(code)
+            if d is None or d.date() < need_update_date:
+                need_update_codes.append(code)
+
+        if not need_update_codes:
+            print(f"\n✅ 所有 {len(latest_dates)} 只股票数据已经是最新，无需更新")
             return True
-        else:
-            outdated = len(latest_dates) - up_to_date_count
-            print(f"\n📊 {outdated}/{len(latest_dates)} 只股票需要更新 (最新: {newest.date()})")
-    
+
+        print(f"\n📊 {len(need_update_codes)}/{len(latest_dates)} 只股票需要更新")
+    else:
+        need_update_codes = stocks
+
     print(f"\n🔄 开始更新数据...")
     print(f"  目标: 补充到 {need_update_date}")
-    
+    print(f"  更新数量: {len(need_update_codes)} 只")
+
     success = 0
     fail = 0
     no_new = 0
     fail_list = []
-    
-    for i, code in enumerate(stocks):
+
+    for i, code in enumerate(need_update_codes):
         local_date = latest_dates.get(code)
         days = 10  # 请求最近10天数据
-        
+
         # 如果本地日期差距较大，多请求一些
         if local_date is not None:
             gap = (need_update_date - local_date.date()).days
             if gap > 0:
                 days = gap + 5  # 多请求几天防止遗漏
-        
+
         try:
             new_rows, ok = update_stock(code, days=days)
             if not ok:
@@ -273,20 +303,19 @@ def update_all_stocks(target_date=None):
             fail_list.append(code)
             if fail <= 3:
                 print(f"  ❌ {code}: {e}")
-        
+
         if (i + 1) % 30 == 0:
-            print(f"  进度: {i+1}/{len(stocks)} ✅{success} ❌{fail} ⏭️{no_new}")
-        
+            print(f"  进度: {i+1}/{len(need_update_codes)} ✅{success} ❌{fail} ⏭️{no_new}")
+
         time.sleep(0.15)  # 避免请求过快
     
-    # 重试失败
+    # 重试失败（只重试失败的）
     if fail_list:
         print(f"\n🔁 重试 {len(fail_list)} 只失败的股票...")
         time.sleep(3)
         retry_fail = []
         for code in fail_list:
             try:
-                # 增加请求天数
                 new_rows, ok = update_stock(code, days=20)
                 if ok:
                     if new_rows > 0:

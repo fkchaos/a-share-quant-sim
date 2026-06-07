@@ -320,6 +320,7 @@ python scripts/ic_analysis_zz800.py
 
 ### 新策略开发流程
 
+**标准策略（run_backtest.py）：**
 ```bash
 # 1. 在 core/config.py 的 STRATEGY_PROFILES 中添加新策略
 # 2. 全量回测
@@ -336,6 +337,20 @@ python scripts/run_backtest.py --strategy v11b_zz800_union my_new_strategy v13_s
 
 # 6. 通过后切换模拟盘
 ```
+
+**v13 评分排序策略（独立脚本）：**
+```bash
+# v13 有独立回测脚本，修改 V13Config 参数后直接跑
+python scripts/v13_small_mid_short.py          # 全量回测
+python scripts/v13_walk_forward.py             # WF 验证
+
+# Bonus 因子扩展（不需要新建脚本）：
+# 在 v13_small_mid_short.py 的 V13Config.bonus_factors 列表中添加：
+# {'factor': 'my_factor', 'calc': lambda c,v,a,h,l: ..., 'condition': lambda v: v > 0, 'score': 0.3}
+```
+
+> ⚠️ **只有评分排序选股等独立策略才需要新建回测脚本。**
+> 大多数因子策略只需在 config.py 注册 profile，用 run_backtest.py 即可。
 
 ### 日常运维
 

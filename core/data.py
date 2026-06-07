@@ -73,6 +73,24 @@ def filter_stocks(codes, market_filter=None, daily_dir=None, as_of_date=None):
                 active.append(code)  # 读文件失败时保守纳入
         filtered = active
 
+    # ── 4. 最低价格过滤 ──
+    if market_filter.min_price > 0 and daily_dir:
+        price_pass = []
+        for code in filtered:
+            csv_path = os.path.join(daily_dir, f"{code}.csv")
+            if not os.path.exists(csv_path):
+                continue
+            try:
+                df = pd.read_csv(csv_path, index_col='date', parse_dates=True)
+                if len(df) == 0:
+                    continue
+                last_close = df['close'].iloc[-1]
+                if last_close >= market_filter.min_price:
+                    price_pass.append(code)
+            except Exception:
+                price_pass.append(code)
+        filtered = price_pass
+
     return filtered
 
 

@@ -79,6 +79,11 @@ class MarketFilter:
     exclude_prefixes: tuple = ('688', '689', '8', '4', '2')
     exclude_delisted: bool = True
     delist_max_gap: int = 30
+    min_price: float = 0.0
+    """最低价格过滤（元）。0=不过滤。
+    排除最新收盘价低于此阈值的股票，用于过滤退市末日轮等异常低价股。
+    建议值：2.0（排除2元以下股票，保留正常低价股）。
+    """
 
 
 @dataclass
@@ -970,7 +975,10 @@ PROFILE_V12_MULTI = StrategyConfig(
 
 STRATEGY_PROFILES["v12_multi"] = PROFILE_V12_MULTI
 
-# ── v13: 小市值中短线（独立脚本 sim_v13.py，此处仅作参考）──────────────────
+# ── v13: 小市值中短线（⚠️ 此 profile 是旧版参考，不代表真实 v13）──────────────────
+# 真实 v13 使用评分排序选股 + 流动性过滤，回测脚本：scripts/v13_small_mid_short.py
+# 全量：49.87%/2.484/-13.46%，WF：14.9%/1.05/94%
+# 此 profile 用 run_backtest.py 跑的结果与真实 v13 不一致，仅作对比基准
 PROFILE_V13_SMALL_MID_SHORT = StrategyConfig(
     label="v13_small_mid_short",
     weight_method="equal",
@@ -1072,7 +1080,14 @@ PROFILE_V17_PRICE_VOLUME_TENSION = StrategyConfig(
     max_industry_weight=0.25,
     use_take_profit=False,
     use_holding_decay=False,
-    factor_weights=None,
+    factor_weights={
+        'price_volume_tension': 0.30,
+        'vol_accel': -0.15,
+        'amount_ratio': 0.15,
+        'high_low_range': 0.20,
+        'rev_5': 0.15,
+        'delist_risk': -0.15,
+    },
 )
 
 STRATEGY_PROFILES["v17_price_volume_tension"] = PROFILE_V17_PRICE_VOLUME_TENSION
@@ -1089,7 +1104,14 @@ PROFILE_V18_VOL_OF_VOL = StrategyConfig(
     max_industry_weight=0.25,
     use_take_profit=False,
     use_holding_decay=False,
-    factor_weights=None,
+    factor_weights={
+        'vol_of_vol': 0.25,
+        'vol_change': 0.15,
+        'atr_14': 0.15,
+        'boll_width_20': 0.15,
+        'kurt_20': -0.10,
+        'delist_risk': -0.20,
+    },
 )
 
 STRATEGY_PROFILES["v18_vol_of_vol"] = PROFILE_V18_VOL_OF_VOL

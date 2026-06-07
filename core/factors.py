@@ -496,6 +496,51 @@ def calc_factors_panel(
 
     factors['resid_mom'] = _resid_mom
 
+    # ── v17: 价量张力因子 ──────────────────────────────────────────
+    # 价格偏离度 × 量能变化率
+    pct_deviation = (close_panel - close_panel.rolling(20).mean()) / (close_panel.rolling(20).std() + eps)
+    vr_5 = volume_panel / (volume_panel.rolling(5).mean() + eps)
+    vr_20 = volume_panel / (volume_panel.rolling(20).mean() + eps)
+    vol_accel = vr_5 / (vr_20 + eps)
+    factors['price_volume_tension'] = pct_deviation * vol_accel
+    factors['vol_accel'] = vol_accel
+
+    # ── v18: 波动率的波动率 ──────────────────────────────────────────
+    vol_20_for_vov = returns.rolling(20).std()
+    factors['vol_of_vol'] = vol_20_for_vov.rolling(20).std()
+
+    # ── 退市风险因子（Delist Risk）──────────────────────────────────
+    # 综合信号：低价 + 价格趋势下行 + 成交量萎缩 + 波动率异常
+    # 每个截面独立计算，值越高 = 退市风险越大
+    # 1. 价格水平：20日均价 < 2元 → 高风险（用 z-score 标准化）
+    price_level = close_panel.rolling(20).mean()
+    # 2. 价格趋势：20日收益率（负值 = 下跌趋势）
+    price_trend = close_panel.pct_change(20)
+    # 3. 成交量萎缩：5日量 / 20日量（< 1 = 缩量）
+    vol_shrink = volume_panel.rolling(5).mean() / (volume_panel.rolling(20).mean() + eps)
+    # 4. 波动率异常：当前波动率 / 历史波动率（> 2 = 异常）
+    vol_current = returns.rolling(5).std()
+    vol_hist = returns.rolling(60).std()
+    vol_abnormal = vol_current / (vol_hist + eps)
+
+    # 综合退市风险得分（越高 = 风险越大）
+    # 标准化到截面 z-score 后加权
+    def _zscore(df):
+        m = df.mean(axis=1)
+        s = df.std(axis=1)
+        return (df.sub(m, axis=0)).div(s + eps, axis=0)
+
+    # 低价风险：价格越低风险越大（取负 z-score）
+    price_risk = -_zscore(price_level)
+    # 下跌风险：趋势越负风险越大（取负 z-score）
+    trend_risk = -_zscore(price_trend)
+    # 缩量风险：量比越小风险越大（取负 z-score）
+    shrink_risk = -_zscore(vol_shrink)
+    # 波动异常：波动率越高风险越大
+    abnormal_risk = _zscore(vol_abnormal)
+
+    factors['delist_risk'] = (price_risk + trend_risk + shrink_risk + abnormal_risk) / 4.0
+
     # ── 行业轮动因子（Industry Rotation）────────────────────────────────
     # 需要 industry_map: {股票代码: 行业名称}
     # 计算行业动量（20日）- 行业反转（5日），映射到个股

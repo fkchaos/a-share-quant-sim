@@ -18,6 +18,7 @@ from scripts.v13_small_mid_short import (
     V13Config,
     load_small_cap_panel,
     calc_small_cap_factors,
+    select_stocks,
 )
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
@@ -105,8 +106,8 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         for code in sold_codes:
             holdings.pop(code, None)
 
-        # 3. 选股
-        candidates = _select_stocks_inline(factors, date, close_panel, volume_panel, amount_panel, holdings)
+        # 3. 选股（复用 v13_small_mid_short.select_stocks，包含 bonus 因子）
+        candidates = select_stocks(factors, date, close_panel, volume_panel, amount_panel, holdings)
 
         # 4. 买入（择时已通过选股因子隐式控制）
         if candidates and cash > initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
@@ -152,52 +153,6 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
     nav = pd.Series(nav_list, index=dates[:len(nav_list)])
     metrics = _calc_fold_metrics(nav, trade_log, initial_capital)
     return metrics, nav, trade_log
-
-
-def _select_stocks_inline(factors, date, close_panel, volume_panel, amount_panel, holdings):
-    """内联选股 — 评分排序制"""
-    if date not in factors['rev_5'].index:
-        return []
-    avg_amount = amount_panel.rolling(20).mean() / 1e4
-    if date in avg_amount.index:
-        day_amount = avg_amount.loc[date]
-        liquid_mask = (day_amount > V13Config.min_liquidity) & (day_amount < V13Config.max_liquidity)
-        liquid_stocks = set(day_amount[liquid_mask].dropna().index)
-    else:
-        liquid_stocks = set(close_panel.columns)
-
-    try:
-        rev_5 = factors['rev_5'].loc[date].dropna()
-        vol_ratio = factors['vol_ratio'].loc[date].dropna()
-        vol_shrink = factors['vol_shrink'].loc[date].dropna()
-        range_ratio = factors['range_ratio'].loc[date].dropna()
-    except KeyError:
-        return []
-
-    scores = {}
-    for code in liquid_stocks:
-        if code not in rev_5.index:
-            continue
-        score = 0.0
-        r = rev_5.get(code, 0)
-        if r < V13Config.rev_threshold:
-            score += abs(r) * 100
-            vr = vol_ratio.get(code, 1.0)
-            if vr > V13Config.vol_ratio_threshold:
-                score += 0.5
-            vs = vol_shrink.get(code, 1.0)
-            if vs < 0.7:
-                score += 0.3
-            rr = range_ratio.get(code, 1.0)
-            if rr < 0.8:
-                score += 0.2
-        if score > 0:
-            scores[code] = score
-
-    if holdings:
-        scores = {c: s for c, s in scores.items() if c not in holdings}
-    candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
-    return candidates[:V13Config.max_holdings]
 
 
 def _calc_fold_metrics(nav, trade_log, initial_capital):

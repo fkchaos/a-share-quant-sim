@@ -417,8 +417,8 @@ def run_intraday_signal():
             if 3000000 < avg_amount < 100000000:
                 liquid_stocks.append(code)
 
-    # 排除科创板（688xxx）— 股票池包含科创板但不交易
-    liquid_stocks = [c for c in liquid_stocks if not c.startswith('688')]
+    # 排除科创板（688xxx/689xxx）— 股票池包含科创板但不交易
+    liquid_stocks = [c for c in liquid_stocks if not (c.startswith('688') or c.startswith('689'))]
     logger.info(f"排除科创板后流动性池: {len(liquid_stocks)} 只")
 
     factors = calc_v13_factors(code_dfs, liquid_stocks)

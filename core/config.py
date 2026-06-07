@@ -76,7 +76,7 @@ class MarketFilter:
     delist_max_gap   : int — 超过多少天无数据判定为退市/停牌（默认 30 天）
     """
     include_prefixes: tuple = ('6', '0', '3')
-    exclude_prefixes: tuple = ('688', '8', '4', '2')
+    exclude_prefixes: tuple = ('688', '689', '8', '4', '2')
     exclude_delisted: bool = True
     delist_max_gap: int = 30
 

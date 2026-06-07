@@ -26,9 +26,14 @@ REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
 
 def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
-                 open_panel, warmup_days=20, label="v13_fold"):
-    """跑单个 fold 的回测（与 v13 主回测逻辑一致）"""
-    factors = calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel)
+                 open_panel, warmup_days=20, label="v13_fold", bonus_factors=None):
+    """跑单个 fold 的回测（与 v13 主回测逻辑一致）
+
+    Args:
+        bonus_factors: 可选的 bonus 因子配置列表，默认 None = 使用 V13Config.bonus_factors
+    """
+    factors = calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
+                                     bonus_factors=bonus_factors)
 
     cfg = V13Config()
     initial_capital = cfg.initial_capital
@@ -107,7 +112,8 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
             holdings.pop(code, None)
 
         # 3. 选股（复用 v13_small_mid_short.select_stocks，包含 bonus 因子）
-        candidates = select_stocks(factors, date, close_panel, volume_panel, amount_panel, holdings)
+        candidates = select_stocks(factors, date, close_panel, volume_panel, amount_panel, holdings,
+                                   bonus_factors=bonus_factors)
 
         # 4. 买入（择时已通过选股因子隐式控制）
         if candidates and cash > initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
@@ -236,7 +242,8 @@ def main():
 
         m, nav, trades = run_v13_fold(
             sub_close, sub_volume, sub_amount, sub_high, sub_low, sub_open,
-            warmup_days=warmup, label=f"v13_fold{fold}"
+            warmup_days=warmup, label=f"v13_fold{fold}",
+            bonus_factors=V13Config.bonus_factors,
         )
 
         test_start_date = dates[test_start].date()

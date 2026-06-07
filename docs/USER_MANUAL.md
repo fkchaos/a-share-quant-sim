@@ -344,9 +344,16 @@ python scripts/run_backtest.py --strategy v11b_zz800_union my_new_strategy v13_s
 python scripts/v13_small_mid_short.py          # 全量回测
 python scripts/v13_walk_forward.py             # WF 验证
 
-# Bonus 因子扩展（不需要新建脚本）：
-# 在 v13_small_mid_short.py 的 V13Config.bonus_factors 列表中添加：
-# {'factor': 'my_factor', 'calc': lambda c,v,a,h,l: ..., 'condition': lambda v: v > 0, 'score': 0.3}
+# Bonus 因子扩展（显式传参，不修改类属性）：
+# 通过 select_stocks(bonus_factors=...) 参数传入：
+# bonus_factors = [
+#     {'factor': 'my_factor',
+#      'calc': lambda c,v,a,h,l: ...,     # 计算函数
+#      'condition': lambda v: v > 0,       # 加分条件
+#      'score': 0.3}                       # 加分值
+# ]
+# 扫描脚本：scripts/v13_bonus_scan.py
+# WF 验证：scripts/v13_walk_forward.py（通过 run_v13_fold 的 bonus_factors 参数传入）
 ```
 
 > ⚠️ **只有评分排序选股等独立策略才需要新建回测脚本。**

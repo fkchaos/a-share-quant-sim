@@ -41,39 +41,10 @@ class V13Config:
     rev_threshold = -0.02         # 反转阈值（5日跌幅 > 2%，放宽）
     vol_ratio_threshold = 1.3     # 放量阈值（当日量 / 10日均量，放宽）
 
-    # Bonus 加分因子（可配置，默认空列表 = 不影响现有结果）
-    # 格式：{
-    #   'factor': 'factors_dict_key',     # 因子在 factors dict 中的 key
-    #   'calc': calc_fn,                  # 计算函数(close, volume, amount, high, low) -> Series/DataFrame
-    #   'condition': lambda v: v > 0,     # 加分条件（接收因子值）
-    #   'score': 0.5,                     # 满足条件时加多少分
-    # }
-    bonus_factors = [
-        # B1: 价量张力 — 价格偏离均线 + 量能放大 → 趋势延续信号
-        {'factor': 'pvt',
-         'calc': lambda c, v, a, h, l: (
-             (c - c.rolling(20).mean()) / (c.rolling(20).std() + 1e-10)  # 价格偏离度
-             * (v / (v.rolling(5).mean() + 1e-10)) / (v / (v.rolling(20).mean() + 1e-10) + 1e-10)  # 量能加速
-         ),
-         'condition': lambda v: v > 0.5,
-         'score': 0.3},
-
-        # B2: 波动率异常 — vol_of_vol 极低 → 波动率稳定，反转信号更可靠
-        {'factor': 'vov_inv',
-         'calc': lambda c, v, a, h, l: (
-             c.pct_change().rolling(20).std().rolling(20).std()
-         ),
-         'condition': lambda v: v < 0.02,  # vol_of_vol 低 = 波动稳定
-         'score': 0.2},
-
-        # B3: 动量一致性 — 5日/10日动量同向 → 趋势确认
-        {'factor': 'mom_agree',
-         'calc': lambda c, v, a, h, l: (
-             (c.pct_change(5) > 0).astype(float) + (c.pct_change(10) > 0).astype(float)
-         ),
-         'condition': lambda v: v >= 2,  # 两个周期都正
-         'score': 0.2},
-    ]
+    # Bonus 加分因子（默认空列表 = 不影响现有结果）
+    # 通过 select_stocks() 和 calc_small_cap_factors() 的 bonus_factors 参数传入
+    # 格式：{'factor': str, 'calc': callable, 'condition': callable, 'score': float}
+    bonus_factors = []
 
     # 择时参数
     market_rev_threshold = -0.01   # 市场 5 日跌幅 > 1% 才选股（放宽）
@@ -144,8 +115,16 @@ def load_small_cap_panel(start_date='2021-01-01', end_date='2026-05-31'):
 # ============================================================
 # 因子计算
 # ============================================================
-def calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel):
-    """计算小市值专用因子"""
+def calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
+                          bonus_factors=None):
+    """计算小市值专用因子
+
+    Args:
+        bonus_factors: 可选的 bonus 因子配置列表，默认 None = 使用 V13Config.bonus_factors
+    """
+    if bonus_factors is None:
+        bonus_factors = V13Config.bonus_factors
+
     factors = {}
 
     # 1. 短期反转因子（5日跌幅）
@@ -172,7 +151,7 @@ def calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, 
     factors['turnover'] = turnover
 
     # 6. Bonus 加分因子（动态计算）
-    for bonus in V13Config.bonus_factors:
+    for bonus in bonus_factors:
         bname = bonus['factor']
         bcalc = bonus['calc']
         try:
@@ -186,8 +165,15 @@ def calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, 
 # ============================================================
 # 选股逻辑
 # ============================================================
-def select_stocks(factors, date, close_panel, volume_panel, amount_panel, current_holdings=None):
-    """每日选股 — 评分排序制"""
+def select_stocks(factors, date, close_panel, volume_panel, amount_panel, current_holdings=None,
+                  bonus_factors=None):
+    """每日选股 — 评分排序制
+
+    Args:
+        bonus_factors: 可选的 bonus 因子配置列表，默认 None = 使用 V13Config.bonus_factors
+    """
+    if bonus_factors is None:
+        bonus_factors = V13Config.bonus_factors
     if date not in factors['rev_5'].index:
         return []
 
@@ -229,8 +215,8 @@ def select_stocks(factors, date, close_panel, volume_panel, amount_panel, curren
             if rr < 0.8:  # 振幅收窄
                 score += 0.2
 
-            # Bonus 加分因子（可配置扩展）
-            for bonus in V13Config.bonus_factors:
+            # Bonus 加分因子（可配置扩展，通过参数传入）
+            for bonus in bonus_factors:
                 bname = bonus['factor']
                 bcond = bonus['condition']
                 bscore = bonus['score']

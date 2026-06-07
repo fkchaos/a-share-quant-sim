@@ -1059,3 +1059,60 @@ PROFILE_V16_MOM_REV_HYBRID = StrategyConfig(
     },
 )
 STRATEGY_PROFILES["v16_mom_rev_hybrid"] = PROFILE_V16_MOM_REV_HYBRID
+
+# ── v17: 价量张力因子 ──────────────────────────────────────────
+# 基于国联民生证券研报(2026.05): 价格偏离度 × 量能变化率
+# 周频调仓，小市值有效，与 v13 互补
+PROFILE_V17_PRICE_VOLUME_TENSION = StrategyConfig(
+    label="v17_price_volume_tension",
+    weight_method="equal",
+    top_n=12, rebalance_freq=5,
+    stop_loss=0.05, max_position=0.10,
+    use_vol_scaling=False,
+    max_industry_weight=0.25,
+    use_take_profit=False,
+    use_holding_decay=False,
+    factor_weights=None,
+)
+
+STRATEGY_PROFILES["v17_price_volume_tension"] = PROFILE_V17_PRICE_VOLUME_TENSION
+
+# ── v18: 波动率的波动率因子 ──────────────────────────────────────
+# 基于方正金工(2022.08): 波动率的波动率刻画市场模糊性
+# 周频调仓，与 v13 互补
+PROFILE_V18_VOL_OF_VOL = StrategyConfig(
+    label="v18_vol_of_vol",
+    weight_method="equal",
+    top_n=12, rebalance_freq=5,
+    stop_loss=0.05, max_position=0.10,
+    use_vol_scaling=False,
+    max_industry_weight=0.25,
+    use_take_profit=False,
+    use_holding_decay=False,
+    factor_weights=None,
+)
+
+STRATEGY_PROFILES["v18_vol_of_vol"] = PROFILE_V18_VOL_OF_VOL
+
+# ── v19: 球队硬币因子（动量效应识别）──────────────────────────────
+# 基于方正金工: 个股动量效应识别
+# 与 v13 互补，动量在特定市场状态下有效
+PROFILE_V19_TEAM_COIN = StrategyConfig(
+    label="v19_team_coin",
+    weight_method="equal",
+    top_n=10, rebalance_freq=5,
+    stop_loss=0.05, max_position=0.10,
+    use_vol_scaling=False,
+    max_industry_weight=0.25,
+    use_take_profit=False,
+    use_holding_decay=False,
+    factor_weights={
+        'mom_5': 0.3,
+        'mom_10': 0.25,
+        'mom_20': 0.2,
+        'rsi_14': 0.15,
+        'amount_ratio': 0.1,
+    },
+)
+
+STRATEGY_PROFILES["v19_team_coin"] = PROFILE_V19_TEAM_COIN

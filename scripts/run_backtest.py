@@ -348,6 +348,9 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
 
             top_stocks = day_score.nlargest(top_n).index.tolist()
 
+            # 排除科创板（688xxx）— 股票池包含科创板但不交易
+            top_stocks = [c for c in top_stocks if not c.startswith('688')]
+
             if top_stocks:
                 current_pv = portfolio_value(state, date, price_data)
 
@@ -812,8 +815,8 @@ def _load_stock_names() -> dict:
     try:
         hs300 = pd.read_csv(hs300_path)
         return dict(zip(
-            hs300['品种代码'].astype(str).str.zfill(6),
-            hs300['品种名称']
+            hs300['code'].astype(str).str.zfill(6),
+            hs300['name']
         ))
     except Exception as e:
         print(f"  ⚠️  Could not load stock names: {e}")

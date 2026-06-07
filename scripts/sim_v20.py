@@ -4,11 +4,16 @@ v20 模拟盘交易脚本
 ==================
 基于 v13 模拟盘框架，使用 v20_tail_pick 尾盘缩量企稳策略。
 账户路径：/root/data/portfolio/
-策略：尾盘缩量企稳 → 次日开盘买入 → 持有1-3天 → 尾盘卖出
+策略：尾盘缩量企稳 → 次日尾盘买入 → 持有1-3天 → 尾盘卖出
+
+时间线：
+  T日 15:01  tail_signal   — 数据更新后选股（用完整日K）
+  T+1日 14:50 tail_buy      — 尾盘买入（价格稳定，避免开盘跳空）
+  T+1~3日 14:50 tail_sell   — 尾盘卖出检查（止盈/止损/超时）
 
 用法:
-    python scripts/sim_v20.py tail_signal       # 14:30 尾盘选股
-    python scripts/sim_v20.py morning_execute   # 次日 09:30 开盘买入
+    python scripts/sim_v20.py tail_signal       # 15:01 收盘后选股
+    python scripts/sim_v20.py tail_buy          # 14:50 尾盘买入
     python scripts/sim_v20.py tail_sell         # 14:50 尾盘卖出
     python scripts/sim_v20.py report_only       # 收盘报告
 """
@@ -235,9 +240,9 @@ def cmd_tail_signal():
 
 
 def cmd_morning_execute():
-    """09:30 开盘买入 — 执行昨日尾盘选股计划"""
+    """14:50 尾盘买入 — 执行昨日收盘后选股计划"""
     log.info("=" * 50)
-    log.info("v20 开盘买入 (09:30)")
+    log.info("v20 尾盘买入 (14:50)")
 
     plan = load_plan()
     if not plan["pending_buy"]:
@@ -406,13 +411,13 @@ def cmd_report():
 # ── Main ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("用法: python scripts/sim_v20.py [tail_signal|morning_execute|tail_sell|report_only]")
+        print("用法: python scripts/sim_v20.py [tail_signal|tail_buy|tail_sell|report_only]")
         sys.exit(1)
 
     cmd = sys.argv[1]
     if cmd == "tail_signal":
         cmd_tail_signal()
-    elif cmd == "morning_execute":
+    elif cmd in ("tail_buy", "morning_execute"):
         cmd_morning_execute()
     elif cmd == "tail_sell":
         cmd_tail_sell()

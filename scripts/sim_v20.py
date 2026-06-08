@@ -4,15 +4,15 @@ v20 模拟盘交易脚本
 ==================
 基于 v13 模拟盘框架，使用 v20_tail_pick 尾盘缩量企稳策略。
 账户路径：/root/data/portfolio/
-策略：尾盘缩量企稳 → 次日尾盘买入 → 持有1-3天 → 尾盘卖出
+策略：尾盘缩量企稳 → 尾盘买入 → 持有1-3天 → 尾盘卖出
 
 时间线：
-  T日 15:01  tail_signal   — 数据更新后选股（用完整日K）
-  T+1日 14:50 tail_buy      — 尾盘买入（价格稳定，避免开盘跳空）
+  T日 14:45  tail_signal   — 尾盘选股（用接近完整的数据）
+  T日 14:50  tail_buy      — 尾盘买入（信号和买入同一天，间隔5分钟）
   T+1~3日 14:50 tail_sell   — 尾盘卖出检查（止盈/止损/超时）
 
 用法:
-    python scripts/sim_v20.py tail_signal       # 15:01 收盘后选股
+    python scripts/sim_v20.py tail_signal       # 14:45 尾盘选股
     python scripts/sim_v20.py tail_buy          # 14:50 尾盘买入
     python scripts/sim_v20.py tail_sell         # 14:50 尾盘卖出
     python scripts/sim_v20.py report_only       # 收盘报告
@@ -49,7 +49,7 @@ HOLD_DAYS_MIN = 1
 _costs = TradingCosts()
 SLIPPAGE_RATE = _costs.slippage_rate
 COMMISSION_RATE = _costs.commission_rate
-STAMP_TAX = _costs.stamp_tax
+STAMP_TAX = _costs.stamp_tax_rate
 
 # ── Logging ─────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -209,32 +209,69 @@ def save_plan(plan):
 
 # ── Commands ───────────────────────────────────────────────────────
 def cmd_tail_signal():
-    """14:30 尾盘选股 — 生成次日买入计划"""
-    log.info("=" * 50)
-    log.info("v20 尾盘选股 (14:30)")
+    """14:45 尾盘选股 — 生成当日买入计划"""
+    log.info("=" * 60)
+    log.info(f"v20 模拟盘 — 尾盘信号 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
+    log.info("=" * 60)
 
+    state = load_portfolio()
+    log.info(f"已加载账户: 现金 ¥{state['cash']:,.0f}, 持仓 {len(state['holdings'])} 只")
+
+    # 卖出检查（止盈/止损/超时）
     data = load_daily_data()
-    factors = calc_factors(data)
     close = data["close"]
-
     today = close.index[-1]
     log.info(f"选股日期: {today.date()}")
 
-    state = load_portfolio()
-    current_holdings = set(state["holdings"].keys())
+    holdings = state["holdings"]
+    cash = state["cash"]
+    to_sell = []
+    for code, h in list(holdings.items()):
+        if code not in close.columns:
+            continue
+        current_price = close.loc[today, code]
+        if pd.isna(current_price) or current_price <= 0:
+            continue
+        pnl_pct = (current_price - h["cost"]) / h["cost"]
+        hold_days = h.get("hold_days", 0)
+        if pnl_pct <= STOP_LOSS:
+            to_sell.append((code, "止损", pnl_pct, current_price))
+        elif pnl_pct >= TAKE_PROFIT:
+            to_sell.append((code, "止盈", pnl_pct, current_price))
+        elif hold_days >= HOLD_DAYS_MAX:
+            to_sell.append((code, "超时", pnl_pct, current_price))
 
+    # 选股
+    factors = calc_factors(data)
+    current_holdings = set(holdings.keys())
     candidates = select_stocks(data, factors, today, current_holdings)
-    log.info(f"选中 {len(candidates)} 只: {candidates}")
 
-    # 保存买入计划
+    # 保存计划
     plan = {
         "pending_buy": candidates,
-        "pending_sell": [],
+        "pending_sell": [c for c, _, _, _ in to_sell],
         "date": str(today.date()),
         "created": datetime.now().isoformat(),
     }
     save_plan(plan)
-    log.info(f"买入计划已保存: {V20_PLAN_FILE}")
+
+    # 输出操作建议摘要
+    log.info("")
+    log.info("📊 操作建议:")
+    if to_sell:
+        log.info(f"  🔴 卖出 {len(to_sell)} 只:")
+        for code, reason, pnl, price in to_sell:
+            log.info(f"    {code} — {reason} @ {price:.2f} (盈亏{pnl:+.1%})")
+    if candidates:
+        log.info(f"  🟢 买入 {len(candidates)} 只:")
+        for c in candidates:
+            vr = factors["vol_ratio"].loc[today, c] if today in factors["vol_ratio"].index and c in factors["vol_ratio"].columns else 0
+            rr = factors["range_ratio"].loc[today, c] if today in factors["range_ratio"].index and c in factors["range_ratio"].columns else 0
+            log.info(f"    {c} — 量比={vr:.2f} 振幅比={rr:.2f}")
+    if not to_sell and not candidates:
+        log.info("  ⚪ 无操作")
+    log.info(f"")
+    log.info(f"📊 运行完成, 信号: 卖 {len(to_sell)} 只 / 买 {len(candidates)} 只")
 
     return candidates
 

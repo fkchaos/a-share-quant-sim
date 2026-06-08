@@ -167,14 +167,6 @@ def update_stock(code, days=5):
     """
     csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
 
-    # 如果文件今天已被更新过（mtime >= 今天零点），跳过
-    if os.path.exists(csv_file):
-        mtime = os.path.getmtime(csv_file)
-        file_mtime = datetime.fromtimestamp(mtime)
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        if file_mtime >= today_start:
-            return 0, True
-
     local_latest = get_local_latest_date(code)
 
     # 获取远程数据
@@ -263,7 +255,7 @@ def update_all_stocks(target_date=None):
                 need_update_codes.append(code)
 
         if not need_update_codes:
-            print(f"\n✅ 所有 {len(latest_dates)} 只股票数据已经是最新，无需更新")
+            print(f"\n✅ 所有 {len(latest_dates)} 只股票数据已经是最新（最新: {newest.date()}），无需更新")
             return True
 
         print(f"\n📊 {len(need_update_codes)}/{len(latest_dates)} 只股票需要更新")

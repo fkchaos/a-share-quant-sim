@@ -223,9 +223,13 @@ def load_portfolio():
             "nav_history": [],
             "trade_log": [],
         }
+    # 首次运行：从 DB 读取 initial_capital
+    from core.db import get_account as get_acct
+    acct = get_acct(3)
+    capital = acct["initial_capital"] if acct else 100000
     return {
-        "cash": INITIAL_CAPITAL,
-        "initial_capital": INITIAL_CAPITAL,
+        "cash": capital,
+        "initial_capital": capital,
         "holdings": {},
         "nav_history": [],
         "trade_log": [],

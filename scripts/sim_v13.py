@@ -79,8 +79,11 @@ def load_account():
     state, loaded = load_account_for_sim(account_id=2)
     if loaded:
         return state
-    from core.account import PortfolioState
-    return PortfolioState(cash=INITIAL_CAPITAL, initial_capital=INITIAL_CAPITAL, holdings={}, trade_log=[])
+    # 首次运行：从 DB 读取 initial_capital
+    from core.db import get_account as get_acct
+    acct = get_acct(2)
+    capital = acct["initial_capital"] if acct else 100000
+    return PortfolioState(cash=capital, initial_capital=capital, holdings={}, trade_log=[])
 
 
 def save_account(state):
@@ -667,7 +670,7 @@ def run_report_only():
             price_data[code] = df["close"].iloc[-1]
 
     nav = portfolio_value(state, datetime.now(), price_data)
-    total_ret = (nav - INITIAL_CAPITAL) / INITIAL_CAPITAL
+    total_ret = (nav - state.initial_capital) / state.initial_capital
 
     # 从 DB 获取股票名称
     from core.db import get_stock_name_map

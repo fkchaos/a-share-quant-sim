@@ -42,7 +42,7 @@ from indices import get_index_trends, IndexBenchmarkService
 from sim_logging import get_logger
 
 # ── Config ─────────────────────────────────────────────────────────
-_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
+_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
 DATA_DIR = _sim_data_dir
 PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
@@ -480,7 +480,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
     # ── 评分（通过 Strategy Engine）──
     # 小市值择时：构造 dynamic_weights
     _dynamic_weights = None
-    if 'small_cap' in _strategy_profile.factor_weights and _engine_mode == "factor":
+    if _strategy_profile.factor_weights and 'small_cap' in _strategy_profile.factor_weights and _engine_mode == "factor":
         _small_cap_base_w = _strategy_profile.factor_weights['small_cap']
         _small_cap_vals = {c: f.get('small_cap', np.nan)
                            for c, f in all_factors.items()
@@ -1166,7 +1166,7 @@ def run_day_end(report_only=False):
                 all_factors[code] = calc_factors_single(df)
 
         _dynamic_weights = None
-        if 'small_cap' in _strategy_profile.factor_weights and _engine_mode == "factor":
+        if _strategy_profile.factor_weights and 'small_cap' in _strategy_profile.factor_weights and _engine_mode == "factor":
             _small_cap_base_w = _strategy_profile.factor_weights['small_cap']
             _small_cap_vals = {c: f.get('small_cap', np.nan)
                                for c, f in all_factors.items()

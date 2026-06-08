@@ -74,51 +74,33 @@ logger = logging.getLogger("sim_v13")
 # }
 
 def load_account():
-    """加载账户状态，兼容旧格式（无 hold_days/entry_date 时自动补全）"""
-    if os.path.exists(V13_ACCOUNT_FILE):
-        with open(V13_ACCOUNT_FILE) as f:
-            data = json.load(f)
-        # 标准化 holdings 字段
-        holdings = {}
-        for code, h in data.get("holdings", {}).items():
-            holdings[code] = {
-                "shares": h.get("shares", 0),
-                "cost_price": h.get("cost_price", 0),
-                "entry_date": h.get("entry_date", ""),
-                "hold_days": h.get("hold_days", 0),
-                "highest_profit": h.get("highest_profit", 0.0),
-            }
-        state = PortfolioState(
-            cash=data.get("cash", INITIAL_CAPITAL),
-            initial_capital=data.get("initial_capital", INITIAL_CAPITAL),
-            holdings=holdings,
-            trade_log=data.get("trade_log", []),
-        )
+    """加载账户状态（从数据库，account_id=2）"""
+    from core.db import load_account_for_sim
+    state, loaded = load_account_for_sim(account_id=2)
+    if loaded:
         return state
+    from core.account import PortfolioState
     return PortfolioState(cash=INITIAL_CAPITAL, initial_capital=INITIAL_CAPITAL, holdings={}, trade_log=[])
 
 
 def save_account(state):
-    """保存账户状态，holdings 字段标准化"""
-    # 标准化 holdings
-    holdings = {}
-    for code, h in state.holdings.items():
-        if isinstance(h, dict):
-            holdings[code] = {
-                "shares": h.get("shares", 0),
-                "cost_price": h.get("cost_price", 0),
-                "entry_date": h.get("entry_date", ""),
-                "hold_days": h.get("hold_days", 0),
-                "highest_profit": h.get("highest_profit", 0.0),
-            }
-    data = {
-        "cash": state.cash,
-        "initial_capital": state.initial_capital,
-        "holdings": holdings,
-        "trade_log": state.trade_log,
-    }
-    with open(V13_ACCOUNT_FILE, "w") as f:
-        json.dump(data, f, indent=2, default=str, ensure_ascii=False)
+    """保存账户状态（写数据库，account_id=2）"""
+    from core.db import save_account_for_sim, clear_holdings, get_conn
+    # 先写基本字段
+    save_account_for_sim(state, account_id=2)
+    # 补充 v13 特有字段（entry_date, hold_days, highest_profit）
+    with get_conn() as conn:
+        for code, h in state.holdings.items():
+            if isinstance(h, dict):
+                conn.execute(
+                    "UPDATE holdings SET tp_taken=? WHERE account_id=2 AND code=?",
+                    (json.dumps({
+                        "entry_date": h.get("entry_date", ""),
+                        "hold_days": h.get("hold_days", 0),
+                        "highest_profit": h.get("highest_profit", 0.0),
+                    }), code),
+                )
+    logger.info(f"账户已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
 
 
 # ── 数据加载 ──────────────────────────────────────────────────────
@@ -624,6 +606,7 @@ def run_intraday_execute():
             "cost_price": buy_price,
             "entry_date": str(datetime.now().date()),
             "hold_days": 0,
+            "name": item.get("name", code),
         }
         state.trade_log.append(
             {

@@ -369,6 +369,98 @@ def db_stats():
         return stats
 
 
+# ── 模拟盘兼容层 ────────────────────────────────────────────
+# 让现有 sim 脚本只改几行 import 就能从 DB 读写
+
+def load_account_for_sim(account_id=1):
+    """
+    返回 (state_dict, loaded)
+    state_dict 格式兼容现有 sim 脚本:
+      {cash, initial_capital, holdings: {code: {shares, cost_price, name, ...}}, trade_log}
+    """
+    from core.account import PortfolioState
+
+    acct = get_account(account_id)
+    if not acct:
+        return None, False
+
+    holdings = get_holdings(account_id)
+    # 标准化 holdings 格式
+    holdings_out = {}
+    for code, h in holdings.items():
+        holdings_out[code] = {
+            "shares": h["shares"],
+            "cost_price": h["cost_price"],
+            "name": h.get("name", code),
+            "tp_taken": json.loads(h.get("tp_taken", "[]")),
+        }
+
+    state = PortfolioState(
+        cash=acct["cash"],
+        initial_capital=acct["initial_capital"],
+        holdings=holdings_out,
+        trade_log=[],
+    )
+    return state, True
+
+
+def save_account_for_sim(state, account_id=1):
+    """从 sim 的 PortfolioState 写回 DB"""
+    # 更新账户现金
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE account SET cash=?, updated_at=datetime('now') WHERE id=?",
+            (state.cash, account_id),
+        )
+    # 清空并重建持仓
+    clear_holdings(account_id)
+    for code, h in state.holdings.items():
+        name = h.get("name", code)
+        tp = h.get("tp_taken", [])
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO holdings(account_id,code,name,shares,cost_price,tp_taken) VALUES(?,?,?,?,?,?)",
+                (account_id, code, name, int(h["shares"]), float(h["cost_price"]),
+                 json.dumps(tp) if isinstance(tp, list) else str(tp)),
+            )
+
+
+def load_kline_for_sim(codes=None, lookback=250):
+    """
+    从 DB 加载日K线，返回 {code: DataFrame} 格式（兼容现有 sim 脚本）
+    DataFrame 列: open, high, low, close, volume, amount，index=date
+    """
+    import pandas as pd
+
+    result = {}
+    with get_conn() as conn:
+        if codes:
+            placeholders = ",".join("?" * len(codes))
+            sql = f"SELECT * FROM daily_kline WHERE code IN ({placeholders}) ORDER BY code, date"
+            rows = conn.execute(sql, codes).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM daily_kline ORDER BY code, date").fetchall()
+
+    if not rows:
+        return result
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["date"] = pd.to_datetime(df["date"])
+
+    for code, grp in df.groupby("code"):
+        grp = grp.set_index("date").sort_index()
+        if lookback and len(grp) > lookback:
+            grp = grp.tail(lookback)
+        result[code] = grp
+
+    return result
+
+
+def get_latest_trade_date():
+    """返回数据库中最新的交易日"""
+    return get_latest_date()
+
+
 if __name__ == "__main__":
     init_db()
     print(db_stats())

@@ -210,28 +210,17 @@ def step_update_data(quick=False):
 
 
 def step_load_account():
-    """Step 1: 加载账户状态"""
-    account_file = os.path.join(PORTFOLIO_DIR, "account.json")
-    if os.path.exists(account_file):
-        with open(account_file) as f:
-            data = json.load(f)
-        state = PortfolioState()
-        state.cash = data['cash']
-        state.initial_capital = data.get('initial_capital', INITIAL_CAPITAL)
-        state.holdings = data['holdings']
-        state.trade_log = data.get('trade_log', [])
-        state.nav_history = data.get('nav_history', [])
-        for code in state.holdings:
-            state.holdings[code]['shares'] = int(state.holdings[code]['shares'])
-            if 'tp_taken' not in state.holdings[code]:
-                state.holdings[code]['tp_taken'] = []
-        for entry in state.nav_history:
-            if 'nav' not in entry and 'portfolio_value' in entry:
-                entry['nav'] = entry['portfolio_value']
+    """Step 1: 加载账户状态（从数据库）"""
+    from core.db import load_account_for_sim
+    state, loaded = load_account_for_sim(account_id=1)
+    if loaded:
         logger.info(f"已加载账户: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
-        return state, True
-    logger.info(f"初始资金: ¥{INITIAL_CAPITAL:,.0f}")
-    return PortfolioState(cash=INITIAL_CAPITAL, initial_capital=INITIAL_CAPITAL), False
+    else:
+        logger.warning("账户加载失败，使用空账户")
+        from core.account import PortfolioState
+        state = PortfolioState(cash=INITIAL_CAPITAL, initial_capital=INITIAL_CAPITAL)
+        loaded = False
+    return state, loaded
 
 
 def step_load_prices(intraday=False):
@@ -808,20 +797,15 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
 
 
 def step_save_state(state, trade_count):
-    """Step 6: 保存账户状态"""
-    data = {
-        'cash': state.cash,
-        'initial_capital': state.initial_capital,
-        'holdings': state.holdings,
-        'trade_log': state.trade_log,
-        'nav_history': state.nav_history,
-        'last_update': str(datetime.now()),
-    }
-    with open(os.path.join(PORTFOLIO_DIR, "account.json"), 'w') as f:
-        json.dump(data, f, indent=2, default=str)
+    """Step 6: 保存账户状态（写数据库 + trade_count.txt）"""
+    from core.db import save_account_for_sim
+    save_account_for_sim(state, account_id=1)
+    logger.info(f"账户已保存到数据库: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
+    # trade_count 仍用文件（调仓频率控制）
     trade_count_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")
     with open(trade_count_file, 'w') as f:
         f.write(str(trade_count))
+    logger.info(f"trade_count={trade_count}")
 
 
 def step_report(state, date, price_data, names, mode="day_end"):

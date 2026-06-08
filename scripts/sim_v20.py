@@ -173,12 +173,28 @@ def select_stocks(data, factors, date, current_holdings=None):
 
 # ── Portfolio State ────────────────────────────────────────────────
 def load_portfolio():
-    """加载账户状态"""
-    if os.path.exists(V20_ACCOUNT_FILE):
-        with open(V20_ACCOUNT_FILE, "r") as f:
-            return json.load(f)
+    """加载账户状态（从数据库，account_id=3）"""
+    from core.db import get_account, get_holdings
+    acct = get_account(3)
+    if acct:
+        holdings = get_holdings(3)
+        holdings_out = {}
+        for code, h in holdings.items():
+            holdings_out[code] = {
+                "shares": h["shares"],
+                "cost_price": h["cost_price"],
+                "name": h.get("name", code),
+            }
+        return {
+            "cash": acct["cash"],
+            "initial_capital": acct["initial_capital"],
+            "holdings": holdings_out,
+            "nav_history": [],
+            "trade_log": [],
+        }
     return {
         "cash": INITIAL_CAPITAL,
+        "initial_capital": INITIAL_CAPITAL,
         "holdings": {},
         "nav_history": [],
         "trade_log": [],
@@ -187,9 +203,24 @@ def load_portfolio():
 
 
 def save_portfolio(state):
-    """保存账户状态"""
-    with open(V20_ACCOUNT_FILE, "w") as f:
-        json.dump(state, f, indent=2, ensure_ascii=False, default=str)
+    """保存账户状态（写数据库，account_id=3）"""
+    from core.db import get_conn, clear_holdings
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE account SET cash=?, updated_at=datetime('now') WHERE id=3",
+            (state["cash"],),
+        )
+    clear_holdings(3)
+    for code, h in state.get("holdings", {}).items():
+        name = h.get("name", code) if isinstance(h, dict) else code
+        shares = h.get("shares", 0) if isinstance(h, dict) else 0
+        cost = h.get("cost_price", 0) if isinstance(h, dict) else 0
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO holdings(account_id,code,name,shares,cost_price) VALUES(?,?,?,?,?)",
+                (3, code, name, int(shares), float(cost)),
+            )
+    log.info(f"账户已保存: 现金 ¥{state['cash']:,.0f}, 持仓 {len(state.get('holdings', {}))} 只")
 
 
 # ── Trade Plan ─────────────────────────────────────────────────────

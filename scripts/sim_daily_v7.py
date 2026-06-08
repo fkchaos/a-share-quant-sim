@@ -424,7 +424,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             trade_count = int(f.read().strip())
 
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
-    current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
+    current_pv = portfolio_value(state, date, price_data) if state.holdings else state.cash
 
     # 合并风控卖出到 sell_plan（风控优先）
     sell_plan = list(risk_sell or [])
@@ -505,7 +505,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         scores = _strategy_engine.score_single(all_factors)
 
     # ── 选股过滤（通过 Strategy Engine）──
-    current_pv_signal = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
+    current_pv_signal = portfolio_value(state, date, price_data) if state.holdings else state.cash
     top_stocks, filtered_scores = _strategy_engine.filter_stocks(
         scores=scores,
         price_data=price_data,

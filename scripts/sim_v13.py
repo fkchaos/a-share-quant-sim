@@ -470,15 +470,15 @@ def run_intraday_signal():
     if sell_plan:
         logger.info(f"  🔴 卖出 {len(sell_plan)} 只:")
         for item in sell_plan:
-            logger.info(f"    {item['code']} — {item['reason']} @ {item['price']:.2f}")
+            logger.info(f"    {item['code']} {item.get('name','')} — {item['reason']} @ {item['price']:.2f}")
     if buy_plan:
         logger.info(f"  🟢 买入 {len(buy_plan)} 只:")
         for item in buy_plan:
-            logger.info(f"    {item['code']} — 目标金额 ¥{item['target_amount']:,.0f} @ {item['price']:.2f}")
+            logger.info(f"    {item['code']} {item.get('name','')} — 目标金额 ¥{item['target_amount']:,.0f} @ {item['price']:.2f}")
     if hold_plan:
         logger.info(f"  🟡 持有 {len(hold_plan)} 只:")
         for item in hold_plan:
-            logger.info(f"    {item['code']} — {item['current_shares']}股 @ {item['price']:.2f} (权重{item['current_weight']:.1%})")
+            logger.info(f"    {item['code']} {item.get('name','')} — {item['current_shares']}股 @ {item['price']:.2f} (权重{item['current_weight']:.1%})")
     logger.info("")
     logger.info(f"📊 运行完成, 信号: 卖 {len(sell_plan)} 只 / 买 {len(buy_plan)} 只 / 持 {len(hold_plan)} 只")
 

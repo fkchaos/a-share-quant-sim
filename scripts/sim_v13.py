@@ -363,18 +363,16 @@ def run_intraday_signal():
     # 加载账户
     state = load_account()
     nav = portfolio_value(state, None, pd.Series())
-    logger.info(f"现金: ¥{state.cash:,.0f}, 持仓: {len(state.holdings)} 只")
+    logger.info(f"已加载账户: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
 
     # 加载日K线数据
     code_dfs = load_daily_data()
-    logger.info(f"日K线数据: {len(code_dfs)} 只")
 
     # 获取价格数据（盘中用实时快照）
     holdings_codes = list(state.holdings.keys())
     price_data, spot_data = get_price_data(datetime.now(), code_dfs, intraday=True, codes=holdings_codes)
 
     if price_data.empty and spot_data:
-        # 用实时快照补充
         for code, sd in spot_data.items():
             price_data[code] = sd["price"]
 
@@ -386,49 +384,44 @@ def run_intraday_signal():
             logger.info(f"  {item['code']} {item['reason']} @ {item['price']:.2f}")
 
     # 选股
-    # 1. 加载中证 800 成分股
     zz800_codes = set()
     zz800_path = os.path.join(DATA_DIR, "zz800_constituents.csv")
     if os.path.exists(zz800_path):
         try:
             zz800_df = pd.read_csv(zz800_path)
             zz800_codes = set(zz800_df["code"].astype(str).str.zfill(6))
-            logger.info(f"中证 800 成分股: {len(zz800_codes)} 只")
         except Exception as e:
             logger.warning(f"中证 800 成分股加载失败: {e}，使用全市场")
     else:
         logger.warning(f"中证 800 成分股文件不存在: {zz800_path}，使用全市场")
 
-    # 2. 流动性筛选：用 20 日平均成交额（从中证 800 中筛选）
     liquid_stocks = []
     for code, df in code_dfs.items():
-        # 限定在中证 800 成分股
         if zz800_codes and code not in zz800_codes:
             continue
         if len(df) >= 20 and "amount" in df.columns:
             avg_amount = df["amount"].rolling(20).mean().iloc[-1]
-            if 3000000 < avg_amount < 100000000:  # 300万-1亿
+            if 3000000 < avg_amount < 100000000:
                 liquid_stocks.append(code)
         elif len(df) >= 20:
-            # 没有 amount 字段，用 volume * close 近似
             avg_vol = df["volume"].rolling(20).mean().iloc[-1]
             avg_close = df["close"].rolling(20).mean().iloc[-1]
             avg_amount = avg_vol * avg_close
             if 3000000 < avg_amount < 100000000:
                 liquid_stocks.append(code)
 
-    # 排除科创板（688xxx/689xxx）— 股票池包含科创板但不交易
     liquid_stocks = [c for c in liquid_stocks if not (c.startswith('688') or c.startswith('689'))]
-    logger.info(f"排除科创板后流动性池: {len(liquid_stocks)} 只")
 
     factors = calc_v13_factors(code_dfs, liquid_stocks)
     candidates = select_stocks_v13(factors, state.holdings)
 
+    # 输出选股结果
     logger.info(f"流动性池: {len(liquid_stocks)} 只, 选股结果: {len(candidates)} 只")
     if candidates:
         for c in candidates:
             rev = factors["rev_5"].get(c, 0)
-            logger.info(f"  {c} 5日跌幅={rev:.1%}")
+            vr = factors["vol_ratio"].get(c, 0)
+            logger.info(f"  {c} 5日跌幅={rev:.1%} 量比={vr:.2f}")
 
     # 生成 buy_plan
     buy_plan = []
@@ -487,7 +480,24 @@ def run_intraday_signal():
     with open(plan_file, "w") as f:
         json.dump(plan, f, indent=2, default=str, ensure_ascii=False)
 
-    logger.info(f"✅ 计划已保存: 卖{len(sell_plan)} 买{len(buy_plan)} 持{len(hold_plan)}")
+    # 输出操作建议摘要
+    logger.info("")
+    logger.info("📊 操作建议:")
+    if sell_plan:
+        logger.info(f"  🔴 卖出 {len(sell_plan)} 只:")
+        for item in sell_plan:
+            logger.info(f"    {item['code']} — {item['reason']} @ {item['price']:.2f}")
+    if buy_plan:
+        logger.info(f"  🟢 买入 {len(buy_plan)} 只:")
+        for item in buy_plan:
+            logger.info(f"    {item['code']} — 目标金额 ¥{item['target_amount']:,.0f} @ {item['price']:.2f}")
+    if hold_plan:
+        logger.info(f"  🟡 持有 {len(hold_plan)} 只:")
+        for item in hold_plan:
+            logger.info(f"    {item['code']} — {item['current_shares']}股 @ {item['price']:.2f} (权重{item['current_weight']:.1%})")
+    logger.info("")
+    logger.info(f"📊 运行完成, 信号: 卖 {len(sell_plan)} 只 / 买 {len(buy_plan)} 只 / 持 {len(hold_plan)} 只")
+
     return plan
 
 

@@ -57,6 +57,7 @@ data/
 ├── portfolio/          # 账户状态（自动生成）
 │   ├── account.json           # v11b 中线账户
 │   ├── account_v13.json       # v13 中短线账户
+│   ├── account_v20.json       # v20 尾盘选股账户
 │   └── trade_plan.json        # 上午信号 → 下午执行的计划
 ├── signals/            # 因子缓存
 ├── backtest_results/   # 回测结果（自动生成）

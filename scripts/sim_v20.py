@@ -3,29 +3,28 @@
 v20 模拟盘交易脚本
 ==================
 基于 v13 模拟盘框架，使用 v20_tail_pick 尾盘缩量企稳策略。
-账户路径：/root/data/portfolio/
+账户：数据库 account_id=3
 策略：尾盘缩量企稳 → 尾盘买入 → 持有1-3天 → 尾盘卖出
 
 时间线：
-  T日 14:45  tail_signal   — 尾盘选股（用接近完整的数据）
-  T日 14:50  tail_buy      — 尾盘买入（信号和买入同一天，间隔5分钟）
-  T+1~3日 14:50 tail_sell   — 尾盘卖出检查（止盈/止损/超时）
+  T日 14:40  tail_signal   — 尾盘选股 + 卖出检查（纯信号，不操作账户）
+  T日 14:55  tail_execute  — 先卖后买（执行信号计划）
+  T日 15:30  report_only   — 收盘报告
 
 用法:
-    python scripts/sim_v20.py tail_signal       # 14:45 尾盘选股
-    python scripts/sim_v20.py tail_buy          # 14:50 尾盘买入
-    python scripts/sim_v20.py tail_sell         # 14:50 尾盘卖出
+    python scripts/sim_v20.py tail_signal       # 14:40 尾盘选股
+    python scripts/sim_v20.py tail_execute      # 14:55 尾盘执行（先卖后买）
     python scripts/sim_v20.py report_only       # 收盘报告
 """
-import sys, os, json, time, logging
+import sys, os, json, logging
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
-sys.path.insert(0, "/root/a-share-quant-sim")
-sys.path.insert(0, os.path.dirname(__file__))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 
-from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
 
 # ── Config ─────────────────────────────────────────────────────────
@@ -34,10 +33,9 @@ PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfoli
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
-V20_ACCOUNT_FILE = os.path.join(PORTFOLIO_DIR, "account_v20.json")
 V20_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v20.json")
 
-INITIAL_CAPITAL = 200000
+INITIAL_CAPITAL = 100000
 STOP_LOSS = -0.05
 TAKE_PROFIT = 0.05
 MAX_HOLDINGS = 8
@@ -65,68 +63,98 @@ log = logging.getLogger("sim_v20")
 
 # ── Data Loading ────────────────────────────────────────────────────
 def load_daily_data():
-    """加载日K数据"""
-    from core.data import load_and_build_panel
-    from core.config import MarketFilter
+    """从数据库加载最近一年的日K线（对齐 v13 格式）"""
+    from core.db import get_stock_pool, get_kline_df
 
-    loaded, codes = load_and_build_panel(
-        "2021-01-01", "2026-05-31",
-        need_open=True, need_hl=True,
-        market_filter=MarketFilter(),
-    )
-    return {
-        "close": loaded[0], "volume": loaded[1], "amount": loaded[2],
-        "high": loaded[3], "low": loaded[4], "open": loaded[5],
-    }
+    # 获取中证800成分股
+    pool = get_stock_pool("zz800")
+    codes = [s["code"] for s in pool] if pool else None
+
+    # 加载最近一年的数据
+    start = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
+    df = get_kline_df(codes=codes, start_date=start)
+
+    if df.empty:
+        log.warning("数据库无数据")
+        return {}
+
+    # 构建 {code: DataFrame} 格式
+    result = {}
+    for code, grp in df.groupby("code"):
+        grp = grp.set_index("date").sort_index()
+        grp.index = pd.DatetimeIndex(grp.index)
+        result[code] = grp
+
+    log.info(f"数据加载: {len(result)} 只股票, {df.shape[0]} 条记录, 日期范围 {df['date'].min()} ~ {df['date'].max()}")
+    return result
+
+
+def _build_panels_from_dfs(code_dfs):
+    """从 {code: DataFrame} 构建 panel 字典"""
+    all_dates = set()
+    for df in code_dfs.values():
+        all_dates.update(df.index.tolist())
+    all_dates = sorted(all_dates)
+
+    codes = sorted(code_dfs.keys())
+    panels = {}
+    for field in ["close", "volume", "amount", "high", "low", "open"]:
+        panel = pd.DataFrame(index=all_dates, columns=codes, dtype=float)
+        for code, df in code_dfs.items():
+            if field in df.columns:
+                panel[code] = df[field]
+        panels[field] = panel
+
+    return panels
 
 
 # ── Factor Calculation ─────────────────────────────────────────────
-def calc_factors(data):
+def calc_factors(panels):
     """计算 v20 选股因子"""
-    close = data["close"]
-    volume = data["volume"]
-    amount = data["amount"]
-    high = data["high"]
-    low = data["low"]
+    close = panels["close"]
+    volume = panels["volume"]
+    amount = panels["amount"]
+    high = panels["high"]
+    low = panels["low"]
 
-    vol_avg5 = volume.rolling(5).mean()
+    vol_avg5 = volume.rolling(5, min_periods=3).mean()
     vol_ratio = volume / vol_avg5
 
     daily_range = (high - low) / close
-    avg_range5 = daily_range.rolling(5).mean()
+    avg_range5 = daily_range.rolling(5, min_periods=3).mean()
     range_ratio = daily_range / avg_range5
 
-    amount_avg20 = amount.rolling(20).mean()
+    amount_avg20 = amount.rolling(20, min_periods=10).mean()
     amount_ratio = amount / amount_avg20
 
-    ma5 = close.rolling(5).mean()
+    ma5 = close.rolling(5, min_periods=3).mean()
     price_vs_ma5 = close / ma5
 
     pct_change = close.pct_change()
     limit_up = (pct_change > 0.095).astype(float)
-    recent_limit_up = limit_up.rolling(20).max()
+    recent_limit_up = limit_up.rolling(20, min_periods=5).max()
 
     return {
-        "vol_ratio": vol_ratio, "range_ratio": range_ratio,
-        "amount_ratio": amount_ratio, "price_vs_ma5": price_vs_ma5,
+        "vol_ratio": vol_ratio,
+        "range_ratio": range_ratio,
+        "amount_ratio": amount_ratio,
+        "price_vs_ma5": price_vs_ma5,
         "recent_limit_up": recent_limit_up,
     }
 
 
 # ── Stock Selection ────────────────────────────────────────────────
-def select_stocks(data, factors, date, current_holdings=None):
+def select_stocks(panels, factors, date, current_holdings=None):
     """尾盘选股 — 缩量企稳"""
-    close = data["close"]
-    volume = data["volume"]
-    amount = data["amount"]
-    high = data["high"]
-    low = data["low"]
+    close = panels["close"]
+    volume = panels["volume"]
+    amount = panels["amount"]
 
     if date not in factors["vol_ratio"].index:
         return []
 
     # 流动性筛选
-    avg_amount = amount.rolling(20).mean() / 1e4
+    avg_amount = amount.rolling(20, min_periods=10).mean() / 1e4
     if date in avg_amount.index:
         day_amount = avg_amount.loc[date]
         liquid_mask = (day_amount > 300) & (day_amount < 10000)
@@ -152,7 +180,7 @@ def select_stocks(data, factors, date, current_holdings=None):
         if rr > 0.8:  # 振幅收窄
             continue
         ar = amount_ratio.get(code, 0)
-        if ar < 0.5 or ar > 3.0:  # 成交额不太冷清也不太异常
+        if ar < 0.5 or ar > 3.0:
             continue
         pm = price_vs_ma5.get(code, 0)
         if pm < 1.0:  # 价格 > MA5
@@ -184,6 +212,9 @@ def load_portfolio():
                 "shares": h["shares"],
                 "cost_price": h["cost_price"],
                 "name": h.get("name", code),
+                "cost": h["cost_price"],  # 兼容字段
+                "hold_days": h.get("hold_days", 0),
+                "buy_date": h.get("buy_date", ""),
             }
         return {
             "cash": acct["cash"],
@@ -198,7 +229,6 @@ def load_portfolio():
         "holdings": {},
         "nav_history": [],
         "trade_log": [],
-        "created": datetime.now().isoformat(),
     }
 
 
@@ -225,7 +255,6 @@ def save_portfolio(state):
 
 # ── Trade Plan ─────────────────────────────────────────────────────
 def load_plan():
-    """加载交易计划"""
     if os.path.exists(V20_PLAN_FILE):
         with open(V20_PLAN_FILE, "r") as f:
             return json.load(f)
@@ -233,14 +262,13 @@ def load_plan():
 
 
 def save_plan(plan):
-    """保存交易计划"""
     with open(V20_PLAN_FILE, "w") as f:
         json.dump(plan, f, indent=2, ensure_ascii=False, default=str)
 
 
 # ── Commands ───────────────────────────────────────────────────────
 def cmd_tail_signal():
-    """14:45 尾盘选股 — 生成当日买入计划"""
+    """14:40 尾盘选股 + 卖出检查 — 生成当日操作计划（纯信号，不操作账户）"""
     log.info("=" * 60)
     log.info(f"v20 模拟盘 — 尾盘信号 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
     log.info("=" * 60)
@@ -248,129 +276,212 @@ def cmd_tail_signal():
     state = load_portfolio()
     log.info(f"已加载账户: 现金 ¥{state['cash']:,.0f}, 持仓 {len(state['holdings'])} 只")
 
-    # 卖出检查（止盈/止损/超时）
-    data = load_daily_data()
-    close = data["close"]
+    # 加载数据
+    code_dfs = load_daily_data()
+    if not code_dfs:
+        log.warning("无数据，跳过信号")
+        return
+
+    panels = _build_panels_from_dfs(code_dfs)
+    factors = calc_factors(panels)
+    close = panels["close"]
     today = close.index[-1]
     log.info(f"选股日期: {today.date()}")
 
+    # ── 卖出检查 ──
     holdings = state["holdings"]
-    cash = state["cash"]
-    to_sell = []
+    sell_plan = []
+    to_remove = []
     for code, h in list(holdings.items()):
         if code not in close.columns:
             continue
         current_price = close.loc[today, code]
         if pd.isna(current_price) or current_price <= 0:
             continue
-        pnl_pct = (current_price - h["cost"]) / h["cost"]
+        pnl_pct = (current_price - h["cost_price"]) / h["cost_price"]
         hold_days = h.get("hold_days", 0)
+
         if pnl_pct <= STOP_LOSS:
-            to_sell.append((code, "止损", pnl_pct, current_price))
+            sell_plan.append({
+                "code": code,
+                "name": h.get("name", code),
+                "shares": "all",
+                "price": float(current_price),
+                "reason": "止损",
+            })
+            to_remove.append(code)
         elif pnl_pct >= TAKE_PROFIT:
-            to_sell.append((code, "止盈", pnl_pct, current_price))
+            sell_plan.append({
+                "code": code,
+                "name": h.get("name", code),
+                "shares": "all",
+                "price": float(current_price),
+                "reason": "止盈",
+            })
+            to_remove.append(code)
         elif hold_days >= HOLD_DAYS_MAX:
-            to_sell.append((code, "超时", pnl_pct, current_price))
+            sell_plan.append({
+                "code": code,
+                "name": h.get("name", code),
+                "shares": "all",
+                "price": float(current_price),
+                "reason": "超时",
+            })
+            to_remove.append(code)
 
-    # 选股
-    factors = calc_factors(data)
-    current_holdings = set(holdings.keys())
-    candidates = select_stocks(data, factors, today, current_holdings)
+    # ── 选股 ──
+    current_holding_codes = set(holdings.keys()) - set(to_remove)
+    candidates = select_stocks(panels, factors, today, current_holding_codes)
 
-    # 保存计划
+    # ── 生成 buy_plan ──
+    buy_plan = []
+    hold_plan = []
+    available_slots = MAX_HOLDINGS - (len(holdings) - len(to_remove))
+
+    if candidates and state["cash"] > 0 and available_slots > 0:
+        n_buy = min(len(candidates), MAX_DAILY_BUY, available_slots)
+        per_stock = min(
+            state["cash"] * 0.9 / n_buy,
+            state["cash"] * MAX_POSITION,
+        )
+        for code in candidates[:n_buy]:
+            if code not in close.columns:
+                continue
+            buy_price = close.loc[today, code]
+            if pd.isna(buy_price) or buy_price <= 0:
+                continue
+            buy_plan.append({
+                "code": code,
+                "name": code_dfs[code].get("name", code) if code in code_dfs else code,
+                "target_amount": float(per_stock),
+                "price": float(buy_price),
+            })
+
+    # hold_plan
+    for code, h in holdings.items():
+        if code in to_remove or code not in close.columns:
+            continue
+        p = close.loc[today, code]
+        if pd.isna(p) or p <= 0:
+            continue
+        mv = h["shares"] * p
+        hold_plan.append({
+            "code": code,
+            "name": h.get("name", code),
+            "current_shares": h["shares"],
+            "price": float(p),
+            "current_weight": 0,
+            "target_weight": 0,
+            "action": "hold",
+            "add_amount": 0,
+        })
+
+    # ── 保存计划 ──
     plan = {
-        "pending_buy": candidates,
-        "pending_sell": [c for c, _, _, _ in to_sell],
+        "generated_at": str(datetime.now()),
         "date": str(today.date()),
-        "created": datetime.now().isoformat(),
+        "mode": "tail_signal",
+        "sell_plan": sell_plan,
+        "hold_plan": hold_plan,
+        "buy_plan": buy_plan,
     }
     save_plan(plan)
 
-    # 输出操作建议摘要
-    log.info("")
-    log.info("📊 操作建议:")
-    if to_sell:
-        log.info(f"  🔴 卖出 {len(to_sell)} 只:")
-        for code, reason, pnl, price in to_sell:
-            log.info(f"    {code} — {reason} @ {price:.2f} (盈亏{pnl:+.1%})")
-    if candidates:
-        log.info(f"  🟢 买入 {len(candidates)} 只:")
-        for c in candidates:
-            vr = factors["vol_ratio"].loc[today, c] if today in factors["vol_ratio"].index and c in factors["vol_ratio"].columns else 0
-            rr = factors["range_ratio"].loc[today, c] if today in factors["range_ratio"].index and c in factors["range_ratio"].columns else 0
-            log.info(f"    {c} — 量比={vr:.2f} 振幅比={rr:.2f}")
-    if not to_sell and not candidates:
-        log.info("  ⚪ 无操作")
-    log.info(f"")
-    log.info(f"📊 运行完成, 信号: 卖 {len(to_sell)} 只 / 买 {len(candidates)} 只")
+    # ── 输出操作建议摘要（print 到 stdout，cron 捕获） ──
+    print("=" * 50)
+    print(f"v20 尾盘信号 — {today.date()}")
+    print(f"现金: ¥{state['cash']:,.0f}  持仓: {len(state['holdings'])} 只")
+    print("-" * 50)
+    if sell_plan:
+        print(f"🔴 卖出 {len(sell_plan)} 只:")
+        for item in sell_plan:
+            print(f"  {item['code']} {item['name']} — {item['reason']} @ {item['price']:.2f}")
+    if buy_plan:
+        print(f"🟢 买入 {len(buy_plan)} 只:")
+        for item in buy_plan:
+            print(f"  {item['code']} {item.get('name','')} — 目标 ¥{item['target_amount']:,.0f} @ {item['price']:.2f}")
+    if hold_plan:
+        print(f"🟡 持有 {len(hold_plan)} 只:")
+        for item in hold_plan:
+            print(f"  {item['code']} {item['name']} — {item['current_shares']}股 @ {item['price']:.2f}")
+    if not sell_plan and not buy_plan and not hold_plan:
+        print("⚪ 无操作")
+    print("=" * 50)
 
-    return candidates
+    log.info(f"信号完成: 卖 {len(sell_plan)} 只 / 买 {len(buy_plan)} 只 / 持有 {len(hold_plan)} 只")
 
 
-def cmd_morning_execute():
-    """14:50 尾盘买入 — 执行昨日收盘后选股计划"""
+def cmd_tail_execute():
+    """14:45 尾盘执行 — 先卖后买"""
     log.info("=" * 50)
-    log.info("v20 尾盘买入 (14:50)")
+    log.info(f"v20 尾盘执行 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
 
     plan = load_plan()
-    if not plan["pending_buy"]:
-        log.info("无待买入计划")
+    if not plan.get("buy_plan") and not plan.get("sell_plan"):
+        log.info("无待执行计划")
+        print("⚪ v20 无待执行计划")
         return
 
-    data = load_daily_data()
-    open_data = data["open"]
-    close = data["close"]
-
-    today = close.index[-1]
-    log.info(f"执行日期: {today.date()}")
-    log.info(f"计划来源: {plan['date']}")
+    log.info(f"计划日期: {plan.get('date')}")
 
     state = load_portfolio()
-    cash = state["cash"]
     holdings = state["holdings"]
+    cash = state["cash"]
 
-    if cash <= 0:
-        log.warning("现金不足，跳过买入")
-        return
-
-    available_cash = cash * 0.9
-    n_buy = min(len(plan["pending_buy"]), MAX_DAILY_BUY, MAX_HOLDINGS - len(holdings))
-    if n_buy <= 0:
-        log.info("持仓已满，跳过买入")
-        return
-
-    per_stock = min(available_cash / n_buy, cash * MAX_POSITION)
-
-    bought = []
-    for code in plan["pending_buy"][:n_buy]:
-        if code not in open_data.columns:
-            continue
-        buy_price = open_data.loc[today, code]
-        if pd.isna(buy_price) or buy_price <= 0:
-            continue
-
-        # 涨停检查
-        prev_close = close.loc[close.index[-2], code] if len(close) > 1 else None
-        if prev_close and not pd.isna(prev_close) and prev_close > 0:
-            if buy_price >= prev_close * 1.10 * 0.99:
-                log.info(f"  {code} 涨停，跳过")
+    # ── 先卖 ──
+    sold = []
+    if plan.get("sell_plan"):
+        from core.db import get_kline_df
+        for item in plan["sell_plan"]:
+            code = item["code"]
+            if code not in holdings:
                 continue
+            h = holdings[code]
+            sell_price = item.get("price", 0)
+            if sell_price <= 0:
+                # 用最新收盘价
+                df = get_kline_df(codes=[code])
+                if not df.empty:
+                    sell_price = float(df.iloc[-1]["close"])
+                else:
+                    continue
+            sv = h["shares"] * sell_price * (1 - COMMISSION_RATE - STAMP_TAX - SLIPPAGE_RATE)
+            cash += sv
+            del holdings[code]
+            sold.append((code, item.get("name", code), item.get("reason", ""), sell_price))
+            log.info(f"  卖出 {code}: {item.get('reason','')} @ {sell_price:.2f}")
 
-        adj = buy_price * (1 + COMMISSION_RATE + SLIPPAGE_RATE)
-        shares = int(per_stock / adj / 100) * 100
-        if shares <= 0:
-            continue
-        cost = shares * adj
-        if cost > cash:
-            continue
-
-        cash -= cost
-        holdings[code] = {
-            "shares": shares, "cost": float(buy_price),
-            "hold_days": 0, "buy_date": str(today.date()),
-        }
-        bought.append(code)
-        log.info(f"  买入 {code}: {shares}股 @ {buy_price:.2f}")
+    # ── 后买 ──
+    bought = []
+    if plan.get("buy_plan") and cash > 0:
+        max_buys = min(len(plan["buy_plan"]), MAX_DAILY_BUY, MAX_HOLDINGS - len(holdings))
+        for item in plan["buy_plan"][:max_buys]:
+            code = item["code"]
+            target = item.get("target_amount", 0)
+            buy_price = item.get("price", 0)
+            if buy_price <= 0 or target <= 0:
+                continue
+            adj = buy_price * (1 + COMMISSION_RATE + SLIPPAGE_RATE)
+            shares = int(target / adj / 100) * 100
+            if shares <= 0:
+                continue
+            cost = shares * adj
+            if cost > cash:
+                shares = int(cash / adj / 100) * 100
+                cost = shares * adj
+            if shares <= 0 or cost > cash:
+                continue
+            cash -= cost
+            holdings[code] = {
+                "shares": shares,
+                "cost_price": float(buy_price),
+                "name": item.get("name", code),
+                "cost": float(buy_price),
+                "hold_days": 0,
+                "buy_date": str(datetime.now().date()),
+            }
+            bought.append((code, item.get("name", code), shares, buy_price))
+            log.info(f"  买入 {code}: {shares}股 @ {buy_price:.2f}")
 
     state["cash"] = cash
     state["holdings"] = holdings
@@ -378,117 +489,84 @@ def cmd_morning_execute():
 
     # 清空计划
     plan["pending_buy"] = []
+    plan["pending_sell"] = []
     save_plan(plan)
 
-    log.info(f"买入完成: {len(bought)} 只, 剩余现金: {cash:,.0f}")
+    # 输出摘要
+    print("=" * 50)
+    print(f"v20 尾盘执行完成")
+    if sold:
+        print(f"🔴 卖出 {len(sold)} 只:")
+        for code, name, reason, price in sold:
+            print(f"  {code} {name} — {reason} @ {price:.2f}")
+    if bought:
+        print(f"🟢 买入 {len(bought)} 只:")
+        for code, name, shares, price in bought:
+            print(f"  {code} {name} — {shares}股 @ {price:.2f}")
+    if not sold and not bought:
+        print("⚪ 无操作")
+    print(f"现金: ¥{cash:,.0f}  持仓: {len(holdings)} 只")
+    print("=" * 50)
 
-
-def cmd_tail_sell():
-    """14:50 尾盘卖出 — 检查止盈止损超时"""
-    log.info("=" * 50)
-    log.info("v20 尾盘卖出检查 (14:50)")
-
-    data = load_daily_data()
-    close = data["close"]
-    today = close.index[-1]
-
-    state = load_portfolio()
-    holdings = state["holdings"]
-    cash = state["cash"]
-
-    if not holdings:
-        log.info("无持仓")
-        return
-
-    to_sell = []
-    for code, h in list(holdings.items()):
-        if code not in close.columns:
-            continue
-        current_price = close.loc[today, code]
-        if pd.isna(current_price) or current_price <= 0:
-            continue
-
-        pnl_pct = (current_price - h["cost"]) / h["cost"]
-        h["hold_days"] += 1
-
-        if pnl_pct <= STOP_LOSS:
-            to_sell.append((code, "stop_loss", pnl_pct))
-        elif pnl_pct >= TAKE_PROFIT:
-            to_sell.append((code, "stop_profit", pnl_pct))
-        elif h["hold_days"] >= HOLD_DAYS_MAX:
-            to_sell.append((code, "timeout", pnl_pct))
-
-    sold = []
-    for code, reason, pnl_pct in to_sell:
-        if code not in close.columns:
-            continue
-        sell_price = close.loc[today, code]
-        if pd.isna(sell_price) or sell_price <= 0:
-            continue
-
-        h = holdings[code]
-        sv = h["shares"] * sell_price * (1 - COMMISSION_RATE - STAMP_TAX - SLIPPAGE_RATE)
-        cash += sv
-        del holdings[code]
-        sold.append((code, reason, pnl_pct))
-        log.info(f"  卖出 {code}: {reason} pnl={pnl_pct*100:.1f}%")
-
-    state["cash"] = cash
-    state["holdings"] = holdings
-    save_portfolio(state)
-
-    log.info(f"卖出完成: {len(sold)} 只, 剩余现金: {cash:,.0f}")
+    log.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 现金 ¥{cash:,.0f}")
 
 
 def cmd_report():
     """收盘报告"""
     log.info("=" * 50)
-    log.info("v20 收盘报告")
-
-    data = load_daily_data()
-    close = data["close"]
-    today = close.index[-1]
+    log.info(f"v20 收盘报告 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
 
     state = load_portfolio()
     holdings = state["holdings"]
     cash = state["cash"]
 
     # 计算持仓市值
+    from core.db import get_kline_df
     portfolio_val = cash
+    holding_details = []
     for code, h in holdings.items():
-        if code in close.columns:
-            p = close.loc[today, code]
-            if not pd.isna(p) and p > 0:
-                portfolio_val += h["shares"] * p
+        df = get_kline_df(codes=[code])
+        if not df.empty:
+            p = float(df.iloc[-1]["close"])
+            mv = h["shares"] * p
+            portfolio_val += mv
+            pnl = (p - h["cost_price"]) / h["cost_price"] if h["cost_price"] > 0 else 0
+            holding_details.append((code, h.get("name", code), h["shares"], p, h["cost_price"], pnl, mv))
 
-    log.info(f"日期: {today.date()}")
-    log.info(f"现金: {cash:,.0f}")
-    log.info(f"持仓: {len(holdings)} 只")
-    log.info(f"总资产: {portfolio_val:,.0f}")
+    initial = state["initial_capital"]
+    total_pnl = (portfolio_val - initial) / initial
 
-    # 记录 NAV 历史
-    state["nav_history"].append({
-        "date": str(today.date()),
-        "nav": portfolio_val,
-    })
-    save_portfolio(state)
+    print("=" * 50)
+    print(f"v20 收盘报告 — {datetime.now().strftime('%Y-%m-%d')}")
+    print(f"现金: ¥{cash:,.0f}")
+    print(f"总资产: ¥{portfolio_val:,.0f}  收益率: {total_pnl:+.2%}")
+    print("-" * 50)
+    if holding_details:
+        print(f"持仓 {len(holding_details)} 只:")
+        for code, name, shares, price, cost, pnl, mv in holding_details:
+            print(f"  {code} {name}  {shares}股  @ {price:.2f}  成本{cost:.2f}  盈亏{pnl:+.1%}  市值¥{mv:,.0f}")
+    else:
+        print("无持仓")
+    print("=" * 50)
 
+    log.info(f"收盘报告: 总资产 ¥{portfolio_val:,.0f}  收益率 {total_pnl:+.2%}")
     return portfolio_val
 
 
 # ── Main ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("用法: python scripts/sim_v20.py [tail_signal|tail_buy|tail_sell|report_only]")
+        print("用法: python scripts/sim_v20.py [tail_signal|tail_execute|report_only]")
         sys.exit(1)
 
     cmd = sys.argv[1]
     if cmd == "tail_signal":
         cmd_tail_signal()
-    elif cmd in ("tail_buy", "morning_execute"):
-        cmd_morning_execute()
+    elif cmd in ("tail_execute", "tail_buy", "morning_execute"):
+        cmd_tail_execute()
     elif cmd == "tail_sell":
-        cmd_tail_sell()
+        # 兼容旧命令，实际执行已经合并到 tail_execute
+        cmd_tail_execute()
     elif cmd == "report_only":
         cmd_report()
     else:

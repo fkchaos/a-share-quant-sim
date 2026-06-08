@@ -298,17 +298,17 @@ def cmd_morning_execute():
     cash = state["cash"]
     holdings = state["holdings"]
 
-    if cash <= INITIAL_CAPITAL * 0.1:
+    if cash <= cash * 0.1:
         log.warning("现金不足，跳过买入")
         return
 
-    available_cash = cash - INITIAL_CAPITAL * 0.1
+    available_cash = cash - cash * 0.1
     n_buy = min(len(plan["pending_buy"]), MAX_DAILY_BUY, MAX_HOLDINGS - len(holdings))
     if n_buy <= 0:
         log.info("持仓已满，跳过买入")
         return
 
-    per_stock = min(available_cash / n_buy, INITIAL_CAPITAL * MAX_POSITION)
+    per_stock = min(available_cash / n_buy, cash * MAX_POSITION)
 
     bought = []
     for code in plan["pending_buy"][:n_buy]:

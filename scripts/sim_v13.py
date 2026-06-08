@@ -299,7 +299,7 @@ def check_risk(state, price_data):
             sell_plan.append(
                 {
                     "code": code,
-                    "name": code,
+                    "name": zz800_names.get(code, code),
                     "shares": "all",
                     "price": float(p),
                     "reason": "止损",
@@ -313,7 +313,7 @@ def check_risk(state, price_data):
             sell_plan.append(
                 {
                     "code": code,
-                    "name": code,
+                    "name": zz800_names.get(code, code),
                     "shares": "all",
                     "price": float(p),
                     "reason": "止盈",
@@ -328,7 +328,7 @@ def check_risk(state, price_data):
             sell_plan.append(
                 {
                     "code": code,
-                    "name": code,
+                    "name": zz800_names.get(code, code),
                     "shares": "all",
                     "price": float(p),
                     "reason": "超时",
@@ -385,11 +385,13 @@ def run_intraday_signal():
 
     # 选股
     zz800_codes = set()
+    zz800_names = {}
     zz800_path = os.path.join(DATA_DIR, "zz800_constituents.csv")
     if os.path.exists(zz800_path):
         try:
             zz800_df = pd.read_csv(zz800_path)
             zz800_codes = set(zz800_df["code"].astype(str).str.zfill(6))
+            zz800_names = dict(zip(zz800_df["code"].astype(str).str.zfill(6), zz800_df["name"]))
         except Exception as e:
             logger.warning(f"中证 800 成分股加载失败: {e}，使用全市场")
     else:
@@ -439,7 +441,7 @@ def run_intraday_signal():
                 buy_plan.append(
                     {
                         "code": code,
-                        "name": code,
+                        "name": zz800_names.get(code, code),
                         "target_amount": float(per_stock),
                         "price": float(price_data[code]),
                     }
@@ -455,7 +457,7 @@ def run_intraday_signal():
                 hold_plan.append(
                     {
                         "code": code,
-                        "name": code,
+                        "name": zz800_names.get(code, code),
                         "current_shares": h["shares"],
                         "price": float(p),
                         "current_weight": w,

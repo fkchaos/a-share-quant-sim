@@ -6,12 +6,21 @@ os.environ['BACKTEST_DATA_DIR'] = '/root/data'
 
 from scripts.run_backtest import walk_forward
 from core.config import STRATEGY_PROFILES
-from core.data import load_and_build_panel
-from core.strategy import StrategyEngine
+from core.data import load_and_build_panel  # 兼容 CSV 回退路径
+from core.db import load_panel_from_db, init_db
+
+USE_DB = os.environ.get("USE_DB", "1") == "1"
+
+def load_panel(start_date=None, end_date=None, need_open=False, need_hl=False, pool="zz800"):
+    if USE_DB:
+        init_db()
+        return load_panel_from_db(start_date, end_date, need_open=need_open, need_hl=need_hl, pool=pool)
+    else:
+        return load_and_build_panel(start_date, end_date, need_open=need_open, need_hl=need_hl)
 
 # 加载数据
 print("加载数据...")
-loaded, codes = load_and_build_panel('2021-01-01', '2026-05-31', need_open=True, need_hl=True)
+loaded, codes = load_panel('2021-01-01', '2026-05-31', need_open=True, need_hl=True)
 close_panel = loaded[0]
 volume_panel = loaded[1]
 amount_panel = loaded[2]

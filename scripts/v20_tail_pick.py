@@ -75,21 +75,16 @@ class V20Config:
 # 数据加载（复用 v13 的加载逻辑）
 # ============================================================
 def load_panel(start_date='2021-01-01', end_date='2026-05-31'):
-    """加载股票面板数据"""
-    from core.data import load_and_build_panel
-    from core.config import MarketFilter
-
-    loaded, codes = load_and_build_panel(
-        start_date, end_date,
-        need_open=True, need_hl=True,
-        market_filter=MarketFilter(),
-    )
-    close_panel = loaded[0]
+    """加载股票面板数据（优先从数据库）"""
+    from core.db import load_panel_from_db, init_db
+    init_db()
+    loaded, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True)
+    close_panel  = loaded[0]
     volume_panel = loaded[1]
     amount_panel = loaded[2]
-    high_panel = loaded[3]
-    low_panel = loaded[4]
-    open_panel = loaded[5]
+    open_panel   = loaded[3]
+    high_panel  = loaded[4]
+    low_panel   = loaded[5]
 
     # 流动性筛选
     avg_amount = amount_panel.rolling(20).mean() / 1e4

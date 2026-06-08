@@ -461,6 +461,75 @@ def get_latest_trade_date():
     return get_latest_date()
 
 
+def load_panel_from_db(start_date=None, end_date=None,
+                       need_open=False, need_hl=False, pool="zz800"):
+    """
+    从数据库加载日K线，构建回测 panel（兼容 core/data.py 的 load_and_build_panel 返回格式）
+
+    Returns
+    -------
+    tuple: (close_panel, volume_panel, amount_panel[, open_panel[, high_panel, low_panel]])
+    list: stock codes
+    """
+    import pandas as pd
+
+    with get_conn() as conn:
+        # 获取股票池
+        pool_rows = conn.execute(
+            "SELECT code FROM stock_pool WHERE pool=? AND is_active=1", (pool,)
+        ).fetchall()
+        pool_codes = [r["code"] for r in pool_rows]
+
+        if not pool_codes:
+            pool_codes = None  # 全市场
+
+        # 构建查询
+        sql = "SELECT code, date, open, high, low, close, volume, amount FROM daily_kline WHERE 1=1"
+        params = []
+        if start_date:
+            sql += " AND date>=?"
+            params.append(start_date)
+        if end_date:
+            sql += " AND date<=?"
+            params.append(end_date)
+
+        rows = conn.execute(sql, params).fetchall()
+
+    if not rows:
+        return tuple(pd.DataFrame() for _ in range(3 + int(need_open) + int(need_hl)*2)), []
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["date"] = pd.to_datetime(df["date"])
+
+    # 过滤股票池
+    if pool_codes:
+        df = df[df["code"].isin(pool_codes)]
+
+    # 构建 panel（date × code 的矩阵）
+    codes = sorted(df["code"].unique())
+
+    close_panel  = df.pivot(index="date", columns="code", values="close")
+    volume_panel = df.pivot(index="date", columns="code", values="volume")
+    amount_panel = df.pivot(index="date", columns="code", values="amount")
+
+    # 用 close * volume 填充 amount 中的 NaN（部分老数据可能没有 amount）
+    if amount_panel.isna().any().any():
+        fill = close_panel * volume_panel
+        amount_panel = amount_panel.fillna(fill)
+
+    result = (close_panel, volume_panel, amount_panel)
+
+    if need_open or need_hl:
+        open_panel = df.pivot(index="date", columns="code", values="open")
+        result += (open_panel,)
+    if need_hl:
+        high_panel = df.pivot(index="date", columns="code", values="high")
+        low_panel  = df.pivot(index="date", columns="code", values="low")
+        result += (high_panel, low_panel)
+
+    return result, list(codes)
+
+
 if __name__ == "__main__":
     init_db()
     print(db_stats())

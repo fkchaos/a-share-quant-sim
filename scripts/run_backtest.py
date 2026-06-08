@@ -78,6 +78,18 @@ FACTOR_WEIGHTS = DEFAULT_FACTOR_WEIGHTS  # 权威权重，来自 core/config.py
 
 
 from core.data import load_and_build_panel
+from core.db import load_panel_from_db, init_db
+
+# 数据源选择：True=从数据库读，False=从CSV读（兼容旧流程）
+USE_DB = os.environ.get("USE_DB", "1") == "1"
+
+def load_panel(start_date=None, end_date=None, need_open=False, need_hl=False, pool="zz800"):
+    """统一数据加载入口，USE_DB 环境变量控制从 DB 还是 CSV 读"""
+    if USE_DB:
+        init_db()
+        return load_panel_from_db(start_date, end_date, need_open=need_open, need_hl=need_hl, pool=pool)
+    else:
+        return load_and_build_panel(start_date, end_date, need_open=need_open, need_hl=need_hl)
 
 
 # ============================================================
@@ -879,9 +891,8 @@ def main():
     need_open = (args.exec_timing == "open")
     need_hl = True  # 短线因子在面板模式下始终需要
     print(f"\n[1/5] 加载数据... (exec_timing={args.exec_timing})")
-    loaded, codes = load_and_build_panel(
+    loaded, codes = load_panel(
         args.start, args.end, need_open=need_open, need_hl=need_hl,
-        market_filter=MarketFilter(),
     )
     close_panel  = loaded[0]
     volume_panel = loaded[1]

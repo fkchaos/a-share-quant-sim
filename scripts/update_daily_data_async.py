@@ -84,6 +84,44 @@ async def async_update_all():
     print(f"  写入完成: 新增{success} 失败{fail}, {t_write:.1f}s")
     print(f"  ─────────────────────────────")
     print(f"  总耗时: {total:.1f}s (请求{t_fetch:.1f}s + 写入{t_write:.1f}s)")
+
+    # ── 同步到数据库（增量：只写今天的） ──
+    try:
+        t2 = time.time()
+        from core.db import upsert_kline_batch, upsert_stock, get_latest_date, get_stock_name_map
+        name_map = get_stock_name_map()
+        today = get_latest_date()
+        records = []
+        if today:
+            for code in stocks:
+                csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
+                if not os.path.exists(csv_file):
+                    continue
+                try:
+                    df = pd.read_csv(csv_file, index_col='date', parse_dates=True)
+                    row = df.loc[df.index == today]
+                    if len(row) > 0:
+                        r = row.iloc[0]
+                        records.append((
+                            code, today,
+                            float(r.get("open", 0) or 0),
+                            float(r.get("high", 0) or 0),
+                            float(r.get("low", 0) or 0),
+                            float(r.get("close", 0) or 0),
+                            float(r.get("volume", 0) or 0),
+                            float(r.get("amount", 0) or 0),
+                        ))
+                except Exception:
+                    pass
+        if records:
+            upsert_kline_batch(records)
+            for code in stocks:
+                upsert_stock(code, name=name_map.get(code, ""))
+            t_db = time.time() - t2
+            print(f"  数据库同步: {len(records)} 条K线({today}), {t_db:.1f}s")
+    except Exception as e:
+        print(f"  数据库同步失败: {e}")
+
     return total
 
 

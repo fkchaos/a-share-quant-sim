@@ -429,7 +429,7 @@ def run_intraday_signal():
     buy_plan = []
     hold_plan = []
 
-    if candidates and state.cash > state.cash * 0.1 and len(state.holdings) < MAX_HOLDINGS:
+    if candidates and state.cash > 0 and len(state.holdings) < MAX_HOLDINGS:
         available_cash = state.cash - state.cash * 0.1
         per_stock = min(
             available_cash / min(len(candidates), MAX_DAILY_BUY),

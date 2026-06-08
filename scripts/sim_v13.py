@@ -669,6 +669,10 @@ def run_report_only():
     nav = portfolio_value(state, datetime.now(), price_data)
     total_ret = (nav - INITIAL_CAPITAL) / INITIAL_CAPITAL
 
+    # 从 DB 获取股票名称
+    from core.db import get_stock_name_map
+    name_map = get_stock_name_map()
+
     logger.info(f"日期: {datetime.now().strftime('%Y-%m-%d')}")
     logger.info(f"总净值: ¥{nav:,.0f}")
     logger.info(f"总收益率: {total_ret:.1%}")
@@ -683,7 +687,8 @@ def run_report_only():
                 mv = h["shares"] * p
                 w = mv / nav if nav > 0 else 0
                 pnl = (p - h["cost_price"]) / h["cost_price"]
-                logger.info(f"  {code} {h['shares']}股 市值¥{mv:,.0f} 权重{w:.1%} 盈亏{pnl:.1%}")
+                name = name_map.get(code, code)
+                logger.info(f"  {code} {name:<8} {h['shares']:>6}股  市值¥{mv:>10,.0f}  权重{w:.1%}  盈亏{pnl:+.1%}")
 
     return {"nav": float(nav), "return": float(total_ret), "holdings": len(state.holdings)}
 

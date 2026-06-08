@@ -414,8 +414,12 @@ def save_account_for_sim(state, account_id=1):
         )
     # 清空并重建持仓
     clear_holdings(account_id)
+    # 从 stock_pool 获取名称
+    name_map = get_stock_name_map()
     for code, h in state.holdings.items():
-        name = h.get("name", code)
+        name = h.get("name", "") if isinstance(h, dict) else ""
+        if not name or name == code:
+            name = name_map.get(code, code)
         tp = h.get("tp_taken", [])
         with get_conn() as conn:
             conn.execute(

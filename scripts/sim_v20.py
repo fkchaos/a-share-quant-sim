@@ -234,7 +234,8 @@ def load_portfolio():
 
 def save_portfolio(state):
     """保存账户状态（写数据库，account_id=3）"""
-    from core.db import get_conn, clear_holdings
+    from core.db import get_conn, clear_holdings, get_stock_name_map
+    name_map = get_stock_name_map()
     with get_conn() as conn:
         conn.execute(
             "UPDATE account SET cash=?, updated_at=datetime('now') WHERE id=3",
@@ -242,7 +243,9 @@ def save_portfolio(state):
         )
     clear_holdings(3)
     for code, h in state.get("holdings", {}).items():
-        name = h.get("name", code) if isinstance(h, dict) else code
+        name = h.get("name", "") if isinstance(h, dict) else ""
+        if not name or name == code:
+            name = name_map.get(code, code)
         shares = h.get("shares", 0) if isinstance(h, dict) else 0
         cost = h.get("cost_price", 0) if isinstance(h, dict) else 0
         with get_conn() as conn:

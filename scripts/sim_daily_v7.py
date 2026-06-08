@@ -456,7 +456,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
             'trade_count': trade_count,
             'mode': 'intraday_signal',
             'no_rebalance': True,
-            'total_nav': float(current_pv) if current_pv else float(INITIAL_CAPITAL),
+            'total_nav': float(current_pv) if current_pv else float(state.cash),
             'sell_plan': sell_plan,
             'hold_plan': hold_plan,
             'buy_plan': [],
@@ -529,7 +529,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
     target_weights = {c: weight_per_stock for c in top_stocks}
 
     # 换手率控制 / 行业上限
-    current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
+    current_pv = portfolio_value(state, date, price_data) if state.holdings else state.cash
     price_dict = price_data.to_dict()
     turnover_info = None
     industry_info = None
@@ -611,7 +611,7 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
         'date': str(date),
         'trade_count': trade_count,
         'mode': 'intraday_signal',
-        'total_nav': float(current_pv) if current_pv else float(INITIAL_CAPITAL),
+        'total_nav': float(current_pv) if current_pv else float(state.cash),
         'sell_plan': sell_plan,
         'hold_plan': hold_plan,
         'buy_plan': buy_plan,
@@ -1146,7 +1146,7 @@ def run_day_end(report_only=False):
             trade_count = int(f.read().strip())
 
     need_rebalance = (trade_count % REBAL_FREQ == 0) or not loaded
-    current_pv = portfolio_value(state, date, price_data) if state.holdings else INITIAL_CAPITAL
+    current_pv = portfolio_value(state, date, price_data) if state.holdings else state.cash
 
     sell_plan = list(risk_sell or [])
 

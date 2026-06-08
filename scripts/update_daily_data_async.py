@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
 """
-update_daily_data_async.py — 并发数据更新（完整版）
-策略：不做任何跳过检查，每次运行都强制全量更新。
-      从任务调度层控制频率（一天上午+下午两次）。
+update_daily_data_async.py — 并发数据更新
+策略：请求到数据后直接 upsert 到 SQLite（天然增量，INSERT OR REPLACE）
+      CSV 作为可选备份（--csv 开启），默认不写
+      从任务调度层控制频率（一天上午+下午两次）
 """
 import os, sys, time, asyncio, argparse
 from datetime import datetime, timedelta
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 
 from update_daily_data import (
     get_stock_list,
-    get_local_latest_date,
     fetch_tencent_kline,
 )
 
 
-async def async_update_all():
-    """强制并发更新所有股票，不做任何跳过检查"""
+async def async_update_all(write_csv=False):
+    """并发更新所有股票，直接 upsert DB"""
     stocks = get_stock_list()
-    print(f"📋 本地股票数量: {len(stocks)}")
-    print(f"🔄 开始并发更新（强制全量，并发数=30）...")
+    print(f"📋 股票数量: {len(stocks)}")
+    print(f"🔄 开始并发更新（并发数=30，直接写DB{' + CSV' if write_csv else ''}）...")
 
     t0 = time.time()
 
@@ -49,84 +51,72 @@ async def async_update_all():
     fail_fetch = sum(1 for _, df, _ in results if df is None)
     print(f"  请求完成: {len(results)} 只, {t_fetch:.1f}s (成功{ok_fetch} 失败{fail_fetch})")
 
-    # ── 写入（读本地 → 合并新数据 → 写回） ──
+    # ── 直接 upsert DB（天然增量） ──
     t1 = time.time()
-    success = 0
-    fail = 0
+    db_success = 0
+    db_fail = 0
+    csv_success = 0
 
+    from core.db import upsert_kline_batch, upsert_stock, get_stock_name_map
+    name_map = get_stock_name_map()
+
+    # 先批量 upsert 所有股票池信息
+    for code in stocks:
+        upsert_stock(code, name=name_map.get(code, ""))
+
+    # 按股票逐个处理：请求到的数据直接 upsert
+    all_records = []
     for code, df, err in results:
         if df is None or len(df) == 0:
-            fail += 1
+            db_fail += 1
             continue
-
-        csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
         try:
-            local_latest = get_local_latest_date(code)
-            if local_latest is not None:
-                new_data = df[df.index > local_latest]
-                if len(new_data) == 0:
-                    # 已是最新，touch一下文件更新时间
-                    os.utime(csv_file, None)
-                    continue
-                old_df = pd.read_csv(csv_file, index_col='date', parse_dates=True)
-                combined = pd.concat([old_df, new_data])
-                combined = combined[~combined.index.duplicated(keep='last')]
-                combined = combined.sort_index()
-                combined.to_csv(csv_file)
-            else:
-                df.to_csv(csv_file)
-            success += 1
+            for date_idx, row in df.iterrows():
+                date_str = str(date_idx)[:10]
+                all_records.append((
+                    code, date_str,
+                    float(row.get("open", 0) or 0),
+                    float(row.get("high", 0) or 0),
+                    float(row.get("low", 0) or 0),
+                    float(row.get("close", 0) or 0),
+                    float(row.get("volume", 0) or 0),
+                    float(row.get("amount", 0) or 0),
+                ))
+            db_success += 1
         except Exception:
-            fail += 1
+            db_fail += 1
 
-    t_write = time.time() - t1
-    total = time.time() - t0
-    print(f"  写入完成: 新增{success} 失败{fail}, {t_write:.1f}s")
-    print(f"  ─────────────────────────────")
-    print(f"  总耗时: {total:.1f}s (请求{t_fetch:.1f}s + 写入{t_write:.1f}s)")
+    if all_records:
+        upsert_kline_batch(all_records)
 
-    # ── 同步到数据库（增量：只写今天的） ──
-    try:
+    t_db = time.time() - t1
+    print(f"  DB写入: {db_success} 只股票, {len(all_records)} 条K线, {t_db:.1f}s (失败{db_fail})")
+
+    # ── 可选：写 CSV 备份 ──
+    if write_csv:
         t2 = time.time()
-        from core.db import upsert_kline_batch, upsert_stock, get_latest_date, get_stock_name_map
-        name_map = get_stock_name_map()
-        today = get_latest_date()
-        records = []
-        if today:
-            for code in stocks:
+        os.makedirs(DAILY_DIR, exist_ok=True)
+        for code, df, err in results:
+            if df is None or len(df) == 0:
+                continue
+            try:
                 csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
-                if not os.path.exists(csv_file):
-                    continue
-                try:
-                    df = pd.read_csv(csv_file, index_col='date', parse_dates=True)
-                    row = df.loc[df.index == today]
-                    if len(row) > 0:
-                        r = row.iloc[0]
-                        records.append((
-                            code, today,
-                            float(r.get("open", 0) or 0),
-                            float(r.get("high", 0) or 0),
-                            float(r.get("low", 0) or 0),
-                            float(r.get("close", 0) or 0),
-                            float(r.get("volume", 0) or 0),
-                            float(r.get("amount", 0) or 0),
-                        ))
-                except Exception:
-                    pass
-        if records:
-            upsert_kline_batch(records)
-            for code in stocks:
-                upsert_stock(code, name=name_map.get(code, ""))
-            t_db = time.time() - t2
-            print(f"  数据库同步: {len(records)} 条K线({today}), {t_db:.1f}s")
-    except Exception as e:
-        print(f"  数据库同步失败: {e}")
+                df.to_csv(csv_file)
+                csv_success += 1
+            except Exception:
+                pass
+        t_csv = time.time() - t2
+        print(f"  CSV备份: {csv_success} 只, {t_csv:.1f}s")
 
+    total = time.time() - t0
+    print(f"  ─────────────────────────────")
+    print(f"  总耗时: {total:.1f}s")
     return total
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="A股日频数据更新（并发强制版）")
+    parser = argparse.ArgumentParser(description="A股日频数据更新（并发直写DB）")
+    parser.add_argument("--csv", action="store_true", help="同时写CSV备份")
     parser.add_argument("--check", action="store_true", help="只检查不更新")
     args = parser.parse_args()
 
@@ -134,4 +124,4 @@ if __name__ == "__main__":
         from update_daily_data import check_status
         check_status()
     else:
-        asyncio.run(async_update_all())
+        asyncio.run(async_update_all(write_csv=args.csv))

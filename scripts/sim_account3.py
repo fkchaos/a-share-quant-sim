@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 """
-v20 模拟盘交易脚本
-==================
-基于 v13 模拟盘框架，使用 v20_tail_pick 尾盘缩量企稳策略。
-账户：数据库 account_id=3
+账户3 模拟盘交易脚本 (v20)
+==========================
 策略：尾盘缩量企稳 → 尾盘买入 → 持有1-3天 → 尾盘卖出
+账户：数据库 account_id=3
 
 时间线：
-  T日 14:40  tail_signal   — 尾盘选股 + 卖出检查（纯信号，不操作账户）
-  T日 14:55  tail_execute  — 先卖后买（执行信号计划）
-  T日 15:30  report_only   — 收盘报告
+  14:40  tail_signal   — 尾盘选股 + 卖出检查（纯信号，不操作账户）
+  14:55  tail_execute  — 先卖后买（执行信号计划）
+  15:30  report_only   — 收盘报告
 
 用法:
-    python scripts/sim_v20.py tail_signal       # 14:40 尾盘选股
-    python scripts/sim_v20.py tail_execute      # 14:55 尾盘执行（先卖后买）
-    python scripts/sim_v20.py report_only       # 收盘报告
+    python scripts/sim_account3.py tail_signal
+    python scripts/sim_account3.py tail_execute
+    python scripts/sim_account3.py report_only
 """
 import sys, os, json, logging
 from datetime import datetime, timedelta

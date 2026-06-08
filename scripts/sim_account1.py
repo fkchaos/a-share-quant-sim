@@ -1,20 +1,18 @@
 """
-模拟盘交易 - 每日操作脚本 (v7, intraday support)
+账户1 模拟盘交易脚本 (v11b, intraday support)
 =============================================
-v7 变更（vs v6）：
-  - 支持盘中双阶段模式：上午出信号 + 下午开盘执行
-  - 上午(11:35): 拉腾讯实时快照(上半天数据) + 日K线 → 算因子评分 → 生成操作计划
-  - 下午(13:00): 拉开盘价 → 按计划执行交易 → 更新账户
-  - 收盘(18:00): 日终报告（复用 v6 逻辑）
-  - 新增腾讯实时行情接口 (qt.gtimg.cn)，89ms 响应
-  - 新增批量实时快照拉取函数 fetch_tencent_spot_batch()
-  - MODE 参数控制运行模式: intraday_signal | intraday_execute | day_end
+策略：截面因子选股（Ensemble）
+账户：数据库 account_id=1
 
-复用 v6 所有核心逻辑:
-  - 交易逻辑: core.account（PortfolioState + buy/sell/check_stop_loss）
-  - 因子计算: core.factors.calc_factors_single
-  - 评分: core.strategy.StrategyEngine (factor/ensemble/ml/hybrid)
-  - P0-1/P0-2/P0-3/P1-1/P1-2 约束全部保留
+时间线：
+  11:45  intraday_signal  — 上午出信号（选股+风控）
+  13:00  intraday_execute — 下午执行（先卖后买）
+  15:30  report_only       — 收盘报告
+
+用法:
+    python scripts/sim_account1.py intraday_signal
+    python scripts/sim_account1.py intraday_execute
+    python scripts/sim_account1.py report_only
 """
 import sys, os, json, time, logging
 from datetime import datetime

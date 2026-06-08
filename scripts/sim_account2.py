@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-v13 模拟盘交易脚本
-==================
-基于 sim_daily_v7 框架，使用 v13_small_mid_short 策略。
-账户路径：/root/data/portfolio_v13/
+账户2 模拟盘交易脚本 (v13)
+==========================
 策略：小市值中短线反转（5日反转 + 量价异动 + 振幅收窄）
+账户：数据库 account_id=2
+
+时间线：
+  11:45  intraday_signal  — 上午出信号（选股+风控）
+  13:00  intraday_execute — 下午执行（先卖后买）
+  15:30  report_only       — 收盘报告
 
 用法:
-    python scripts/sim_v13.py intraday_signal     # 上午出信号
-    python scripts/sim_v13.py intraday_execute    # 下午执行
-    python scripts/sim_v13.py report_only          # 收盘报告
+    python scripts/sim_account2.py intraday_signal
+    python scripts/sim_account2.py intraday_execute
+    python scripts/sim_account2.py report_only
 """
 import sys, os, json, time, logging
 from datetime import datetime

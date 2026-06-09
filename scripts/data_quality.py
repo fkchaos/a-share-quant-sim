@@ -70,16 +70,18 @@ class DataQualityAuditor:
     def __init__(
         self,
         code_list: list[str],
-        daily_dir: str,
+        daily_dir: str = None,
         as_of=None,
         max_stale_days: int = MAX_STALE_DAYS,
         recent_window: int = RECENT_WINDOW,
+        data_source: str = "csv",  # "csv" | "db"
     ):
         self.code_list = code_list
         self.daily_dir = daily_dir
         self.as_of = pd.to_datetime(as_of) if as_of else None
         self.max_stale_days = max_stale_days
         self.recent_window = recent_window
+        self.data_source = data_source
 
     def audit(self) -> DataQualityResult:
         """
@@ -90,20 +92,39 @@ class DataQualityAuditor:
         reference_date = self.as_of  # 若有指定日期就用，否则用今天
 
         for code in self.code_list:
-            csv_path = os.path.join(self.daily_dir, f"{code}.csv")
-            if not os.path.exists(csv_path):
-                sq = SymbolQuality(code=code, latest_date="N/A",
-                                   issues=["数据文件不存在"])
-                results.append(sq)
-                continue
-
-            try:
-                df = pd.read_csv(csv_path, index_col="date", parse_dates=True)
-            except Exception as e:
-                sq = SymbolQuality(code=code, latest_date="N/A",
-                                   issues=[f"CSV 读取失败: {e}"])
-                results.append(sq)
-                continue
+            if self.data_source == "db":
+                # ── 从 DB 读取 ──
+                try:
+                    from core.db import get_kline
+                    kl = get_kline(code)
+                except Exception as e:
+                    sq = SymbolQuality(code=code, latest_date="N/A",
+                                       issues=[f"DB 读取失败: {e}"])
+                    results.append(sq)
+                    continue
+                if not kl:
+                    sq = SymbolQuality(code=code, latest_date="N/A",
+                                       issues=["DB 中无数据"])
+                    results.append(sq)
+                    continue
+                df = pd.DataFrame(kl)
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.set_index('date').sort_index()
+            else:
+                # ── 从 CSV 读取 ──
+                csv_path = os.path.join(self.daily_dir, f"{code}.csv")
+                if not os.path.exists(csv_path):
+                    sq = SymbolQuality(code=code, latest_date="N/A",
+                                       issues=["数据文件不存在"])
+                    results.append(sq)
+                    continue
+                try:
+                    df = pd.read_csv(csv_path, index_col="date", parse_dates=True)
+                except Exception as e:
+                    sq = SymbolQuality(code=code, latest_date="N/A",
+                                       issues=[f"CSV 读取失败: {e}"])
+                    results.append(sq)
+                    continue
 
             if len(df) == 0:
                 sq = SymbolQuality(code=code, latest_date="N/A",

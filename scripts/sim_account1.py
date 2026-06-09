@@ -28,6 +28,7 @@ from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_v
 from core.config import STRATEGY_PROFILES, TradingCosts
 from core.scoring import score_all_stocks
 from core.factors import calc_factors_single
+from core.db import get_kline, get_all_codes
 
 # ── Auxiliary modules ──────────────────────────────────────────────
 from constraints import build_trade_context
@@ -221,46 +222,52 @@ def step_load_account():
     return state, loaded
 
 
-def step_load_prices(intraday=False):
+def step_load_prices(intdb=False):
     """
     Step 2: 加载当日价格数据
-    intraday=False: 日终模式, 从本地CSV加载(日K线)
-    intraday=True:  盘中模式, 用腾讯实时快照(上半天数据已包含开/高/低/收=当前价)
+    intdb=False: 日终模式, 从 DB 加载
+    intdb=True:  盘中模式, DB 历史数据 + 腾讯实时快照
 
-    返回: (date_str, price_data, code_dataframes, files)
+    返回: (date_str, price_data, code_dataframes, codes)
         date_str: "2026-06-01_AM" 或 "2026-06-01"
         price_data: Series, index=code, value=price
-        code_dataframes: dict {code: df} (仅在非盘中模式有完整数据)
-        files: list of csv filenames
+        code_dataframes: dict {code: df} (按日期升序排列，供因子计算用)
+        codes: list of codes
     """
-    files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
-    if not files:
-        logger.error("没有找到日K线数据")
+    codes = get_all_codes()
+    if not codes:
+        logger.error("DB 中没有股票数据")
         return None, None, None, None
 
-    if not intraday:
-        # ── 日终模式: 本地 CSV ──
-        sample_df = pd.read_csv(os.path.join(DAILY_DIR, files[0]), index_col='date', parse_dates=True)
-        latest_date = sample_df.index[-1]
-        today = datetime.now().date()
-        days_behind = (today - latest_date.date()).days
-        logger.info(f"📅 本地数据: {len(files)} 只 | 最新: {latest_date.date()} | 滞后: {days_behind}天")
-
+    if not intdb:
+        # ── 日终模式: 从 DB 获取最新一天收盘价 ──
+        # 采样第一只股票确定最新日期
+        sample_kl = get_kline(codes[0], limit=1)
+        if not sample_kl:
+            logger.error("DB 中没有 K 线数据")
+            return None, None, None, None
+        latest_date_str = sample_kl[0]["date"]
+        
         price_data = pd.Series(dtype=float)
         code_dataframes = {}
-        for f in files:
-            code = f.replace(".csv", "")
-            df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
-            if latest_date in df.index:
-                price_data[code] = df.loc[latest_date, 'close']
+        for code in codes:
+            kl = get_kline(code)
+            if kl:
+                df = pd.DataFrame(kl)
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.set_index('date').sort_index()
                 code_dataframes[code] = df
+                # 用最新日期的收盘价
+                last_row = df.iloc[-1]
+                price_data[code] = last_row['close']
 
-        return str(latest_date.date()), price_data, code_dataframes, files
+        logger.info(f"📅 DB 数据: {len(codes)} 只 | 最新: {latest_date_str} | code_dataframes: {len(code_dataframes)} 只")
+
+        return latest_date_str, price_data, code_dataframes, codes
 
     else:
-        # ── 盘中模式: 实时快照 ──
+        # ── 盘中模式: DB 历史 + 腾讯实时快照 ──
         logger.info("📡 拉取盘中实时行情...")
-        codes = [f.replace(".csv", "") for f in files]
         t0 = time.time()
         spot_data = fetch_tencent_spot_batch(codes)
         elapsed = (time.time() - t0) * 1000
@@ -270,40 +277,37 @@ def step_load_prices(intraday=False):
             logger.error("实时行情拉取失败，无法继续")
             return None, None, None, None
 
+        # 实时价格
         price_data = pd.Series(dtype=float)
-        code_dataframes = {}  # 盘中模式不需要完整DF
-
         for code in codes:
             if code in spot_data:
                 sd = spot_data[code]
-                # 盘中价格用当前价(实时快照的 close 字段)
                 price_data[code] = sd['price']
 
         now = datetime.now()
         date_str = f"{now.strftime('%Y-%m-%d')}_AM"
         logger.info(f"盘中数据时间: {now.strftime('%H:%M')}, 有效股票 {len(price_data)} 只")
 
-        # 同时加载本地CSV供因子计算用(用的是历史数据，不受盘中影响)
+        # 同时从 DB 加载历史数据供因子计算用
+        code_dataframes = {}
         latest_dates = {}
-        for f in files:
-            code = f.replace(".csv", "")
-            try:
-                df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
+        for code in codes:
+            kl = get_kline(code)
+            if kl:
+                df = pd.DataFrame(kl)
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.set_index('date').sort_index()
                 code_dataframes[code] = df
                 if len(df) > 0:
                     latest_dates[code] = df.index[-1]
-            except Exception:
-                pass
 
-        # 打印本地数据最后更新时间
         if latest_dates:
             newest = max(latest_dates.values())
             today = datetime.now().date()
             days_behind = (today - newest.date()).days
-            logger.info(f"📅 本地数据: {len(latest_dates)} 只 | 最新: {newest.date()} | 滞后: {days_behind}天")
+            logger.info(f"📅 DB 数据: {len(latest_dates)} 只 | 最新: {newest.date()} | 滞后: {days_behind}天")
 
-        return date_str, price_data, code_dataframes, files
-
+        return date_str, price_data, code_dataframes, codes
 
 def step_load_prices_pm(trade_plan):
     """
@@ -312,21 +316,27 @@ def step_load_prices_pm(trade_plan):
 
     返回: (datetime, price_data)
     """
-    files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
-    codes = [f.replace(".csv", "") for f in files]
+    codes = get_all_codes()
     # 只拉取计划中的股票 + 当前持仓
     plan_codes = set()
     for action in trade_plan.get('sell_plan', []):
         plan_codes.add(action['code'])
     for action in trade_plan.get('buy_plan', []):
         plan_codes.add(action['code'])
-    # 加上当前持仓
-    account_file = os.path.join(PORTFOLIO_DIR, "account.json")
-    if os.path.exists(account_file):
-        with open(account_file) as f:
-            data = json.load(f)
-        for code in data.get('holdings', {}):
+    # 加上当前持仓（从 DB 获取）
+    try:
+        from core.db import get_holdings
+        h = get_holdings(acct_id=1)
+        for code in h:
             plan_codes.add(code)
+    except Exception:
+        # 兼容：尝试读旧的 account.json
+        account_file = os.path.join(PORTFOLIO_DIR, "account.json")
+        if os.path.exists(account_file):
+            with open(account_file) as f:
+                data = json.load(f)
+            for code in data.get('holdings', {}):
+                plan_codes.add(code)
 
     logger.info(f"📡 下午开盘价采集 ({len(plan_codes)} 只)...")
     t0 = time.time()
@@ -386,12 +396,17 @@ def step_holding_decay(state, date, price_data, names):
     return state
 
 
-def step_data_quality(files, date):
-    """Step 4: 数据质量门禁"""
-    code_list = [f.replace(".csv", "") for f in files]
+def step_data_quality(codes, date, source="db"):
+    """Step 4: 数据质量门禁
+    codes: list of codes
+    source: "db" | "csv"
+    """
     # Strip _AM/_PM suffix for intraday modes (pd.to_datetime can't parse those)
     clean_date = date.split("_")[0] if "_" in date else date
-    auditor = DataQualityAuditor(code_list, daily_dir=DAILY_DIR, as_of=clean_date)
+    if source == "db":
+        auditor = DataQualityAuditor(codes, daily_dir=None, as_of=clean_date, data_source="db")
+    else:
+        auditor = DataQualityAuditor(codes, daily_dir=DAILY_DIR, as_of=clean_date, data_source="csv")
     quality_result = auditor.audit()
     print_quality_report(quality_result)
     return not quality_result.approved
@@ -456,12 +471,15 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
 
     logger.info("🔄 调仓日 — 生成操作计划")
 
-    # 生成因子
+    # 生成因子（从 DB 读取历史数据）
     all_factors = {}
-    for f in files:
-        code = f.replace(".csv", "")
-        df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col='date', parse_dates=True)
-        if len(df) > 120:
+    from core.db import get_kline
+    for code in codes:
+        kl = get_kline(code)
+        if kl and len(kl) > 120:
+            df = pd.DataFrame(kl)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date').sort_index()
             all_factors[code] = calc_factors_single(df)
 
     # ── 评分（通过 Strategy Engine）──
@@ -908,7 +926,7 @@ def run_intraday_signal():
         pass
 
     # Step 3: 数据质量
-    quality_blocked = step_data_quality(files, date)
+    quality_blocked = step_data_quality(codes, date, source="db")
 
     # Step 4: 风控检查（止损/止盈/decay）— 只生成信号，不修改 state
     # 所有风控操作在下午执行时统一处理（考虑跌停等执行失败情况）
@@ -1118,7 +1136,7 @@ def run_day_end(report_only=False):
         state = step_holding_decay(state, latest_date, price_data, names)
 
     # Step 4: 数据质量
-    quality_blocked = step_data_quality(files, latest_date)
+    quality_blocked = step_data_quality(codes, latest_date, source="db")
 
     # Step 5: 调仓 (日终模式直接执行)
     trade_count_file = os.path.join(PORTFOLIO_DIR, "trade_count.txt")

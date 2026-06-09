@@ -35,29 +35,30 @@
              │                              │
              ▼                              ▼
   ┌──────────────────────┐   ┌─────────────────────────────┐
-  │  sim_daily_v7.py    │   │  run_backtest.py            │
-  │  (三阶段模拟盘)      │   │  (历史回测引擎)               │
+  │  sim_account1.py    │   │  run_backtest.py            │
+  │  (账户1 三阶段模拟盘) │   │  (历史回测引擎)               │
   │                      │   │                             │
   │  策略来源:            │   │  策略来源:                    │
   │  StrategyEngine      │   │  composite_score /           │
   │  (config/strategy_   │   │  run_ml_pipeline             │
   │   config.json)       │   │                             │
   │                      │   │  流程:                       │
-  │  **模拟盘 Pipeline (三阶段)**: │  │  1. 加载 CSV 面板             │
-  │  ① 更新数据 (AM)       │  │  2. calc_factors_panel()     │
-  │  ② 加载账户            │  │  3. IC 分析(可选)             │
-  │  ③ 止损/止盈/decay     │  │  4. composite_score/         │
-  │  ④ 数据质量            │  │     run_ml_pipeline          │
-  │  ⑤ 调仓 → 信号文件(PM) │  │  5. 回测循环→buy/sell        │
-  │  ⑥ 执行信号→交易(PM)   │  │  6. 绩效指标+自检             │
-  │  ⑦ 保存+报告(收盘)     │  │                             │
-  │ 11:35 信号 → 13:00 执行 → 15:30 报告 │                  │
+  │  **模拟盘 Pipeline (三阶段)**: │  │  1. 加载 CSV/DB 面板          │
+  │  ① 加载账户(DB)        │   │  2. calc_factors_panel()     │
+  │  ② 加载价格            │   │  3. IC 分析(可选)             │
+  │  ③ 止损/止盈/decay     │   │  4. composite_score/         │
+  │  ④ 数据质量            │   │     run_ml_pipeline          │
+  │  ⑤ 调仓 → 信号文件(PM) │   │  5. 回测循环→buy/sell        │
+  │  ⑥ 执行信号→交易(PM)   │   │  6. 绩效指标+自检             │
+  │  ⑦ 保存+报告(收盘)     │   │                             │
+  │ 11:45 信号 → 13:00 执行 → 15:30 报告 │                  │
   └──────────────────────┘   └─────────────────────────────┘
 
   ┌──────────────────────┐   ┌─────────────────────────────┐
-  │ train_ml_model.py   │   │  update_daily_data.py       │
-  │ (ML 离线训练)        │   │  (数据层: 腾讯 API → CSV)    │
-  │ 每周一 06:00 cron   │   │                             │
+  │ sim_account2.py     │   │  sim_account3.py            │
+  │ (账户2 模拟盘)       │   │  (账户3 尾盘模拟盘)          │
+  │ v13 小市值反转       │   │  v20 尾盘缩量企稳            │
+  │ 11:45信号/13:00执行  │   │  14:40信号/14:55执行         │
   └──────────────────────┘   └─────────────────────────────┘
   ┌──────────────────────┐   ┌─────────────────────────────┐
   │ fill_daily_gaps.py   │   │  ic_analysis_zz800.py       │
@@ -268,13 +269,13 @@ class StrategyEngine:
 
 ---
 
-## 三、调度层：sim_daily_v7.py
+## 三、调度层：sim_account1.py
 
-### 三阶段 Pipeline（2026-06-05 最终版）
+### 三阶段 Pipeline
 
 ```
-intraday_signal (11:35) — 策略决策，生成 plan：
-  ① update_data(腾讯API) → ② load_account → ③ data_quality
+intraday_signal (11:45) — 策略决策，生成 plan：
+  ① load_account(DB) → ② load_prices → ③ data_quality
   → ④ 风控：止损/止盈/decay → risk_sell
   → ⑤ 调仓：StrategyEngine.score_single() + filter_stocks()
   → ⑥ 生成 plan（sell_plan/hold_plan/buy_plan），保存 state
@@ -282,10 +283,10 @@ intraday_signal (11:35) — 策略决策，生成 plan：
 intraday_execute (13:00) — 纯执行，不做策略判断：
   ⑦ load trade_plan + 开盘价
   ⑧ 执行 plan：sell → hold(add) → buy
-  ⑨ 保存 state + 执行报告
+  ⑨ 保存 state(DB) + 执行报告
 
 report_only (15:30) — 纯只读报告，零副作用：
-  ⑩ load_account + 本地价格 → 输出报告
+  ⑩ load_account(DB) + 本地价格 → 输出报告
   （不更新数据/不调仓/不修改 state）
 ```
 

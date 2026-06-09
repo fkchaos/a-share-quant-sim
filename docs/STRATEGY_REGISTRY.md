@@ -1,8 +1,8 @@
 # 策略注册表
 
-> 所有策略参数定义在 `core/config.py` → `STRATEGY_PROFILES`
+> 所有策略参数定义在 `core/config.py` 的 `STRATEGY_PROFILES`
 > 回测入口：`scripts/run_backtest.py --strategy <name>`
-> 模拟盘入口：`scripts/sim_daily_v7.py`（通过 `strategy_config.json` 选择策略）
+> 模拟盘入口：`scripts/sim_account1.py` / `sim_account2.py` / `sim_account3.py`
 > 评分引擎：`core/strategy.py` → `StrategyEngine`（factor/ensemble/ml/hybrid/multi 五种模式）
 > 配置参考：[CONFIG_REFERENCE.md](CONFIG_REFERENCE.md)
 
@@ -202,7 +202,7 @@
 
 | 维度 | 值 |
 |------|-----|
-| **选股池** | 中证800成分股（715只）+ 流动性过滤（300万-1亿元日均成交额） |
+| **选股池** | 中证800成分股（800只）+ 流动性过滤（300万-1亿元日均成交额） |
 | **评分模式** | 评分排序选股（独立脚本，非 StrategyEngine） |
 | **因子** | 5日反转（基础分=跌幅×100）+ 量比加分（放量+0.5/缩量企稳+0.3/振幅收窄+0.2） |
 | **调仓频率** | 每日调仓 |
@@ -210,13 +210,13 @@
 | **止损/止盈** | -5% / +5%（固定） |
 | **最大持仓** | 8只 |
 | **单只上限** | 20% |
-| **初始资金** | 20万 |
-| **账户文件** | `account_v13.json`（独立于 v11b 的 `account.json`） |
-| **模拟盘脚本** | `scripts/sim_v13.py`（signal/execute/report 三阶段） |
+| **初始资金** | 10万 |
+| **账户** | DB `account` 表（account_id=2） |
+| **模拟盘脚本** | `scripts/sim_account2.py`（intraday_signal/intraday_execute/report_only） |
 | **回测脚本** | `scripts/v13_small_mid_short.py` |
 | **WF 脚本** | `scripts/v13_walk_forward.py` |
-||| **状态** | ✅ 模拟盘运行中（2026-06-10 起），独立于 v11b |
-||| **架构** | 评分排序选股 + 可配置 bonus 因子（显式传参，不修改类属性） |
+| **状态** | ✅ 模拟盘运行中（2026-06-10 起），独立于账户1 |
+| **架构** | 评分排序选股 + 可配置 bonus 因子（显式传参，不修改类属性） |
 
 **与 v11b 的关系**：完全独立运行，不同的脚本、不同的账户文件、不同的 cron job。两者互不影响。
 
@@ -272,7 +272,7 @@
 
 | 维度 | 值 |
 |------|-----|
-| **选股池** | 中证800成分股（715只）+ 流动性过滤（300万-1亿元日均成交额） |
+| **选股池** | 中证800成分股（800只）+ 流动性过滤（300万-1亿元日均成交额） |
 | **评分模式** | 尾盘缩量企稳选股（独立脚本，非 StrategyEngine） |
 | **选股信号** | 缩量（量比<0.8）+ 振幅收窄（<0.8）+ 价格>MA5 + 20天内有涨停史 |
 | **交易执行** | T日尾盘选股 → T+1日开盘买入 → 持有1-3天 → 止盈/止损/超时卖出 |
@@ -281,11 +281,12 @@
 | **止损/止盈** | -5% / +5%（固定） |
 | **最大持仓** | 8只 |
 | **单只上限** | 20% |
-| **初始资金** | 20万 |
-| **账户文件** | `account_v20.json`（独立于 v11b/v13） |
+| **初始资金** | 10万 |
+| **账户** | DB `account` 表（account_id=3） |
+| **模拟盘脚本** | `scripts/sim_account3.py`（tail_signal/tail_execute/report_only） |
 | **回测脚本** | `scripts/v20_tail_pick.py` |
 | **WF 脚本** | `scripts/v20_walk_forward.py` |
-| **状态** | ✅ WF 通过，待模拟盘验证 |
+| **状态** | ✅ 模拟盘运行中 |
 
 **回测结果（close, 2021-01~2026-05）：**
 

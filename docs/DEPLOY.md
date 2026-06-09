@@ -59,78 +59,74 @@ python scripts/run_backtest.py --strategy v13_small_mid_short --walk-forward
 python -m pytest tests/ -v -k "not slow"
 ```
 
-## 模拟盘（盘中双阶段）
+## 模拟盘（三账户）
 
-v7 脚本支持三阶段模式，需要配置 3 个定时任务：
+三个账户对应三个独立脚本，共享同一个数据库（`/root/data/quant.db`）：
 
-| 时间 | 命令 | 说明 |
-|------|------|------|
-| **11:31** | `python scripts/update_daily_data.py` | 上午数据更新（上午收盘后） |
-| **12:00** | `python scripts/sim_daily_v7.py intraday_signal` | v11b 上午出信号 |
-| **12:00** | `python scripts/sim_v13.py intraday_signal` | v13 上午出信号 |
-| **13:00** | `python scripts/sim_daily_v7.py intraday_execute` | v11b 下午开盘执行 |
-| **13:00** | `python scripts/sim_v13.py intraday_execute` | v13 下午开盘执行 |
-| **15:01** | `python scripts/update_daily_data.py` | 下午数据更新（下午收盘后） |
-| **15:30** | `python scripts/sim_daily_v7.py report_only` | v11b 收盘报告（纯只读） |
-| **15:30** | `python scripts/sim_v13.py report_only` | v13 收盘报告（纯只读） |
+| 账户 | 脚本 | 策略 | account_id | 调度 |
+|------|------|------|------------|------|
+| 账户1 | `sim_account1.py` | v11b 截面因子 | 1 | 11:45信号/13:00执行 |
+| 账户2 | `sim_account2.py` | v13 小市值反转 | 2 | 11:45信号/13:00执行 |
+| 账户3 | `sim_account3.py` | v20 尾盘缩量企稳 | 3 | 14:40信号/14:55执行 |
+
+### Cron 调度（Hermes）
+
+```
+11:31  数据更新-上午（update_daily_data_async.py，直接 upsert DB）
+11:45  账户1-上午信号（sim_account1.py intraday_signal）
+11:45  账户2-上午信号（sim_account2.py intraday_signal）
+13:00  账户1-下午执行（sim_account1.py intraday_execute）
+13:00  账户2-下午执行（sim_account2.py intraday_execute）
+14:30  数据更新-下午
+14:40  账户3-尾盘信号（sim_account3.py tail_signal）
+14:55  账户3-尾盘执行（sim_account3.py tail_execute）
+15:30  收盘报告（三账户 report_only）
+```
 
 ### 方式一：crontab
 
-```bash
-crontab -e
-```
-
-添加（替换 `/path/to/project` 为实际路径）：
-
 ```cron
-# 数据更新（上午收盘后 + 下午收盘后）
-31 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/update_daily_data.py
-1 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/update_daily_data.py
+# 数据更新
+31 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data_async.py
+30 14 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data_async.py
 
-# A股模拟盘 — v11b 中线策略（工作日）
-0 12 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_signal
-0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_execute
-30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py report_only
+# 账户1（v11b）
+45 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py intraday_signal
+0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py intraday_execute
 
-# A股模拟盘 — v13 中短线策略（工作日）
-0 12 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_signal
-0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py intraday_execute
-30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_v13.py report_only
+# 账户2（v13）
+45 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py intraday_signal
+0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py intraday_execute
+
+# 账户3（v20）
+40 14 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py tail_signal
+55 14 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py tail_execute
+
+# 收盘报告
+30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py report_only
+30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py report_only
+30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py report_only
 ```
-
-### 方式二：Hermes cron
-
-如果部署在 Hermes 环境，用 `cronjob` 工具创建 3 个 job，schedule 同上。
-
-### 环境变量
-
-如果数据目录不在工程内，设 `BACKTEST_DATA_DIR`：
-
-```bash
-export BACKTEST_DATA_DIR=/path/to/data
-# 或在 crontab 里：
-35 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/path/to/data python scripts/sim_daily_v7.py intraday_signal
-```
-
-> 默认数据目录为工程内 `data/daily/`，无需额外配置。
 
 ## 数据目录结构
 
 ```
 data/
-├── daily/              # 日K线 CSV（update_daily_data.py 维护）
+├── daily/              # 日K线 CSV（可选备份）
 │   ├── 000001.csv
 │   └── ...
-├── portfolio/          # 账户状态（自动生成）
-│   ├── account.json
-│   └── trade_plan.json # 上午信号 → 下午执行的计划
+├── quant.db            # SQLite 数据库（主数据源）
+│   ├── stock_pool      # 股票池（800只中证800）
+│   ├── daily_kline     # 日K线（112万条）
+│   ├── account         # 账户（3个）
+│   ├── holdings        # 持仓
+│   ├── trade_log       # 交易记录
+│   └── indicators      # 技术指标
+├── portfolio/          # 交易计划（自动生成）
+│   ├── trade_plan_v13.json
+│   └── trade_plan_v20.json
 ├── signals/            # 因子缓存
-├── ml_models/          # ML 模型（train_ml_model.py 生成）
-│   ├── latest.json     # 最新模型元数据
-│   ├── lgb_*.pkl       # LightGBM 模型
-│   ├── xgb_*.pkl       # XGBoost 模型
-│   ├── ridge_*.pkl     # Ridge 模型
-│   └── scaler_*.pkl    # 标准化参数
+├── ml_models/          # ML 模型
 └── logs/               # 运行日志
 ```
 
@@ -176,16 +172,16 @@ python scripts/train_ml_model.py
 A: 腾讯接口偶尔不稳定，重试即可。检查网络是否能访问 `http://web.ifzq.gtimg.cn`。
 
 **Q: 回测结果跟 README 里不一样？**
-A: 数据区间和股票池不同会导致结果差异。当前基准用中证800（674只），2021-01 ~ 2026-06。详见 [docs/STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md)。
+A: 数据区间和股票池不同会导致结果差异。当前基准用中证800（800只），2021-01 ~ 2026-06。详见 [docs/STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md)。
 
 **Q: 模拟盘初始资金对不上？**
-A: 初始资金在 `core/config.py` 的 `TradingCosts` dataclass 中定义（默认 200000）。如果已有 `data/portfolio/account.json`，删掉让它重新初始化。
+A: 初始资金在 DB `account` 表的 `initial_capital` 字段中定义。账户1=200000，账户2/3=100000。修改：`UPDATE account SET initial_capital=xxx WHERE id=1;`
 
 **Q: cron 没执行？**
-A: 检查 `crontab -l` 确认任务存在。查看 `data/logs/sim_daily_*.log` 找错误原因。
+A: 检查 cron job 状态。查看 `data/logs/` 下的日志找错误原因。
 
 **Q: 策略参数改了但没生效？**
-A: 策略参数在 `core/config.py` 的 `STRATEGY_PROFILES` 字典中定义。确认 `run_backtest.py` 和 `sim_daily_v7.py` 都通过 `StrategyEngine` 读取 `STRATEGY_PROFILES`。
+A: 策略参数在脚本中硬编码（STOP_LOSS、TAKE_PROFIT 等）。账户参数（initial_capital、cash）从 DB 读取。
 
 ## 回测记录规范
 

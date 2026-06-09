@@ -2,7 +2,7 @@
 
 > 面向开发者的实现逻辑与框架说明
 >
-> 最后更新：2026-06-11（v13 独立策略加入，路径统一可配置）
+> 最后更新：2026-07-10（数据库化改造完成，三账户体系上线）
 
 ## 一、整体架构：共享引擎 + 策略 Profile 模式
 
@@ -12,7 +12,7 @@
   │  config.py                                                      │
   │    DEFAULT_FACTOR_WEIGHTS (40因子权重, sum=1.0)                  │
   │    StrategyConfig dataclass (所有策略参数)                        │
-  │    STRATEGY_PROFILES dict (预定义策略: v4~v11b, 当前最优 v11b (Ensemble))          │
+  │    STRATEGY_PROFILES dict (预定义策略: factor/ensemble 模式用)       │
   │    TradingCosts + RiskLimits dataclass                          │
   │  factors.py    calc_factors_panel() / calc_factors_single()     │
   │                40 技术因子计算                                    │
@@ -29,8 +29,7 @@
   │                ML 训练/预测核心 (Walk-Forward 回测用)              │
   │  ml_predictor.py  train_and_save() + MLPredictor                │
   │                离线训练 + 在线推理 (模拟盘用)                      │
-  │  strategy.py   StrategyEngine 统一策略入口                       │
-  │                factor / ensemble / ml / hybrid 四种模式          │
+  │  strategy.py   StrategyEngine 统一策略引擎（factor/ensemble/ml/hybrid/multi 五种模式）
   └──────────┬──────────────────────────────┬──────────────────────┘
              │                              │
              ▼                              ▼
@@ -112,8 +111,11 @@ STRATEGY_PROFILES = {
     "v8_all_icir":      PROFILE_V8_ALL_ICIR,
     "v10_small_cap":    PROFILE_V10_SMALL_CAP,
     "v10b_small_mom":   PROFILE_V10B_SMALL_MOM,
-    "v11b_zz800_union": PROFILE_V11B_ZZ800_UNION,  # 3组Ensemble, 当前最优
+    "v11b_zz800_union": PROFILE_V11B_ZZ800_UNION,  # 3组Ensemble, 账户1使用
 }
+
+# v13/v20 为独立脚本（sim_account2/3.py），不在 STRATEGY_PROFILES 中
+# v11b 的模拟盘账户通过 sim_account1.py 运行，数据源为 SQLite DB
 ```
 
 ### 2.2 `factors.py` — 因子计算引擎
@@ -334,7 +336,7 @@ report_only (15:30) — 纯只读报告，零副作用：
 ### 与模拟盘的一致性保证
 
 ```
-sim_daily_v7.py ──▶ core.account.buy / sell / check_stop_loss / check_take_profit
+sim_account1.py ──▶ core.account.buy / sell / check_stop_loss / check_take_profit
 run_backtest.py   ──▶ core.account.buy / sell / check_stop_loss / check_take_profit
                       ↑↑↑ 完全相同的函数 ↑↑↑
 ```
@@ -371,19 +373,23 @@ python scripts/train_ml_model.py
 
 ---
 
-## 六、数据层：增量更新机制
+## 六、数据层：SQLite 增量更新
 
 ```
-① 读取本地 CSV，找到最后日期 local_latest
-② 请求最近 N 天数据（N = 缺口 + 5，防止遗漏）
-③ 追加到原 CSV（不覆盖）
-④ 失败的等待 3 秒后重试
+① update_daily_data_async.py 从腾讯 API 拉取当日数据
+② 直接 upsert 到 /root/data/quant.db（SQLite，WAL 模式）
+③ 表：daily_kline / stock_pool / indicators
+④ 两次更新：11:31（上午收盘后）+ 14:30（下午收盘前）
 ```
 
-**数据路径**：
-- 默认：`data/daily/`（工程内）
-- 覆盖：设 `BACKTEST_DATA_DIR=/path/to/data` 环境变量
-- 所有脚本均支持
+**数据库**：`/root/data/quant.db`
+- `stock_pool`：中证800成分股（800只）
+- `daily_kline`：日K线（~112万条）
+- `account`：3个模拟盘账户
+- `holdings`：当前持仓
+- `trade_log`：交易记录
+
+**兼容**：`data/daily/*.csv` 保留为可选备份，不再作为主数据源
 
 ---
 
@@ -453,7 +459,10 @@ tests/test_sim_trading.py — 39 个模拟盘执行测试（< 1s）
 | 止盈档位 | [(0.10,0.30),(0.20,0.30),(0.30,1.00)] | `PROFILE_V5_TP_DECAY.tp_tiers` |
 | ML 训练窗口 | 252天 | `train_ml_model.py TRAIN_DAYS` |
 | ML 预测周期 | [5, 20]天 | `train_ml_model.py FORWARD_PERIODS` |
-| 数据 API | `web.ifzq.gtimg.cn` | `update_daily_data.py` |
+| 数据 API | `web.ifzq.gtimg.cn` | `update_daily_data_async.py` |
+| 数据库 | `/root/data/quant.db` | `core/db.py` |
+| 初始资金(账户1) | 200,000 | DB `account` table, id=1 |
+| 初始资金(账户2/3) | 100,000 | DB `account` table, id=2,3 |
 
 ---
 
@@ -474,5 +483,9 @@ tests/test_sim_trading.py — 39 个模拟盘执行测试（< 1s）
 || ⭐ | **StrategyEngine 统一策略入口** | ✅ 完成 | 2026-06-03 |
 || ⭐ | **ML hybrid 模拟盘上线** | ✅ 完成 | 2026-06-03 |
 || ⭐ | **ML 周度自动训练 cron** | ✅ 完成 | 2026-06-03 |
-|| ⭐ | **多策略并行框架 (mode=multi)** | ✅ 完成 | 2026-06-05 |
-|| P4 🔵 | 生产监控（RankIC/基准对比） | 📋 待开始 | - |
+| ⭐ | **多策略并行框架 (mode=multi)** | ✅ 完成 | 2026-06-05 |
+| ⭐ | **v13 独立策略 + WF 通过** | ✅ 完成 | 2026-06-10 |
+| ⭐ | **v20 尾盘策略 + WF 通过** | ✅ 完成 | 2026-06-15 |
+| ⭐ | **数据库化改造（SQLite）** | ✅ 完成 | 2026-06-18 |
+| ⭐ | **三账户体系上线（sim_account1/2/3）** | ✅ 完成 | 2026-06-18 |
+| P4 🔵 | 生产监控（RankIC/基准对比） | 📋 待开始 | - |

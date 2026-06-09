@@ -22,7 +22,7 @@
 │  config.py  ← STRATEGY_PROFILES + MarketFilter│
 │  factors.py ← 40 技术因子计算                 │
 │  scoring.py ← Z-score + Ensemble 多组选股     │
-│  strategy.py← StrategyEngine (4种模式)        │
+│  strategy.py← StrategyEngine (5种模式)        │
 │  account.py ← PortfolioState + buy/sell/风控  │
 │  db.py      ← SQLite 数据库层                 │
 └─────────────────────────────────────────────┘
@@ -42,7 +42,7 @@
 
 ## 特性
 
-- **盘中三阶段模式**: 11:35 上午出信号 → 13:00 下午开盘执行 → 15:30 收盘报告（纯只读）
+- **盘中三阶段模式**: 11:45 上午出信号 → 13:00 下午开盘执行 → 15:30 收盘报告（纯只读）
 - **Ensemble 多组选股**: 3 个因子组独立选股并集构建组合，自适应不同市场状态
 - **40 个技术因子**: 动量/反转/波动率/成交量/RSI/趋势/统计/短线
 - **共享交易逻辑**: 模拟盘和回测共用 `core/`，杜绝回测/实盘不一致
@@ -82,6 +82,7 @@
 
 | 策略 | 全量年化 | 全量夏普 | 全量回撤 | WF年化 | WF夏普 | 正收益fold | 状态 |
 |------|---------|---------|---------|--------|--------|-----------|------|
+| **v20_tail_pick** | **51.22%** | **4.94** | **-10.13%** | **21.7%** | **2.23** | **15/16 (94%)** | ✅ 尾盘，WF通过，全面最优 |
 | **v13_small_mid_short** | **49.87%** | **2.48** | **-13.46%** | **14.9%** | **1.05** | **15/16 (94%)** | ✅ 中短线，WF通过 |
 | **v11b_zz800_union** | 30.43% | 1.16 | -27.49% | 12.4% | 0.52 | 6/16 (37.5%) | ⭐ 中线全量最优 |
 | v10c_zz800_balanced | 37.33% | 1.30 | -27.86% | 32.9% | 0.61 | 7/16 (44%) | WF未通过 |
@@ -102,20 +103,25 @@ cd a-share-quant-sim
 pip install -r requirements.txt
 
 # 初始化数据（首次运行，约 3-5 分钟）
-BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data.py
+BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data_async.py
 
 # 回测最优策略 + Walk-Forward 验证
 BACKTEST_DATA_DIR=/root/data python scripts/run_backtest.py --strategy v11b_zz800_union --walk-forward
 
-# 模拟盘三阶段（v11b 中线）
-BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_signal   # 上午信号
-BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py intraday_execute  # 下午执行
-BACKTEST_DATA_DIR=/root/data python scripts/sim_daily_v7.py report_only       # 收盘报告
+# 模拟盘 — 账户1（v11b 中线，11:45信号/13:00执行/15:30报告）
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py intraday_signal
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py intraday_execute
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py report_only
 
-# 模拟盘三阶段（v13 中短线）
-BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_signal   # 上午信号
-BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py intraday_execute  # 下午执行
-BACKTEST_DATA_DIR=/root/data python scripts/sim_v13.py report_only       # 收盘报告
+# 模拟盘 — 账户2（v13 中短线，11:45信号/13:00执行/15:30报告）
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py intraday_signal
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py intraday_execute
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py report_only
+
+# 模拟盘 — 账户3（v20 尾盘，14:40信号/14:55执行/15:30报告）
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py tail_signal
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py tail_execute
+BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py report_only
 
 # 测试
 python -m pytest tests/test_sim_trading.py tests/test_ensemble.py -v  # 58 tests
@@ -139,10 +145,12 @@ a-share-quant-sim/
 │   ├── ml.py                   # ML 训练/预测（已弃用）
 │   └── ml_predictor.py         # ML 离线训练 + 在线推理（已弃用）
 ├── scripts/
-│   ├── sim_daily_v7.py         # ⭐ 每日模拟盘 A（v11b 中线，三阶段）
-│   ├── sim_v13.py              # ⭐ 每日模拟盘 B（v13 中短线，三阶段）
-│   ├── run_backtest.py         # 统一回测引擎（含 WF）
-│   ├── update_daily_data.py    # 数据更新：腾讯 API → CSV
+│   ├── sim_account1.py        # ⭐ 账户1 模拟盘（v11b 中线，三阶段）
+│   ├── sim_account2.py        # ⭐ 账户2 模拟盘（v13 中短线，三阶段）
+│   ├── sim_account3.py        # ⭐ 账户3 模拟盘（v20 尾盘）
+│   ├── cli.py                 # DB CLI（buy/sell/account/holdings/trades/kline/stats）
+│   ├── run_backtest.py        # 统一回测引擎（含 WF）
+│   ├── update_daily_data_async.py # 数据更新：腾讯 API → DB
 │   ├── v13_small_mid_short.py  # v13 回测脚本
 │   ├── v13_walk_forward.py     # v13 WF 检测
 │   ├── ic_analysis_zz800.py    # 中证800 IC/IR 分析

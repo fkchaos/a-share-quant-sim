@@ -33,12 +33,12 @@ export BACKTEST_DATA_DIR=/root/data
 首次运行需要下载日 K 线数据：
 
 ```bash
-python scripts/update_daily_data.py
+python scripts/update_daily_data_async.py
 ```
 
-- 默认下载中证 800 成分股（~730 只），约 3-5 分钟
-- 数据保存在 `data/daily/{code}.csv`
-- 每天收盘后运行一次更新
+- 默认下载中证 800 成分股（~800 只），约 1 分钟
+- 数据直接 upsert 到 `/root/data/quant.db`（SQLite）
+- 每天收盘后运行两次更新（11:31 上午 + 14:30 下午）
 
 ## 验证安装
 
@@ -134,28 +134,23 @@ data/
 
 ### 策略模式切换
 
-编辑 `data/portfolio/strategy_config.json`（或环境变量 `$DATA_DIR/strategy_config.json`）：
+`sim_account1.py`（v11b）通过 `StrategyEngine` 运行，模式固定为 `ensemble`。
 
-```json
-{
-  "mode": "ensemble",      // factor | ensemble
-  "profile": "v11b_zz800_union"
-}
-```
-
-- **factor**：纯因子加权（传统评分）
-- **ensemble**：多组独立选股并集（v11b 当前使用，WF 验证最优）
-
-修改后无需重启，下次 cron 自动生效。
+策略配置文件（`s_config.json`）兼容保留，但不影响三账户体系：
+- 账户1（v11b）：ensemble 模式，3组因子并集
+- 账户2（v13）：独立脚本，评分排序选股
+- 账户3（v20）：独立脚本，尾盘缩量企稳
 
 ### 手动训练
 
 ```bash
-# 全量训练（约 60s）
+# 全量 ML 训练（约 60s，生成 /root/data/ml_models/）
 python scripts/train_ml_model.py
 
-# 输出到 /root/data/ml_models/
-```
+# CLI 操作 DB 数据
+python scripts/cli.py account    # 查看账户
+python scripts/cli.py holdings   # 查看持仓
+python scripts/cli.py trades     # 查看交易记录
 
 ### 自动训练（Hermes cron）
 

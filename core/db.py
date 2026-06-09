@@ -171,9 +171,11 @@ def get_kline(code, limit=None, start_date=None, end_date=None):
         if end_date:
             sql += " AND date<=?"
             params.append(end_date)
-        sql += " ORDER BY date ASC"
         if limit:
-            sql += f" LIMIT {int(limit)}"
+            sql += " ORDER BY date DESC LIMIT ?"
+            params.append(int(limit))
+        else:
+            sql += " ORDER BY date ASC"
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 

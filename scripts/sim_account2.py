@@ -27,11 +27,11 @@ from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
 from constraints import build_trade_context
 from indices import get_index_trends
+from core.db import get_kline, get_all_codes
 
 # ── Config ─────────────────────────────────────────────────────────
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
-DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 # v13 使用独立的 account 文件，避免与 v7 (v11b) 冲突
@@ -112,20 +112,20 @@ def save_account(state):
 
 # ── 数据加载 ──────────────────────────────────────────────────────
 def load_daily_data():
-    """加载日K线数据，返回 {code: df} 并打印数据最后更新时间"""
-    files = [f for f in os.listdir(DAILY_DIR) if f.endswith(".csv")]
+    """加载日K线数据，从 DB 读取，返回 {code: df} 并打印数据最后更新时间"""
     code_dfs = {}
     latest_dates = {}
-    for f in files:
-        code = f.replace(".csv", "")
-        try:
-            df = pd.read_csv(os.path.join(DAILY_DIR, f), index_col="date", parse_dates=True)
+    codes = get_all_codes()
+    for code in codes:
+        kl = get_kline(code)
+        if kl and len(kl) > 20:
+            df = pd.DataFrame(kl)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date').sort_index()
             df = df[df["volume"] > 0]
             if len(df) > 20:
                 code_dfs[code] = df
                 latest_dates[code] = df.index[-1]
-        except Exception:
-            pass
     # 打印数据最后更新时间
     if latest_dates:
         newest = max(latest_dates.values())
@@ -133,9 +133,9 @@ def load_daily_data():
         today = datetime.now().date()
         days_behind = (today - newest.date()).days
         ts = newest.strftime("%Y-%m-%d %H:%M:%S") if hasattr(newest, 'strftime') else str(newest)
-        logger.info(f"📅 本地数据: {len(code_dfs)} 只 | 最新: {ts} | 最旧: {oldest.date()} | 滞后: {days_behind}天")
+        logger.info(f"📅 DB 数据: {len(code_dfs)} 只 | 最新: {ts} | 最旧: {oldest.date()} | 滞后: {days_behind}天")
     else:
-        logger.warning("📅 本地数据: 无有效 CSV 文件")
+        logger.warning("📅 DB 数据: 无有效数据")
     return code_dfs
 
 

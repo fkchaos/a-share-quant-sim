@@ -29,7 +29,6 @@ from core.config import TradingCosts
 # ── Config ─────────────────────────────────────────────────────────
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
-DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 V20_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v20.json")

@@ -912,7 +912,7 @@ def run_intraday_signal():
     state, loaded = step_load_account()
 
     # Step 2: 加载盘中价格 (实时快照 + 本地CSV)
-    date, price_data, code_dataframes, files = step_load_prices(intraday=True)
+    date, price_data, code_dataframes, codes = step_load_prices(intdb=True)
     if date is None:
         logger.error("价格数据加载失败")
         return None
@@ -994,7 +994,7 @@ def run_intraday_signal():
                                               'reason': '持有期decay'})
 
     # Step 5: 生成调仓信号
-    plan = step_generate_signal(state, date, price_data, code_dataframes, files, loaded, names, risk_sell)
+    plan = step_generate_signal(state, date, price_data, code_dataframes, codes, loaded, names, risk_sell)
 
     # 上午信号不修改 account.json，所有操作在下午执行
     # state 保持不变，下午执行时会重新加载 account.json
@@ -1087,7 +1087,7 @@ def run_day_end(report_only=False):
             return None
 
         # Step 2: 加载价格 (本地CSV, 日终)
-        result = step_load_prices(intraday=False)
+        result = step_load_prices(intdb=False)
         if result[0] is None:
             return None
         latest_date, price_data, code_dataframes, files = result

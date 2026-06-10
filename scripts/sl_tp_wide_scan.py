@@ -229,7 +229,7 @@ def scan_v20():
                     available_cash = cash
                     n_buy = min(len(pending_buy), cfg.max_daily_buy, cfg.max_holdings - len(holdings))
                     per_stock = min(available_cash / n_buy, initial_capital * cfg.max_position) if n_buy > 0 else 0
-                    for code, score in pending_buy[:n_buy]:
+                    for code in pending_buy[:n_buy]:
                         if code not in open_data.index: continue
                         bp = open_data[code]
                         if pd.isna(bp) or bp <= 0: continue
@@ -271,7 +271,7 @@ def scan_v20():
                 for code in sold_codes: holdings.pop(code, None)
 
                 # T日选股，T+1日买
-                c = v20_select_stocks(factors, date, close_panel, volume_panel, amount_panel, holdings)
+                c = v20_select_stocks(factors, date, close_panel, volume_panel, amount_panel, high_panel, low_panel, holdings)
                 if c:
                     pending_buy = c
 

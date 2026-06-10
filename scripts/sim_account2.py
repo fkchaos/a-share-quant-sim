@@ -40,12 +40,12 @@ V13_TRADE_COUNT_FILE = os.path.join(PORTFOLIO_DIR, "trade_count_v13.txt")
 V13_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v13.json")
 
 # v13 策略参数
-STOP_LOSS = -0.05
-TAKE_PROFIT = 0.05
+STOP_LOSS = -0.02
+TAKE_PROFIT = 0.10
 MAX_HOLDINGS = 8
 MAX_DAILY_BUY = 6
 MAX_POSITION = 0.20
-HOLD_DAYS_MAX = 5
+HOLD_DAYS_MAX = 8
 HOLD_DAYS_MIN = 2
 
 # 交易成本
@@ -267,8 +267,10 @@ def select_stocks_v13(factors, holdings):
 
 
 # ── 风控检查 ──────────────────────────────────────────────────────
-def check_risk(state, price_data):
+def check_risk(state, price_data, zz800_names=None):
     """风控检查：止损/止盈/超时，返回 sell_plan"""
+    if zz800_names is None:
+        zz800_names = {}
     sell_plan = []
     to_remove = []
 
@@ -364,14 +366,7 @@ def run_intraday_signal():
         for code, sd in spot_data.items():
             price_data[code] = sd["price"]
 
-    # 风控检查
-    sell_plan, to_remove = check_risk(state, price_data)
-    if sell_plan:
-        logger.info(f"风控触发: {len(sell_plan)} 只")
-        for item in sell_plan:
-            logger.info(f"  {item['code']} {item['reason']} @ {item['price']:.2f}")
-
-    # 选股
+    # 加载中证800成分股（风控 + 选股共用）
     zz800_codes = set()
     zz800_names = {}
     zz800_path = os.path.join(DATA_DIR, "zz800_constituents.csv")
@@ -384,6 +379,15 @@ def run_intraday_signal():
             logger.warning(f"中证 800 成分股加载失败: {e}，使用全市场")
     else:
         logger.warning(f"中证 800 成分股文件不存在: {zz800_path}，使用全市场")
+
+    # 风控检查
+    sell_plan, to_remove = check_risk(state, price_data, zz800_names)
+    if sell_plan:
+        logger.info(f"风控触发: {len(sell_plan)} 只")
+        for item in sell_plan:
+            logger.info(f"  {item['code']} {item['name']} {item['reason']} @ {item['price']:.2f}")
+
+    # 选股
 
     liquid_stocks = []
     for code, df in code_dfs.items():

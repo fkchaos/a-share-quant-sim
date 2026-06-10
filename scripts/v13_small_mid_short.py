@@ -53,6 +53,8 @@ class V13Config:
     max_position = 0.20            # 单只最大仓位 20%
     hold_days_max = 8             # 最大持仓天数（反转效应需要 3-8 天）
     hold_days_min = 2             # 最小持仓天数
+    hold_days_extend = 7          # 浮盈达标后的最大持仓天数
+    hold_days_extend_pnl = 0.03   # 浮盈 3% 可延长持仓
 
     # 风控参数
     stop_loss = -0.02             # 个股止损 -2%
@@ -296,10 +298,14 @@ def run_v13_backtest():
                 to_sell.append((code, 'stop_profit', pnl_pct))
                 continue
 
-            # 超时
-            if h['hold_days'] >= cfg.hold_days_max:
+            # 超时（动态持仓天数）
+            hd = h['hold_days']
+            if pnl_pct >= cfg.hold_days_extend_pnl and hd >= cfg.hold_days_max:
+                # 浮盈达标但未超过延长线，继续拿
+                if hd >= cfg.hold_days_extend:
+                    to_sell.append((code, 'timeout_extend', pnl_pct))
+            elif hd >= cfg.hold_days_max:
                 to_sell.append((code, 'timeout', pnl_pct))
-                continue
 
         # 执行卖出
         sold_codes = set()

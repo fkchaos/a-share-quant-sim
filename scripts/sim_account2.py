@@ -47,6 +47,8 @@ MAX_DAILY_BUY = 6
 MAX_POSITION = 0.20
 HOLD_DAYS_MAX = 8
 HOLD_DAYS_MIN = 2
+HOLD_DAYS_EXTEND = 7          # 浮盈达标后的最大持仓天数
+HOLD_DAYS_EXTEND_PNL = 0.03   # 浮盈 3% 可延长持仓
 
 # 交易成本
 _costs = TradingCosts()
@@ -312,9 +314,22 @@ def check_risk(state, price_data, zz800_names=None):
             to_remove.append(code)
             continue
 
-        # 超时
+        # 超时（动态持仓天数）
         hold_days = h.get("hold_days", 0)
-        if hold_days >= HOLD_DAYS_MAX:
+        if pnl_pct >= HOLD_DAYS_EXTEND_PNL and hold_days >= HOLD_DAYS_MAX:
+            # 浮盈达标可延长持仓
+            if hold_days >= HOLD_DAYS_EXTEND:
+                sell_plan.append(
+                    {
+                        "code": code,
+                        "name": code,
+                        "shares": "all",
+                        "price": float(p),
+                        "reason": "超时(延长)",
+                    }
+                )
+                to_remove.append(code)
+        elif hold_days >= HOLD_DAYS_MAX:
             sell_plan.append(
                 {
                     "code": code,

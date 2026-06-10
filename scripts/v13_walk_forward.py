@@ -79,8 +79,13 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
                 to_sell.append((code, 'stop_profit', pnl_pct))
                 continue
 
-            # 超时
-            if h['hold_days'] >= cfg.hold_days_max:
+            # 超时（动态持仓天数）
+            hd = h['hold_days']
+            if pnl_pct >= cfg.hold_days_extend_pnl and hd >= cfg.hold_days_max:
+                if hd >= cfg.hold_days_extend:
+                    to_sell.append((code, 'timeout_extend', pnl_pct))
+                    continue
+            elif hd >= cfg.hold_days_max:
                 to_sell.append((code, 'timeout', pnl_pct))
                 continue
 

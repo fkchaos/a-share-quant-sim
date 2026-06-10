@@ -40,12 +40,12 @@ V13_TRADE_COUNT_FILE = os.path.join(PORTFOLIO_DIR, "trade_count_v13.txt")
 V13_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v13.json")
 
 # v13 策略参数
-STOP_LOSS = -0.05
-TAKE_PROFIT = 0.05
+STOP_LOSS = -0.02
+TAKE_PROFIT = 0.10
 MAX_HOLDINGS = 8
 MAX_DAILY_BUY = 6
 MAX_POSITION = 0.20
-HOLD_DAYS_MAX = 5
+HOLD_DAYS_MAX = 8
 HOLD_DAYS_MIN = 2
 
 # 交易成本

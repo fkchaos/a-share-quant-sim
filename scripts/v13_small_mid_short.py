@@ -51,12 +51,12 @@ class V13Config:
     max_daily_buy = 6              # 每日最多买 6 只
     max_holdings = 8               # 最大持仓 8 只
     max_position = 0.20            # 单只最大仓位 20%
-    hold_days_max = 5             # 最大持仓天数（反转效应需要 3-5 天）
+    hold_days_max = 8             # 最大持仓天数（反转效应需要 3-8 天）
     hold_days_min = 2             # 最小持仓天数
 
     # 风控参数
-    stop_loss = -0.05             # 个股止损 -5%
-    stop_profit = 0.05            # 个股止盈 5%
+    stop_loss = -0.02             # 个股止损 -2%
+    stop_profit = 0.10            # 个股止盈 10%
     daily_max_dd = -0.03          # 单日最大回撤 -3% 清仓
     initial_capital = 200000      # 初始资金 20万
 

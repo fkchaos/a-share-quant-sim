@@ -33,7 +33,6 @@ os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 V20_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v20.json")
 
-INITIAL_CAPITAL = 100000
 STOP_LOSS = -0.05
 TAKE_PROFIT = 0.05
 MAX_HOLDINGS = 8

@@ -40,7 +40,6 @@ V13_TRADE_COUNT_FILE = os.path.join(PORTFOLIO_DIR, "trade_count_v13.txt")
 V13_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v13.json")
 
 # v13 策略参数
-INITIAL_CAPITAL = 200000
 STOP_LOSS = -0.05
 TAKE_PROFIT = 0.05
 MAX_HOLDINGS = 8

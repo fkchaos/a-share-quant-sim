@@ -70,39 +70,27 @@ class V13Config:
 # 数据加载
 # ============================================================
 def load_small_cap_panel(start_date='2021-01-01', end_date='2026-05-31'):
-    """加载小市值股票面板数据
-    用日均成交额近似流动性，筛选流动性适中的小市值股票
-    """
-    from core.data import load_and_build_panel
-    from core.config import MarketFilter
+    """加载面板数据（从数据库，zz800成分股 + 流动性过滤）"""
+    from core.db import load_panel_from_db
 
-    loaded, codes = load_and_build_panel(
+    loaded, codes = load_panel_from_db(
         start_date, end_date,
         need_open=True, need_hl=True,
-        market_filter=MarketFilter(),
+        pool="zz800",
     )
-    close_panel = loaded[0]
-    volume_panel = loaded[1]
-    amount_panel = loaded[2]
-    high_panel = loaded[3]
-    low_panel = loaded[4]
-    open_panel = loaded[5]
+    close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel = loaded
 
-    # 用 20 日平均成交额近似流动性（单位：万元）
+    # 流动性过滤统计
     avg_amount = amount_panel.rolling(20).mean() / 1e4
-
-    # 筛选流动性适中的股票
     min_liquidity = V13Config.min_liquidity
     max_liquidity = V13Config.max_liquidity
-
     valid_count = 0
     for date in close_panel.index:
         if date not in avg_amount.index:
             continue
         day_amount = avg_amount.loc[date]
         mask = (day_amount > min_liquidity) & (day_amount < max_liquidity)
-        n = mask.sum()
-        if n >= V13Config.max_holdings * 2:
+        if mask.sum() >= V13Config.max_holdings * 2:
             valid_count += 1
 
     print(f"流动性筛选：{valid_count}/{len(close_panel)} 个交易日有足够候选")

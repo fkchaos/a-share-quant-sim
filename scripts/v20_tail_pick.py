@@ -62,7 +62,7 @@ class V20Config:
 
     # 风控参数
     stop_loss = -0.05       # 个股止损 -5%
-    stop_profit = 0.05      # 个股止盈 5%
+    stop_profit = 0.25      # 个股止盈 25%
     initial_capital = 200000  # 初始资金 20万
 
     # 交易成本

@@ -34,11 +34,11 @@ os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 V20_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v20.json")
 
 STOP_LOSS = -0.05
-TAKE_PROFIT = 0.05
+TAKE_PROFIT = 0.25
 MAX_HOLDINGS = 8
 MAX_DAILY_BUY = 6
 MAX_POSITION = 0.20
-HOLD_DAYS_MAX = 3
+HOLD_DAYS_MAX = 5
 HOLD_DAYS_MIN = 1
 
 _costs = TradingCosts()

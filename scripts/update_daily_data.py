@@ -108,11 +108,11 @@ def fetch_tencent_kline(code, days=30):
         df = df.set_index('date')
         df = df.sort_index()
         
-        # 估算成交额 (用 VWAP 近似: 均价 * 成交量)
-        # 均价 ≈ (open + close + high + low) / 4
+        # 估算成交额: 均价 * 成交量
+        # 腾讯接口返回的 volume 单位是"股"，不需要再乘 100
         if df['amount'].eq(0).all():
             vwap = (df['open'] + df['close'] + df['high'] + df['low']) / 4
-            df['amount'] = vwap * df['volume'] * 100  # 成交量单位是手，1手=100股
+            df['amount'] = vwap * df['volume']
         
         # 添加 turnover 和 outstanding_share 列（用 NaN 填充，后续不需要的话不影响策略）
         df['outstanding_share'] = np.nan

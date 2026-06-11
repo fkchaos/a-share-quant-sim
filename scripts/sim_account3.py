@@ -61,11 +61,13 @@ log = logging.getLogger("sim_v20")
 # ── Data Loading ────────────────────────────────────────────────────
 def load_daily_data():
     """从数据库加载最近一年的日K线（对齐 v13 格式）"""
-    from core.db import get_stock_pool, get_kline_df
+    from core.db import get_all_codes, get_kline_df
 
-    # 获取中证800成分股
-    pool = get_stock_pool("zz800")
-    codes = [s["code"] for s in pool] if pool else None
+    # 获取全部股票代码（daily_kline 里的 800 只，已排除科创板/北交所）
+    codes = get_all_codes()
+    if not codes:
+        log.warning("数据库无股票代码")
+        return {}
 
     # 加载最近一年的数据
     start = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
@@ -164,6 +166,9 @@ def select_stocks(panels, factors, date, current_holdings=None):
     amount_ratio = factors["amount_ratio"].loc[date].dropna()
     price_vs_ma5 = factors["price_vs_ma5"].loc[date].dropna()
     recent_limit_up = factors["recent_limit_up"].loc[date].dropna()
+
+    # 排除科创板/北交所/老三板
+    liquid_stocks = {c for c in liquid_stocks if not any(c.startswith(p) for p in ('688', '689', '8', '4', '2'))}
 
     candidates = []
     for code in liquid_stocks:

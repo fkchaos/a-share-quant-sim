@@ -419,7 +419,7 @@ def run_intraday_signal():
             if 5000000 < avg_amount < 80000000:
                 liquid_stocks.append(code)
 
-    liquid_stocks = [c for c in liquid_stocks if not (c.startswith('688') or c.startswith('689'))]
+    liquid_stocks = [c for c in liquid_stocks if not any(c.startswith(p) for p in ('688', '689', '8', '4', '2'))]
 
     factors = calc_v13_factors(code_dfs, liquid_stocks)
     candidates = select_stocks_v13(factors, state.holdings)

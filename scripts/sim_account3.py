@@ -154,7 +154,7 @@ def select_stocks(panels, factors, date, current_holdings=None):
     avg_amount = amount.rolling(20, min_periods=10).mean() / 1e4
     if date in avg_amount.index:
         day_amount = avg_amount.loc[date]
-        liquid_mask = (day_amount > 300) & (day_amount < 10000)
+        liquid_mask = (day_amount > 500) & (day_amount < 8000)
         liquid_stocks = set(day_amount[liquid_mask].dropna().index)
     else:
         liquid_stocks = set(close.columns)
@@ -171,10 +171,10 @@ def select_stocks(panels, factors, date, current_holdings=None):
             continue
 
         vr = vol_ratio.get(code, 999)
-        if vr > 0.8:  # 缩量
+        if vr > 1.0:  # 缩量（从0.8放宽）
             continue
         rr = range_ratio.get(code, 999)
-        if rr > 0.8:  # 振幅收窄
+        if rr > 1.0:  # 振幅收窄（从0.8放宽）
             continue
         ar = amount_ratio.get(code, 0)
         if ar < 0.5 or ar > 3.0:

@@ -251,7 +251,7 @@ def select_stocks_v13(factors, holdings):
         if r >= -0.02:  # 跌幅不够 2% 跳过
             continue
         score = abs(r) * 100  # 基础分：跌幅绝对值
-        if vol_ratio.get(code, 1.0) > 1.3:
+        if vol_ratio.get(code, 1.0) > 1.0:
             score += 0.5
         if vol_shrink.get(code, 1.0) < 0.7:
             score += 0.3
@@ -410,13 +410,13 @@ def run_intraday_signal():
             continue
         if len(df) >= 20 and "amount" in df.columns:
             avg_amount = df["amount"].rolling(20).mean().iloc[-1]
-            if 3000000 < avg_amount < 100000000:
+            if 5000000 < avg_amount < 80000000:
                 liquid_stocks.append(code)
         elif len(df) >= 20:
             avg_vol = df["volume"].rolling(20).mean().iloc[-1]
             avg_close = df["close"].rolling(20).mean().iloc[-1]
             avg_amount = avg_vol * avg_close
-            if 3000000 < avg_amount < 100000000:
+            if 5000000 < avg_amount < 80000000:
                 liquid_stocks.append(code)
 
     liquid_stocks = [c for c in liquid_stocks if not (c.startswith('688') or c.startswith('689'))]

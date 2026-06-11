@@ -29,3 +29,4 @@ data/backtest_results/
 data/cache/
 data/quality_factors_cache.csv
 data/*.csv
+quant.db

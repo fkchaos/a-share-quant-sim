@@ -479,15 +479,14 @@ def load_panel_from_db(start_date=None, end_date=None,
     """
     import pandas as pd
 
+    from core.config import MarketFilter
+
     with get_conn() as conn:
         # 获取股票池
         pool_rows = conn.execute(
             "SELECT code FROM stock_pool WHERE pool=? AND is_active=1", (pool,)
         ).fetchall()
         pool_codes = [r["code"] for r in pool_rows]
-
-        if not pool_codes:
-            pool_codes = None  # 全市场
 
         # 构建查询
         sql = "SELECT code, date, open, high, low, close, volume, amount FROM daily_kline WHERE 1=1"
@@ -507,9 +506,21 @@ def load_panel_from_db(start_date=None, end_date=None,
     df = pd.DataFrame([dict(r) for r in rows])
     df["date"] = pd.to_datetime(df["date"])
 
-    # 过滤股票池
+    # 过滤股票池：优先用 stock_pool 表，再叠加 MarketFilter 排除规则
     if pool_codes:
         df = df[df["code"].isin(pool_codes)]
+    # 无论是否有 stock_pool，都应用 exclude_prefixes 和退市过滤
+    mf = MarketFilter()
+    if mf.exclude_prefixes:
+        for prefix in mf.exclude_prefixes:
+            df = df[~df["code"].str.startswith(prefix)]
+    # 退市/停牌过滤：用 DB 里最后交易日期判断
+    if mf.exclude_delisted and end_date:
+        from datetime import datetime, timedelta
+        cutoff = (datetime.strptime(end_date, "%Y-%m-%d") - timedelta(days=mf.delist_max_gap)).strftime("%Y-%m-%d")
+        latest_dates = df.groupby("code")["date"].max()
+        active_codes = latest_dates[latest_dates >= cutoff].index.tolist()
+        df = df[df["code"].isin(active_codes)]
 
     # 构建 panel（date × code 的矩阵）
     codes = sorted(df["code"].unique())

@@ -373,7 +373,7 @@ def run_intraday_signal():
     # 加载日K线数据
     code_dfs = load_daily_data()
 
-    # 获取价格数据（盘中用实时快照）
+    # 获取价格数据：持仓用实时快照
     holdings_codes = list(state.holdings.keys())
     price_data, spot_data = get_price_data(datetime.now(), code_dfs, intraday=True, codes=holdings_codes)
 
@@ -431,6 +431,13 @@ def run_intraday_signal():
             rev = factors["rev_5"].get(c, 0)
             vr = factors["vol_ratio"].get(c, 0)
             logger.info(f"  {c} 5日跌幅={rev:.1%} 量比={vr:.2f}")
+
+    # 为候选股票补充 DB 最新收盘价（避免 buy_plan 为空）
+    for code in candidates:
+        if code not in price_data.index and code in code_dfs:
+            df = code_dfs[code]
+            if len(df) > 0:
+                price_data[code] = df["close"].iloc[-1]
 
     # 生成 buy_plan
     buy_plan = []

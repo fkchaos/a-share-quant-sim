@@ -30,8 +30,8 @@ REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 # ============================================================
 class V13Config:
     # 选股池（用流动性近似）
-    min_liquidity = 300     # 最小日均成交额 300万（放宽）
-    max_liquidity = 10000   # 最大日均成交额 1亿（放宽）
+    min_liquidity = 500     # 最小日均成交额 500万
+    max_liquidity = 8000    # 最大日均成交额 8000万
     exclude_st = True             # 排除 ST
     exclude_new_ipo_days = 60     # 排除上市 60 天内的新股
 

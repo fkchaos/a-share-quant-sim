@@ -39,7 +39,7 @@ class V13Config:
     rev_lookback = 5              # 短期反转回看天数
     vol_lookback = 10             # 量能回看天数
     rev_threshold = -0.02         # 反转阈值（5日跌幅 > 2%，放宽）
-    vol_ratio_threshold = 1.3     # 放量阈值（当日量 / 10日均量，放宽）
+    vol_ratio_threshold = 1.0     # 放量阈值（当日量 / 10日均量，放宽）
 
     # Bonus 加分因子（默认空列表 = 不影响现有结果）
     # 通过 select_stocks() 和 calc_small_cap_factors() 的 bonus_factors 参数传入

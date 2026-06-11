@@ -46,8 +46,8 @@ class V20Config:
     # 尾盘选股因子参数
     # v20a: 放量追涨（强势延续）— 已证伪，次日低开 -3%
     # v20b: 缩量企稳（反转逻辑）— 振幅收窄 + 缩量 = 洗盘结束
-    vol_vs_avg_max = 1.0     # 当日成交量 < 5日均量 × 1.0（缩量，从0.8放宽）
-    range_vs_avg = 1.0        # 当日振幅 < 5日平均振幅 × 1.0（振幅收窄，从0.8放宽）
+    vol_vs_avg_max = 0.8     # 当日成交量 < 5日均量 × 0.8（缩量）
+    range_vs_avg = 0.8        # 当日振幅 < 5日平均振幅 × 0.8（振幅收窄）
     amount_vs_avg_min = 0.5   # 当日成交额 / 20日平均成交额 > 0.5（不太冷清）
     amount_vs_avg_max = 3.0   # 排除异常放量
     price_above_ma5 = True    # 收盘价 > 5日均线（短期趋势向上）
@@ -57,12 +57,12 @@ class V20Config:
     max_daily_buy = 6       # 每日最多买 6 只
     max_holdings = 8        # 最大持仓 8 只
     max_position = 0.20     # 单只最大仓位 20%
-    hold_days_max = 5       # 最大持仓天数
+    hold_days_max = 3       # 最大持仓天数
     hold_days_min = 1       # 最小持仓天数
 
     # 风控参数
     stop_loss = -0.05       # 个股止损 -5%
-    stop_profit = 0.25      # 个股止盈 25%
+    stop_profit = 0.05      # 个股止盈 5%
     initial_capital = 200000  # 初始资金 20万
 
     # 交易成本
@@ -75,16 +75,21 @@ class V20Config:
 # 数据加载（复用 v13 的加载逻辑）
 # ============================================================
 def load_panel(start_date='2021-01-01', end_date='2026-05-31'):
-    """加载股票面板数据（优先从数据库）"""
-    from core.db import load_panel_from_db, init_db
-    init_db()
-    loaded, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True)
-    close_panel  = loaded[0]
+    """加载股票面板数据"""
+    from core.data import load_and_build_panel
+    from core.config import MarketFilter
+
+    loaded, codes = load_and_build_panel(
+        start_date, end_date,
+        need_open=True, need_hl=True,
+        market_filter=MarketFilter(),
+    )
+    close_panel = loaded[0]
     volume_panel = loaded[1]
     amount_panel = loaded[2]
-    open_panel   = loaded[3]
-    high_panel  = loaded[4]
-    low_panel   = loaded[5]
+    high_panel = loaded[3]
+    low_panel = loaded[4]
+    open_panel = loaded[5]
 
     # 流动性筛选
     avg_amount = amount_panel.rolling(20).mean() / 1e4

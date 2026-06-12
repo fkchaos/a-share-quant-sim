@@ -118,7 +118,7 @@ def generate_sentiment_signals(sentiment_df, lookback=20):
     df['heat_pct'] = df['heat'].rolling(lookback * 3).rank(pct=True)
 
     # 信号
-    df['signal'] = 0
+    df['signal'] = 0.0
     df.loc[df['heat_pct'] > 0.8, 'signal'] = 1
     df.loc[df['heat_pct'] < 0.2, 'signal'] = -1
 

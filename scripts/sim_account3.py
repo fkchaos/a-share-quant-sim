@@ -423,6 +423,7 @@ def cmd_tail_signal():
         print(f"v20 尾盘信号 — {today.date()}")
         print(f"现金: ¥{state['cash']:,.0f}  持仓: {len(state['holdings'])} 只")
         print(f"⚠️ 今日计划已存在，未覆盖 (生成于 {existing_plan.get('generated_at', '?')})")
+        print("-" * 50)
         if existing_plan.get("sell_plan"):
             print(f"🔴 卖出 {len(existing_plan['sell_plan'])} 只:")
             for item in existing_plan["sell_plan"]:
@@ -431,6 +432,10 @@ def cmd_tail_signal():
             print(f"🟢 买入 {len(existing_plan['buy_plan'])} 只:")
             for item in existing_plan["buy_plan"]:
                 print(f"  {item['code']} {item.get('name','')} — 目标 ¥{item.get('target_amount',0):,.0f} @ {item.get('price',0):.2f}")
+        if existing_plan.get("hold_plan"):
+            print(f"🟡 持有 {len(existing_plan['hold_plan'])} 只:")
+            for item in existing_plan["hold_plan"]:
+                print(f"  {item['code']} {item.get('name','')} — {item['current_shares']}股 @ {item.get('price',0):.2f}")
         print("=" * 50)
         return
 

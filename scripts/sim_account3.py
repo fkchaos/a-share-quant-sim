@@ -144,7 +144,7 @@ def calc_factors(panels):
 
 # ── Stock Selection ────────────────────────────────────────────────
 def select_stocks(panels, factors, date, current_holdings=None):
-    """尾盘选股 — 缩量企稳"""
+    """尾盘选股 — 软约束加权评分排序（v20c）"""
     close = panels["close"]
     volume = panels["volume"]
     amount = panels["amount"]
@@ -156,7 +156,7 @@ def select_stocks(panels, factors, date, current_holdings=None):
     avg_amount = amount.rolling(20, min_periods=10).mean() / 1e4
     if date in avg_amount.index:
         day_amount = avg_amount.loc[date]
-        liquid_mask = (day_amount > 500) & (day_amount < 8000)
+        liquid_mask = (day_amount > 300) & (day_amount < 10000)
         liquid_stocks = set(day_amount[liquid_mask].dropna().index)
     else:
         liquid_stocks = set(close.columns)
@@ -170,32 +170,54 @@ def select_stocks(panels, factors, date, current_holdings=None):
     # 排除科创板/北交所/老三板
     liquid_stocks = {c for c in liquid_stocks if not any(c.startswith(p) for p in ('688', '689', '8', '4', '2'))}
 
+    if current_holdings:
+        liquid_stocks = liquid_stocks - set(current_holdings)
+
     candidates = []
     for code in liquid_stocks:
         if code not in vol_ratio.index:
             continue
 
         vr = vol_ratio.get(code, 999)
-        if vr > 1.0:  # 缩量（从0.8放宽）
-            continue
         rr = range_ratio.get(code, 999)
-        if rr > 1.0:  # 振幅收窄（从0.8放宽）
-            continue
         ar = amount_ratio.get(code, 0)
-        if ar < 0.5 or ar > 3.0:
-            continue
         pm = price_vs_ma5.get(code, 0)
-        if pm < 1.0:  # 价格 > MA5
-            continue
         lu = recent_limit_up.get(code, 0)
-        if lu < 1.0:  # 近期有涨停
+
+        # 硬性排除底线
+        if vr > 1.5:
+            continue
+        if ar < 0.15:
             continue
 
-        score = (1.0 / (vr + 0.1)) * 2.0 + (1.0 / (rr + 0.1)) * 1.0 + lu * 0.5
-        candidates.append((code, score))
+        score = 0.0
 
-    if current_holdings:
-        candidates = [(c, s) for c, s in candidates if c not in current_holdings]
+        # 1. 缩量加分（核心信号，权重最高）
+        if vr < 1.5:
+            score += max(0, 3.0 - vr * 2.0)
+
+        # 2. 振幅收窄加分
+        if rr < 1.0:
+            score += (1.0 - rr) * 2.0
+        elif rr < 1.2:
+            score += max(0, (1.2 - rr) / 0.2 * 0.5)
+
+        # 3. 活跃度加分（适中最好）
+        if 0.15 < ar < 3.0:
+            score += max(0, 1.0 - abs(ar - 1.0) * 0.8)
+
+        # 4. 趋势加分
+        if pm > 1.0:
+            score += min((pm - 1.0) * 5.0, 1.0)
+        elif pm > 0.98:
+            score += 0.2
+
+        # 5. 股性加分
+        if lu > 0:
+            score += 0.8
+
+        if score > 0:
+            candidates.append((code, score))
 
     candidates.sort(key=lambda x: x[1], reverse=True)
     return [c for c, s in candidates[:MAX_HOLDINGS]]
@@ -291,6 +313,10 @@ def cmd_tail_signal():
         log.warning("无数据，跳过信号")
         return
 
+    # 从 DB 获取股票名称映射
+    from core.db import get_stock_name_map
+    name_map = get_stock_name_map()
+
     panels = _build_panels_from_dfs(code_dfs)
     factors = calc_factors(panels)
     close = panels["close"]
@@ -313,7 +339,7 @@ def cmd_tail_signal():
         if pnl_pct <= STOP_LOSS:
             sell_plan.append({
                 "code": code,
-                "name": h.get("name", code),
+                "name": h.get("name") or name_map.get(code, code),
                 "shares": "all",
                 "price": float(current_price),
                 "reason": "止损",
@@ -322,7 +348,7 @@ def cmd_tail_signal():
         elif pnl_pct >= TAKE_PROFIT:
             sell_plan.append({
                 "code": code,
-                "name": h.get("name", code),
+                "name": h.get("name") or name_map.get(code, code),
                 "shares": "all",
                 "price": float(current_price),
                 "reason": "止盈",
@@ -331,7 +357,7 @@ def cmd_tail_signal():
         elif hold_days >= HOLD_DAYS_MAX:
             sell_plan.append({
                 "code": code,
-                "name": h.get("name", code),
+                "name": h.get("name") or name_map.get(code, code),
                 "shares": "all",
                 "price": float(current_price),
                 "reason": "超时",
@@ -361,7 +387,7 @@ def cmd_tail_signal():
                 continue
             buy_plan.append({
                 "code": code,
-                "name": code_dfs[code].get("name", code) if code in code_dfs else code,
+                "name": name_map.get(code, code),
                 "target_amount": float(per_stock),
                 "price": float(buy_price),
             })
@@ -376,7 +402,7 @@ def cmd_tail_signal():
         mv = h["shares"] * p
         hold_plan.append({
             "code": code,
-            "name": h.get("name", code),
+            "name": h.get("name") or name_map.get(code, code),
             "current_shares": h["shares"],
             "price": float(p),
             "current_weight": 0,

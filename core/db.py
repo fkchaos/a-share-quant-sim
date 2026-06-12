@@ -100,9 +100,17 @@ def init_db():
             CREATE TABLE IF NOT EXISTS indicators (
                 code        TEXT NOT NULL,
                 date        TEXT NOT NULL,
-                name        TEXT NOT NULL,  -- ma5, ma20, rsi14, macd, boll_upper, ...
+                ind_name    TEXT NOT NULL,
                 value       REAL,
-                PRIMARY KEY (code, date, name)
+                PRIMARY KEY (code, date, ind_name)
+            ) WITHOUT ROWID;
+
+            CREATE TABLE IF NOT EXISTS industry_map (
+                code        TEXT PRIMARY KEY,
+                industry    TEXT NOT NULL DEFAULT '',
+                industry_m  TEXT NOT NULL DEFAULT '',
+                industry_s  TEXT NOT NULL DEFAULT '',
+                updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
             ) WITHOUT ROWID;
 
             CREATE INDEX IF NOT EXISTS idx_ind_name ON indicators(name, date);
@@ -550,3 +558,28 @@ def load_panel_from_db(start_date=None, end_date=None,
 if __name__ == "__main__":
     init_db()
     print(db_stats())
+
+
+def load_industry_map():
+    """
+    从 DB 加载行业分类映射。
+    Returns: dict {code: industry_name}
+    """
+    with get_conn() as conn:
+        rows = conn.execute("SELECT code, industry FROM industry_map WHERE industry!=''").fetchall()
+    if rows:
+        return {r["code"]: r["industry"] for r in rows}
+    return {}
+
+
+def load_industry_table():
+    """
+    从 DB 加载完整行业分类表。
+    Returns: DataFrame with columns [code, industry, industry_m, industry_s]
+    """
+    import pandas as pd
+    with get_conn() as conn:
+        rows = conn.execute("SELECT code, industry, industry_m, industry_s FROM industry_map").fetchall()
+    if rows:
+        return pd.DataFrame([dict(r) for r in rows]).set_index("code")
+    return pd.DataFrame(columns=["code", "industry", "industry_m", "industry_s"])

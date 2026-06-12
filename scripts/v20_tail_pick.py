@@ -152,7 +152,17 @@ def calc_tail_pick_factors(close_panel, volume_panel, amount_panel, high_panel, 
 # ============================================================
 def select_stocks_tail_pick(factors, date, close_panel, volume_panel, amount_panel,
                             high_panel, low_panel, current_holdings=None):
-    """尾盘选股 — 缩量企稳信号（v20b）"""
+    """尾盘选股 — 软约束加权评分排序（v20c）
+
+    替代 v20b 的硬条件过滤，改为连续加权评分：
+    - 缩量加分：vol_ratio 越低分越高（洗盘结束信号）
+    - 收窄加分：range_ratio 越低分越高（振幅收敛）
+    - 活跃加分：amount_ratio 适中得分高（不太冷清也不太疯狂）
+    - 趋势加分：price_vs_ma5 > 1 得分高（短期趋势向上）
+    - 股性加分：recent_limit_up 得分高（涨停史，指数衰减）
+
+    最终按综合评分排序，选 top_n。
+    """
     if date not in factors['vol_ratio'].index:
         return []
 
@@ -177,34 +187,50 @@ def select_stocks_tail_pick(factors, date, close_panel, volume_panel, amount_pan
         if code not in vol_ratio.index:
             continue
 
-        # 条件1：尾盘缩量（成交量 < 5日均量 × 0.8）
         vr = vol_ratio.get(code, 999)
-        if vr > V20Config.vol_vs_avg_max:
-            continue
-
-        # 条件2：振幅收窄（当日振幅 < 5日平均振幅 × 0.8）
         rr = range_ratio.get(code, 999)
-        if rr > V20Config.range_vs_avg:
-            continue
-
-        # 条件3：成交额活跃（当日成交额 / 20日均额 在 1.2-5.0 之间）
         ar = amount_ratio.get(code, 0)
-        if ar < V20Config.amount_vs_avg_min or ar > V20Config.amount_vs_avg_max:
-            continue
-
-        # 条件4：价格 > 5日均线（短期趋势向上）
         pm = price_vs_ma5.get(code, 0)
-        if pm < 1.0:
-            continue
-
-        # 条件5：近期有涨停历史（20天内）
         lu = recent_limit_up.get(code, 0)
-        if lu < 1.0:
+
+        # 硬性排除条件（不可妥协的底线）
+        if vr > V20Config.vol_vs_avg_max * 1.5:   # 严重放量排除
+            continue
+        if ar < V20Config.amount_vs_avg_min * 0.3:  # 极度冷清排除
             continue
 
-        # 综合评分（缩量企稳：量比低 + 振幅收窄 + 涨停史）
-        score = (1.0 / (vr + 0.1)) * 2.0 + (1.0 / (rr + 0.1)) * 1.0 + lu * 0.5
-        candidates.append((code, score))
+        score = 0.0
+
+        # 1. 缩量加分（核心信号，权重最高）
+        # vol_ratio 0→3.0分, 0.5→2.0分, 1.0→1.0分, 1.5→0分
+        if vr < 1.5:
+            score += max(0, 3.0 - vr * 2.0)
+
+        # 2. 振幅收窄加分
+        # range_ratio 0→2.0分, 0.5→1.0分, 1.0→0分
+        if rr < 1.0:
+            score += (1.0 - rr) * 2.0
+        elif rr < V20Config.range_vs_avg * 1.2:
+            score += max(0, (1.2 - rr) / 0.2 * 0.5)  # 轻微加分
+
+        # 3. 活跃度加分（适中最好，高斯形状）
+        # amount_ratio=1.0→1.0分, 偏离1.0越多分越低
+        if V20Config.amount_vs_avg_min * 0.3 < ar < V20Config.amount_vs_avg_max:
+            score += max(0, 1.0 - abs(ar - 1.0) * 0.8)
+
+        # 4. 趋势加分（价格 > MA5）
+        if pm > 1.0:
+            score += min((pm - 1.0) * 5.0, 1.0)  # 封顶1分
+        elif pm > 0.98:
+            score += 0.2  # 接近MA5给少量分
+
+        # 5. 股性加分（涨停史）
+        # lu>0 表示 recent_limit_up 窗口内有涨停
+        if lu > 0:
+            score += 0.8
+
+        if score > 0:
+            candidates.append((code, score))
 
     # 排除当前持仓
     if current_holdings:
@@ -361,20 +387,9 @@ def run_v20_backtest():
                 high_panel, low_panel, holdings
             )
             if candidates:
-                # 重新评分排序（缩量企稳：量比低 + 振幅收窄 + 涨停史）
-                vol_ratio = factors['vol_ratio'].loc[date]
-                range_ratio = factors['range_ratio'].loc[date]
-                recent_lu = factors['recent_limit_up'].loc[date]
-                scored = []
-                for code in candidates:
-                    vr = vol_ratio.get(code, 999)
-                    rr = range_ratio.get(code, 999)
-                    lu = recent_lu.get(code, 0)
-                    # 量比越低（缩量越多）分越高 + 振幅收窄 + 涨停史
-                    score = (1.0 / (vr + 0.1)) * 2.0 + (1.0 / (rr + 0.1)) * 1.0 + lu * 0.5
-                    scored.append((code, score))
-                scored.sort(key=lambda x: x[1], reverse=True)
-                pending_buy = scored[:cfg.max_daily_buy]
+                # 将 code 列表转为 (code, score) 格式供执行队列使用
+                # score 仅用于日志记录，不影响执行顺序
+                pending_buy = [(c, 0.0) for c in candidates[:cfg.max_daily_buy]]
 
         # 5. NAV
         portfolio_value = cash

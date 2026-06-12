@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-v21_industry_rotation — 行业轮动两层选股策略
+v21b_industry_defense — 行业轮动防御性过滤 + 全市场选股
 ==============================================
 
 架构：
-  第一层：行业轮动打分 → 选 top N 行业
+  第一层：行业轮动打分 → 排除最差行业（后30%）
     - 行业动量：过去 20 日行业平均收益
-    - 行业反转：过去 5 日行业平均收益（避免追高）
-    - 行业拥挤度：行业内股票换手率标准差（高拥挤 = 过热）
-    - 综合轮动分 = 动量 - 反转 - 拥挤度惩罚
+    - 行业反转：过去 5 日行业平均收益
+    - 行业拥挤度：行业内换手率标准差
+    - 排除轮动分最低的行业（后30%），保留中间+上游行业
 
-  第二层：在 top 行业内选股
-    - 沿用 v13 量价因子（反转+放量+缩量企稳+振幅收窄）
-    - 只在 top 行业内的股票中评分排序
+  第二层：在保留行业内用 v13 量价因子选股
+    - 沿用 v13 反转+量价因子
+    - 选股池 = 保留行业内的股票（排除差行业后约 70% 股票）
 
-与 v13 的关系：
-  - v13 全市场选股（715只）
-  - v21 先在行业内过滤，再在行业内选股
-  - 当行业轮动失效时（所有行业评分接近），退化为全市场选股
+核心思路：
+  - 行业轮动不做进攻（不追最强行业），只做防御（排除最差行业）
+  - 避免"行业动量+个股反转"的冲突
+  - 选股仍由 v13 量价因子主导
 """
 
 import sys, os
@@ -31,15 +31,15 @@ sys.path.insert(0, os.path.dirname(__file__))
 from core.db import load_panel_from_db, load_industry_map
 
 
-# ============================================================
-# 行业轮动打分引擎
-# ============================================================
-class IndustryRotationScorer:
-    """行业轮动打分引擎"""
+class IndustryDefenseFilter:
+    """行业轮动防御性过滤引擎"""
 
     def __init__(self, close_panel, volume_panel, amount_panel,
                  industry_map, mom_window=20, rev_window=5,
-                 crowding_penalty=0.3):
+                 crowding_penalty=0.3, exclude_pct=0.3):
+        """
+        exclude_pct: 排除最差行业的比例（默认后30%）
+        """
         self.close_panel = close_panel
         self.volume_panel = volume_panel
         self.amount_panel = amount_panel
@@ -47,6 +47,7 @@ class IndustryRotationScorer:
         self.mom_window = mom_window
         self.rev_window = rev_window
         self.crowding_penalty = crowding_penalty
+        self.exclude_pct = exclude_pct
 
         self._industry_mom = None
         self._industry_rev = None
@@ -74,7 +75,6 @@ class IndustryRotationScorer:
             ind_ret = returns[ind_codes].mean(axis=1)
             mom_dict[ind] = ind_ret.rolling(self.mom_window, min_periods=5).mean()
             rev_dict[ind] = ind_ret.rolling(self.rev_window, min_periods=2).mean()
-            # 拥挤度
             if self.amount_panel is not None and self.volume_panel is not None:
                 amt = self.amount_panel.reindex(columns=ind_codes).fillna(0)
                 close_sub = self.close_panel.reindex(columns=ind_codes).ffill()
@@ -102,32 +102,32 @@ class IndustryRotationScorer:
         common = mom_z.index.intersection(rev_z.index).intersection(crowd_z.index)
         return (mom_z[common] - rev_z[common] - self.crowding_penalty * crowd_z[common]).dropna()
 
-    def get_top_industries(self, date, top_n=5, min_score=None):
+    def get_excluded_industries(self, date):
+        """获取应排除的最差行业"""
         scores = self.get_industry_scores(date)
         if scores.empty:
             return []
-        if min_score is not None:
-            scores = scores[scores >= min_score]
-        return scores.nlargest(top_n).index.tolist()
+        n_exclude = max(1, int(len(scores) * self.exclude_pct))
+        return scores.nsmallest(n_exclude).index.tolist()
 
-    def get_industry_mask(self, date, top_n=5, min_score=None):
-        top_inds = self.get_top_industries(date, top_n=top_n, min_score=min_score)
-        if not top_inds:
-            return pd.Series(False, index=self.close_panel.columns)
-        mask = self._stock_industry.isin(top_inds)
-        return mask.reindex(self.close_panel.columns).fillna(False)
+    def get_industry_mask(self, date):
+        """获取保留行业的股票掩码（True=保留）"""
+        excluded = self.get_excluded_industries(date)
+        if not excluded:
+            return pd.Series(True, index=self.close_panel.columns)
+        mask = ~self._stock_industry.isin(excluded)
+        return mask.reindex(self.close_panel.columns).fillna(True)
 
 
 # ============================================================
-# v21 参数配置
+# 参数配置
 # ============================================================
-class V21Config:
-    # 行业轮动参数
-    top_industries = 5        # top N 行业
-    mom_window = 20           # 动量窗口
-    rev_window = 5            # 反转窗口
-    crowding_penalty = 0.3    # 拥挤度惩罚系数
-    ind_score_min = -1.0      # 最低行业分（低于此分数不选）
+class V21bConfig:
+    # 行业过滤参数
+    exclude_pct = 0.3          # 排除后30%行业
+    mom_window = 20
+    rev_window = 5
+    crowding_penalty = 0.3
 
     # 选股参数（继承 v13）
     min_liquidity = 500
@@ -142,7 +142,6 @@ class V21Config:
     stop_loss = -0.015
     stop_profit = 0.03
 
-    # 交易成本
     commission_rate = 0.0003
     stamp_tax = 0.001
     slippage_rate = 0.002
@@ -150,10 +149,9 @@ class V21Config:
 
 
 # ============================================================
-# 选股逻辑（v13 量价因子 + 行业过滤）
+# 选股逻辑
 # ============================================================
 def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel):
-    """计算量价因子"""
     rev_5 = close_panel.pct_change(5)
     vol_avg = volume_panel.rolling(10).mean()
     vol_ratio = volume_panel / vol_avg
@@ -169,12 +167,11 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel)
     }
 
 
-def select_stocks_with_industry(factors, date, close_panel, volume_panel, amount_panel,
-                                 industry_mask, current_holdings, cfg):
+def select_stocks(factors, date, close_panel, volume_panel, amount_panel,
+                   industry_mask, current_holdings, cfg):
     """在行业掩码内选股"""
     if date not in factors['rev_5'].index:
         return []
-    # 流动性筛选
     avg_amount = amount_panel.rolling(20).mean() / 1e4
     if date in avg_amount.index:
         day_amount = avg_amount.loc[date]
@@ -182,10 +179,8 @@ def select_stocks_with_industry(factors, date, close_panel, volume_panel, amount
     else:
         liquid = set(close_panel.columns)
 
-    # 行业过滤：只保留 top 行业内的股票
     if industry_mask is not None:
         liquid = liquid & set(industry_mask[industry_mask].index)
-
     if not liquid:
         return []
 
@@ -224,34 +219,12 @@ def select_stocks_with_industry(factors, date, close_panel, volume_panel, amount
 # ============================================================
 # 回测引擎
 # ============================================================
-def calc_nav_from_trades(trade_log, initial_capital):
-    """从交易记录计算 NAV 序列"""
-    if not trade_log:
-        return pd.Series([initial_capital])
-    df = pd.DataFrame(trade_log)
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date')
-    # 简化：用现金流水计算
-    nav = initial_capital
-    nav_list = {df.iloc[0]['date']: nav}
-    for _, row in df.iterrows():
-        if row['action'] == 'buy':
-            nav -= row.get('cost', 0)
-        elif row['action'] == 'sell':
-            nav += row.get('value', 0)
-        nav_list[row['date']] = nav
-    return pd.Series(nav_list)
-
-
-def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
-                      top_industries=5):
-    """v21 完整回测"""
+def run_v21b_backtest(start_date='2022-01-01', end_date='2026-05-31'):
     print("=" * 60)
-    print("v21_industry_rotation — 行业轮动两层选股策略")
+    print("v21b 行业轮动防御性过滤 + 全市场选股")
     print("=" * 60)
     t0 = time.time()
 
-    # 加载数据
     print("\n[1/4] 加载数据...")
     tpl, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True)
     close_panel, volume_panel, amount_panel = tpl[0], tpl[1], tpl[2]
@@ -260,39 +233,36 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
     low_panel = tpl[5] if len(tpl) > 5 else None
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只")
 
-    # 行业映射
     industry_map = load_industry_map()
     mapped = sum(1 for c in close_panel.columns if c in industry_map)
-    print(f"  行业分类: {len(industry_map)} 只, 选股池覆盖 {mapped}/{len(close_panel.columns)}")
+    print(f"  行业分类: {len(industry_map)} 只, 覆盖 {mapped}/{len(close_panel.columns)}")
 
-    # 因子计算
     print("\n[2/4] 计算因子...")
     factors = calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel)
 
-    # 行业轮动引擎
     print("\n[3/4] 预计算行业轮动...")
-    scorer = IndustryRotationScorer(
+    engine = IndustryDefenseFilter(
         close_panel, volume_panel, amount_panel, industry_map,
-        mom_window=V21Config.mom_window, rev_window=V21Config.rev_window,
-        crowding_penalty=V21Config.crowding_penalty
+        mom_window=V21bConfig.mom_window, rev_window=V21bConfig.rev_window,
+        crowding_penalty=V21bConfig.crowding_penalty, exclude_pct=V21bConfig.exclude_pct
     )
 
-    # 回测循环
     print("\n[4/4] 运行回测...")
-    cfg = V21Config()
+    cfg = V21bConfig()
     cash = cfg.initial_capital
-    holdings = {}  # {code: {shares, cost, hold_days}}
+    holdings = {}
     trade_log = []
     nav_series = []
     select_days = 0
     total_buys = 0
     total_sells = 0
     sell_reasons = {}
+    ind_excluded_days = 0
 
     dates = close_panel.index[close_panel.index >= pd.Timestamp(start_date)]
 
     for i, date in enumerate(dates):
-        if i < 30:  # 预热
+        if i < 30:
             nav_series.append((date, cash))
             continue
 
@@ -303,18 +273,15 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
 
         open_data = open_panel.loc[date] if open_panel is not None and date in open_panel.index else price_data
 
-        # 更新持仓天数
         for code in holdings:
             holdings[code]['hold_days'] = holdings[code].get('hold_days', 0) + 1
 
-        # === 行业轮动打分 ===
-        ind_mask = scorer.get_industry_mask(date, top_n=top_industries, min_score=cfg.ind_score_min)
+        # 行业过滤
+        ind_mask = engine.get_industry_mask(date)
+        if ind_mask.sum() < len(close_panel.columns) * 0.5:
+            ind_excluded_days += 1
 
-        # 如果行业轮动选出股票太少（<5只），退化为全市场
-        if ind_mask.sum() < 5:
-            ind_mask = None  # None 表示全市场
-
-        # === 风控检查 ===
+        # 风控
         to_sell = []
         for code, h in holdings.items():
             if code not in price_data.index:
@@ -324,7 +291,6 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
                 continue
             pnl = (cp - h['cost']) / h['cost']
             hd = h.get('hold_days', 0)
-
             if pnl <= cfg.stop_loss:
                 to_sell.append((code, 'stop_loss', pnl))
             elif pnl >= cfg.stop_profit:
@@ -332,7 +298,6 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
             elif hd >= cfg.hold_days_max:
                 to_sell.append((code, 'timeout', pnl))
 
-        # 执行卖出
         sold_codes = set()
         for code, reason, pnl in to_sell:
             if code not in price_data.index:
@@ -352,11 +317,9 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
         for code in sold_codes:
             holdings.pop(code, None)
 
-        # === 选股 + 买入 ===
-        candidates = select_stocks_with_industry(
-            factors, date, close_panel, volume_panel, amount_panel,
-            ind_mask, holdings, cfg
-        )
+        # 选股 + 买入
+        candidates = select_stocks(factors, date, close_panel, volume_panel, amount_panel,
+                                    ind_mask, holdings, cfg)
 
         if candidates and cash > cfg.initial_capital * 0.1 and len(holdings) < cfg.max_holdings:
             available = cash - cfg.initial_capital * 0.1
@@ -386,7 +349,6 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
         if candidates:
             select_days += 1
 
-        # 计算 NAV
         nav = cash
         for code, h in holdings.items():
             if code in price_data.index:
@@ -397,9 +359,8 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
 
     elapsed = time.time() - t0
 
-    # === 统计 ===
     nav_df = pd.DataFrame(nav_series, columns=['date', 'nav']).set_index('date')
-    nav_df['return'] = nav_df['nav'].pct_change()
+    nav_df['return'] = nav_df['pct_change'] = nav_df['nav'].pct_change()
     total_return = (nav_df['nav'].iloc[-1] / cfg.initial_capital) - 1
     days = (nav_df.index[-1] - nav_df.index[0]).days
     annual_return = (1 + total_return) ** (365 / max(days, 1)) - 1
@@ -414,20 +375,16 @@ def run_v21_backtest(start_date='2022-01-01', end_date='2026-05-31',
     print(f"  最大回撤: {max_dd*100:.2f}%")
     print(f"  总交易: {total_buys} 买 / {total_sells} 卖")
     print(f"  选股率: {select_days}/{len(dates)-30} 天 ({select_days/max(1,len(dates)-30)*100:.1f}%)")
+    print(f"  行业过滤生效天数: {ind_excluded_days}/{len(dates)-30}")
     print(f"  卖出原因: {sell_reasons}")
     print(f"  耗时: {elapsed:.1f}s")
 
     return {
-        'annual_return': annual_return,
-        'sharpe': sharpe,
-        'max_dd': max_dd,
-        'total_buys': total_buys,
-        'total_sells': total_sells,
-        'select_days': select_days,
-        'nav': nav_df,
-        'trade_log': trade_log,
+        'annual_return': annual_return, 'sharpe': sharpe, 'max_dd': max_dd,
+        'total_buys': total_buys, 'total_sells': total_sells,
+        'select_days': select_days, 'nav': nav_df, 'trade_log': trade_log,
     }
 
 
 if __name__ == "__main__":
-    run_v21_backtest()
+    run_v21b_backtest()

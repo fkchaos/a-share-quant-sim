@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
 v22_walk_forward — v22 策略 Walk-Forward 验证
+用测试期总收益（非年化）避免短窗口放大问题
+v13 同框架对比
 """
 
 import sys, os
@@ -12,26 +14,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.dirname(__file__))
 
 from core.db import load_panel_from_db
-from core.factors import calc_factors_panel
 
 
-def run_v22_for_panel(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel, cfg):
-    """对给定面板跑 v22 回测"""
-    returns = close_panel.pct_change()
+def run_v22_on_window(close_panel, volume_panel, amount_panel,
+                       high_panel, low_panel, open_panel, cfg):
+    """在给定窗口上跑 v22 回测（窗口 = train + test）"""
     eps = 1e-10
 
-    # 计算因子
-    factors = {}
-    factors['mom_5'] = close_panel.pct_change(5)
+    # 因子在整个窗口上计算（rolling只用过去，无未来泄露）
+    mom_5 = close_panel.pct_change(5)
     prev_close = close_panel.shift(1)
-    factors['gap_ratio'] = (open_panel - prev_close) / (prev_close + eps) if open_panel is not None else returns * 0
+    gap_ratio = (open_panel - prev_close) / (prev_close + eps)
     avg_amount = amount_panel.rolling(20).mean()
-    factors['illiquidity'] = 1.0 / (avg_amount / 1e4 + eps)
+    illiq = 1.0 / (avg_amount / 1e4 + eps)
     ma20 = close_panel.rolling(20).mean()
     std20 = close_panel.rolling(20).std()
-    factors['boll_width_20'] = (4 * std20) / (ma20 + eps)
-    factors['vol_20'] = returns.rolling(20).std()
-    factors['amplitude'] = (high_panel - low_panel) / (close_panel + eps)
+    boll_w = (4 * std20) / (ma20 + eps)
+
+    n = close_panel.shape[0]
+    train_days = cfg.get('train_days', 252)
 
     cash = cfg['initial_capital']
     holdings = {}
@@ -40,28 +41,27 @@ def run_v22_for_panel(close_panel, volume_panel, amount_panel, high_panel, low_p
     for i, date in enumerate(close_panel.index):
         if i < 30:
             nav_list.append(cash); continue
-        if date not in close_panel.index:
-            nav_list.append(nav_list[-1]); continue
 
         pd_ = close_panel.loc[date]
-        od = open_panel.loc[date] if open_panel is not None else pd_
+        od = open_panel.loc[date]
 
         for c in holdings:
             holdings[c]['hold_days'] = holdings[c].get('hold_days', 0) + 1
 
+        # 卖出
         to_sell = []
         for c, h in holdings.items():
             if c not in pd_.index: continue
             cp = pd_[c]
             if pd.isna(cp) or cp <= 0: continue
             pnl = (cp - h['cost']) / h['cost']
-            if pnl <= cfg['stop_loss']: to_sell.append((c, 'SL', pnl)); continue
-            if pnl >= cfg['stop_profit']: to_sell.append((c, 'TP', pnl)); continue
+            if pnl <= cfg['stop_loss']: to_sell.append(c); continue
+            if pnl >= cfg['stop_profit']: to_sell.append(c); continue
             hd = h.get('hold_days', 0)
-            if hd >= cfg['hold_days_max']: to_sell.append((c, 'TO', pnl))
+            if hd >= cfg['hold_days_max']: to_sell.append(c)
 
         sold = set()
-        for c, reason, pnl in to_sell:
+        for c in to_sell:
             if c not in pd_.index: continue
             sp = pd_[c]
             if pd.isna(sp) or sp <= 0: continue
@@ -71,24 +71,24 @@ def run_v22_for_panel(close_panel, volume_panel, amount_panel, high_panel, low_p
         for c in sold: holdings.pop(c, None)
 
         # 选股
-        if date not in factors['mom_5'].index:
+        if date not in mom_5.index:
             nav_list.append(cash); continue
 
-        mom_5 = factors['mom_5'].loc[date].dropna()
+        m5 = mom_5.loc[date].dropna()
         scores = {}
-        for code in mom_5.index:
+        for code in m5.index:
             score = 0.0
-            m = mom_5[code]
+            m = m5[code]
             if m > cfg.get('mom_threshold', 0.02):
                 score += m * 100
-                if 'gap_ratio' in factors and date in factors['gap_ratio'].index:
-                    gr = factors['gap_ratio'].loc[date, code] if code in factors['gap_ratio'].columns else 0
+                if date in gap_ratio.index and code in gap_ratio.columns:
+                    gr = gap_ratio.loc[date, code]
                     if not pd.isna(gr) and gr > 0.02: score += 0.5
-                if 'illiquidity' in factors and date in factors['illiquidity'].index:
-                    illiq = factors['illiquidity'].loc[date, code] if code in factors['illiquidity'].columns else 0
-                    if not pd.isna(illiq) and illiq > 0: score += 0.8
-                if 'boll_width_20' in factors and date in factors['boll_width_20'].index:
-                    bw = factors['boll_width_20'].loc[date, code] if code in factors['boll_width_20'].columns else 0
+                if date in illiq.index and code in illiq.columns:
+                    il = illiq.loc[date, code]
+                    if not pd.isna(il) and il > 0: score += 0.8
+                if date in boll_w.index and code in boll_w.columns:
+                    bw = boll_w.loc[date, code]
                     if not pd.isna(bw) and bw > 1.2: score += 0.3
             if score > 0: scores[code] = score
 
@@ -99,11 +99,10 @@ def run_v22_for_panel(close_panel, volume_panel, amount_panel, high_panel, low_p
 
         if cands and cash > cfg['initial_capital'] * 0.1 and len(holdings) < cfg['max_holdings']:
             avail = cash - cfg['initial_capital'] * 0.1
-            n = min(len(cands), cfg['max_daily_buy'], cfg['max_holdings'] - len(holdings))
-            per = min(avail / n, cfg['initial_capital'] * cfg['max_position'])
-            bought = 0
+            nb = min(len(cands), cfg['max_daily_buy'], cfg['max_holdings'] - len(holdings))
+            per = min(avail / nb, cfg['initial_capital'] * cfg['max_position'])
             for c in cands[:cfg['max_daily_buy']]:
-                if bought >= n: break
+                if len(holdings) >= cfg['max_holdings'] or nb <= 0: break
                 bp = od[c] if c in od.index else pd_[c]
                 if pd.isna(bp) or bp <= 0: continue
                 adj = bp * (1 + cfg['commission_rate'] + cfg['slippage_rate'])
@@ -113,7 +112,7 @@ def run_v22_for_panel(close_panel, volume_panel, amount_panel, high_panel, low_p
                 if cost > cash: continue
                 cash -= cost
                 holdings[c] = {'shares': sh, 'cost': bp, 'hold_days': 0}
-                bought += 1
+                nb -= 1
 
         nav = cash
         for c, h in holdings.items():
@@ -122,21 +121,31 @@ def run_v22_for_panel(close_panel, volume_panel, amount_panel, high_panel, low_p
                 if not pd.isna(cp) and cp > 0: nav += h['shares'] * cp
         nav_list.append(nav)
 
+    # 分割 train/test NAV
     nav_s = pd.Series(nav_list)
-    total = nav_s.iloc[-1] / cfg['initial_capital'] - 1
-    days = len(nav_list) - 30
-    annual = (1 + total) ** (365 / max(days, 1)) - 1
-    ret = nav_s.pct_change().dropna()
-    sharpe = ret.mean() / ret.std() * np.sqrt(252) if ret.std() > 0 else 0
-    max_dd = ((nav_s.cummax() - nav_s) / nav_s.cummax()).max()
+    train_nav = nav_s[:train_days]
+    test_nav = nav_s[train_days:]
 
-    return annual, sharpe, max_dd, total
+    if len(test_nav) == 0:
+        return 0, 0, 0, 0, 0
+
+    # 训练期
+    train_ret = train_nav.iloc[-1] / train_nav.iloc[0] - 1 if train_nav.iloc[0] > 0 else 0
+    train_dd = ((train_nav.cummax() - train_nav) / train_nav.cummax()).max()
+
+    # 测试期
+    test_ret = test_nav.iloc[-1] / test_nav.iloc[0] - 1 if test_nav.iloc[0] > 0 else 0
+    test_dd = ((test_nav.cummax() - test_nav) / test_nav.cummax()).max()
+    test_daily = test_nav.pct_change().dropna()
+    test_sharpe = test_daily.mean() / test_daily.std() * np.sqrt(252) if test_daily.std() > 0 else 0
+
+    return train_ret, train_dd, test_ret, test_dd, test_sharpe
 
 
-def walk_forward_v22(train_days=252, test_days=63, step_days=63):
-    """Walk-Forward 验证"""
+def walk_forward_v22(train_days=252, test_days=126, step_days=63):
+    """Walk-Forward: 训练期因子预热，测试期验证"""
     print("=" * 60)
-    print("v22 Walk-Forward 验证")
+    print("v22 Walk-Forward 验证 (train=%d, test=%d, step=%d)" % (train_days, test_days, step_days))
     print("=" * 60)
 
     tpl, _ = load_panel_from_db('2021-01-01', '2026-05-31', need_open=True, need_hl=True)
@@ -155,6 +164,7 @@ def walk_forward_v22(train_days=252, test_days=63, step_days=63):
         'stamp_tax': 0.001,
         'slippage_rate': 0.002,
         'mom_threshold': 0.02,
+        'train_days': train_days,
     }
 
     fold_results = []
@@ -162,46 +172,50 @@ def walk_forward_v22(train_days=252, test_days=63, step_days=63):
     start_idx = 0
 
     while start_idx + train_days + test_days < total_days:
-        end_idx = start_idx + train_days + test_days
-        train_end = start_idx + train_days
+        end_idx = min(start_idx + train_days + test_days, total_days)
 
-        # 用训练期+测试期的数据（因子需要在完整窗口上计算）
-        window_close = close_panel.iloc[start_idx:end_idx]
-        window_vol = tpl[1].iloc[start_idx:end_idx]
-        window_amt = tpl[2].iloc[start_idx:end_idx]
-        window_open = tpl[3].iloc[start_idx:end_idx] if tpl[3] is not None else None
-        window_high = tpl[4].iloc[start_idx:end_idx]
-        window_low = tpl[5].iloc[start_idx:end_idx]
+        win_close = close_panel.iloc[start_idx:end_idx]
+        win_vol = tpl[1].iloc[start_idx:end_idx]
+        win_amt = tpl[2].iloc[start_idx:end_idx]
+        win_open = tpl[3].iloc[start_idx:end_idx]
+        win_high = tpl[4].iloc[start_idx:end_idx]
+        win_low = tpl[5].iloc[start_idx:end_idx]
 
-        print("Fold %d: [%d:%d] train=%d test=%d" % (fold, start_idx, end_idx, train_days, test_days))
-
-        ar, sh, mdd, total = run_v22_for_panel(
-            window_close, window_vol, window_amt, window_high, window_low, window_open, cfg
+        tr, tdd, tret, tdd2, tsh = run_v22_on_window(
+            win_close, win_vol, win_amt, win_high, win_low, win_open, cfg
         )
 
         fold_results.append({
             'fold': fold,
-            'annual': ar, 'sharpe': sh, 'max_dd': mdd, 'total': total
+            'train_ret': tr, 'train_dd': tdd,
+            'test_ret': tret, 'test_dd': tdd2, 'test_sharpe': tsh,
+            'test_days': test_days,
         })
-        print("  -> 年化=%.2f%% 夏普=%.3f 回撤=%.2f%%" % (ar*100, sh, mdd*100))
+        print("Fold %d | 训练: %.2f%% (DD=%.1f%%) | 测试: %.2f%% (DD=%.1f%%, Sharpe=%.2f)" % (
+            fold, tr*100, tdd*100, tret*100, tdd2*100, tsh))
 
         start_idx += step_days
         fold += 1
 
-    # 汇总
-    results_df = pd.DataFrame(fold_results)
-    print("\n" + "=" * 60)
-    print("WF 汇总 (%d folds)" % len(results_df))
-    print("=" * 60)
-    print("  平均年化: %.2f%%" % (results_df['annual'].mean() * 100))
-    print("  平均夏普: %.3f" % results_df['sharpe'].mean())
-    print("  平均回撤: %.2f%%" % (results_df['max_dd'].mean() * 100))
-    print("  正收益 fold: %d/%d (%.0f%%)" % (
-        (results_df['annual'] > 0).sum(), len(results_df),
-        (results_df['annual'] > 0).mean() * 100))
+    if not fold_results:
+        print("数据不足，无法生成 fold")
+        return pd.DataFrame()
 
-    return results_df
+    df = pd.DataFrame(fold_results)
+    print("\n" + "=" * 60)
+    print("v22 WF 汇总 (%d folds)" % len(df))
+    print("=" * 60)
+    print("  测试期平均收益率: %.2f%%" % (df['test_ret'].mean() * 100))
+    print("  测试期平均夏普:   %.3f" % df['test_sharpe'].mean())
+    print("  测试期平均回撤:   %.2f%%" % (df['test_dd'].mean() * 100))
+    print("  正收益 fold:      %d/%d (%.0f%%)" % (
+        (df['test_ret'] > 0).sum(), len(df),
+        (df['test_ret'] > 0).mean() * 100))
+    print("  年化(均值+):      ~%.1f%%" % (
+        ((1 + df['test_ret'].mean()) ** (252.0 / test_days) - 1) * 100))
+
+    return df
 
 
 if __name__ == "__main__":
-    walk_forward_v22()
+    walk_forward_v22(train_days=252, test_days=126, step_days=63)

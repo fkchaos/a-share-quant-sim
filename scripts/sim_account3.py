@@ -371,15 +371,15 @@ def cmd_tail_signal():
     # ── 生成 buy_plan ──
     buy_plan = []
     hold_plan = []
-    available_slots = MAX_HOLDINGS - (len(holdings) - len(to_remove))
 
-    if candidates and state["cash"] > 0 and available_slots > 0:
-        n_buy = min(len(candidates), MAX_DAILY_BUY, available_slots)
+    if candidates and state["cash"] > 0:
+        # 按评分排序，取前 MAX_DAILY_BUY 只生成计划（不限制 available_slots，由执行时决定）
+        n_plan = min(len(candidates), MAX_DAILY_BUY)
         per_stock = min(
-            state["cash"] * 0.9 / n_buy,
+            state["cash"] * 0.9 / n_plan,
             state["cash"] * MAX_POSITION,
         )
-        for code in candidates[:n_buy]:
+        for code in candidates[:n_plan]:
             if code not in close.columns:
                 continue
             buy_price = close.loc[today, code]
@@ -412,6 +412,28 @@ def cmd_tail_signal():
         })
 
     # ── 保存计划 ──
+    # 检查今天的计划是否已存在且未被执行过（避免 tail_signal 多次运行覆盖）
+    existing_plan = load_plan()
+    if existing_plan.get("date") == str(today.date()) and (
+        existing_plan.get("buy_plan") or existing_plan.get("sell_plan")
+    ):
+        log.info(f"今日计划已存在，跳过覆盖 (生成于 {existing_plan.get('generated_at', '?')})")
+        # 仍然输出摘要，但不覆盖计划
+        print("=" * 50)
+        print(f"v20 尾盘信号 — {today.date()}")
+        print(f"现金: ¥{state['cash']:,.0f}  持仓: {len(state['holdings'])} 只")
+        print(f"⚠️ 今日计划已存在，未覆盖 (生成于 {existing_plan.get('generated_at', '?')})")
+        if existing_plan.get("sell_plan"):
+            print(f"🔴 卖出 {len(existing_plan['sell_plan'])} 只:")
+            for item in existing_plan["sell_plan"]:
+                print(f"  {item['code']} {item.get('name','')} — {item.get('reason','')} @ {item.get('price',0):.2f}")
+        if existing_plan.get("buy_plan"):
+            print(f"🟢 买入 {len(existing_plan['buy_plan'])} 只:")
+            for item in existing_plan["buy_plan"]:
+                print(f"  {item['code']} {item.get('name','')} — 目标 ¥{item.get('target_amount',0):,.0f} @ {item.get('price',0):.2f}")
+        print("=" * 50)
+        return
+
     plan = {
         "generated_at": str(datetime.now()),
         "date": str(today.date()),
@@ -489,7 +511,10 @@ def cmd_tail_execute():
     # ── 后买 ──
     bought = []
     if plan.get("buy_plan") and cash > 0:
-        max_buys = min(len(plan["buy_plan"]), MAX_DAILY_BUY, MAX_HOLDINGS - len(holdings))
+        # 计算可用空位
+        available_slots = MAX_HOLDINGS - len(holdings)
+        # 按评分排序（buy_plan 已按评分排序），取可用空位数量
+        max_buys = min(len(plan["buy_plan"]), MAX_DAILY_BUY, max(available_slots, 0))
         for item in plan["buy_plan"][:max_buys]:
             code = item["code"]
             target = item.get("target_amount", 0)
@@ -522,7 +547,10 @@ def cmd_tail_execute():
     state["holdings"] = holdings
     save_portfolio(state)
 
-    # 清空计划
+    # 清空计划（防止 tail_signal 误判"已存在"）
+    plan["buy_plan"] = []
+    plan["sell_plan"] = []
+    plan["hold_plan"] = []
     plan["pending_buy"] = []
     plan["pending_sell"] = []
     save_plan(plan)

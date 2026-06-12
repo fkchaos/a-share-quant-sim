@@ -871,16 +871,10 @@ def main():
     stock_names = _load_stock_names()
 
     # ── 加载行业分类映射 ──────────────────────────────────────────
-    _industry_map = {}
-    _industry_cache = os.path.join(DATA_DIR, "industry_map.csv")
-    if os.path.exists(_industry_cache):
-        try:
-            import pandas as pd
-            _im_df = pd.read_csv(_industry_cache, dtype={"code": str})
-            _industry_map = dict(zip(_im_df["code"], _im_df["industry"]))
-            print(f"  行业分类: {len(_industry_map)} 只股票, {len(set(_industry_map.values()))} 个行业")
-        except Exception as _e:
-            print(f"  ⚠️ 行业分类加载失败: {_e}")
+    from core.db import load_industry_map
+    _industry_map = load_industry_map()
+    if _industry_map:
+        print(f"  行业分类: {len(_industry_map)} 只股票, {len(set(_industry_map.values()))} 个行业")
 
     print("=" * 60)
     print("A股量化回测系统  |  策略参数来源：core.config.STRATEGY_PROFILES")

@@ -20,7 +20,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
-CACHE_FILE = os.path.join(DATA_DIR, "industry_map.csv")
+CACHE_FILE = os.path.join(DATA_DIR, "industry_map.csv")  # 兼容旧路径，已废弃
 
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context

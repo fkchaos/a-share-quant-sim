@@ -23,16 +23,10 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
-INDUSTRY_CACHE = os.path.join(DATA_DIR, "industry_map.csv")
-
-
 def load_industry_map():
-    """加载行业分类映射。"""
-    if not os.path.exists(INDUSTRY_CACHE):
-        return {}
-    df = pd.read_csv(INDUSTRY_CACHE, dtype={"code": str})
-    return dict(zip(df["code"], df["industry"]))
+    """加载行业分类映射（从 DB）。"""
+    from core.db import load_industry_map as _load
+    return _load()
 
 
 class IndustryRotation:

@@ -97,7 +97,7 @@ def check_risk(state, date, price_data, params):
         cp = price_data[code]
         if pd.isna(cp) or cp <= 0:
             continue
-        pnl = (cp - h['cost']) / h['cost']
+        pnl = (cp - h['cost_price']) / h['cost_price']
         if pnl <= params.get("STOP_LOSS", -0.05):
             to_sell.append((code, 'stop_loss', pnl))
         elif pnl >= params.get("TAKE_PROFIT", 0.10):
@@ -108,24 +108,22 @@ def check_risk(state, date, price_data, params):
 
 
 def execute_sells(state, to_sell, date, spot):
-    """执行卖出"""
-    sold = set()
+    """执行卖出，返回新 state"""
     for code, reason, pnl in to_sell:
         if code in spot and spot[code] > 0:
-            sell(state, code, spot[code], date, reason)
-            sold.add(code)
-    return sold
+            state = sell(state, code, spot[code], date, reason)
+    return state
 
 
 def execute_buys(state, cands, date, spot, params):
-    """执行买入"""
+    """执行买入，返回新 state"""
     max_buy = params.get("MAX_DAILY_BUY", 6)
     max_pos = params.get("MAX_POSITION", 0.20)
     max_hold = params.get("MAX_HOLDINGS", 8)
 
     available = state.cash - state.initial_capital * 0.1
     if available <= 0:
-        return
+        return state
 
     nb = min(len(cands), max_buy, max_hold - len(state.holdings))
     per_stock = min(available / nb, state.initial_capital * max_pos) if nb > 0 else 0
@@ -141,8 +139,9 @@ def execute_buys(state, cands, date, spot, params):
         shares = int(per_stock / adj / 100) * 100
         if shares <= 0 or shares * adj > state.cash:
             continue
-        buy(state, code, price, date, shares)
+        state = buy(state, code, price, date, shares)
         bought += 1
+    return state
 
 
 # ── 主流程 ──────────────────────────────────────────────────────
@@ -180,7 +179,7 @@ def run_signal(strategy_name, date):
     plan = {
         'date': str(date),
         'strategy': strategy_name,
-        'sell_plan': [c for c, _ in to_sell],
+        'sell_plan': [c for c, _, _ in to_sell],
         'buy_plan': [{'code': c, 'score': round(s, 2)} for c, s in cands[:params.get("MAX_DAILY_BUY", 6)]],
         'timestamp': datetime.now().isoformat(),
     }
@@ -232,11 +231,11 @@ def run_execute(strategy_name, date):
     # 先卖
     for code in plan.get('sell_plan', []):
         if code in state.holdings and code in spot:
-            sell(state, code, spot[code], date, 'plan')
+            state = sell(state, code, spot[code], date, 'plan')
 
     # 后买
     cands = [(b['code'], b.get('score', 0)) for b in plan.get('buy_plan', [])]
-    execute_buys(state, cands, date, spot, params)
+    state = execute_buys(state, cands, date, spot, params)
 
     save_account(state, account_id)
     logger.info(f"执行完成: 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")

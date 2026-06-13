@@ -41,14 +41,14 @@ def load_strategy(name):
 
 
 STRATEGY_MAP = {
-    # ── v11b: Ensemble 截面因子（账户1）──
+    # ── v11b: Ensemble 截面因子（账户1，legacy 模式）──
     "v11b": {
-        "mode": "ensemble",
+        "mode": "legacy",
         "description": "Ensemble 截面因子选股（Momentum+Volatility+Reversal 3组并集）",
         "account_id": 1,
-        "timing": "intraday",  # 11:45信号 → 13:00执行
-        "config": "STRATEGY_PROFILES.v11b_zz800_union",
-        # v11b 走 StrategyEngine，不需要自定义 select_fn
+        "timing": "intraday",
+        "script": "scripts.sim.sim_account1",  # 直接调用原脚本
+        "note": "v11b 使用 StrategyEngine + 逐只加载，暂不走统一入口",
     },
 
     # ── v27: 价量共振动量（账户2）──

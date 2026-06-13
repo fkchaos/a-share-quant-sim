@@ -74,7 +74,7 @@ def _zscore(df):
 delist_risk = (-_zscore(price_level) + -_zscore(price_trend) +
                -_zscore(vol_shrink) + _zscore(vol_abnormal)) / 4.0
 
-IC = 200000; MH = 8; MDB = 6; MP = 0.20; HM = 5
+IC = 200000; MH = 8; MDB = 8; MP = 0.30; HM = 5
 SL = -0.015; SP = 0.03; CR = 0.0003; ST = 0.001; SR = 0.002
 
 def run_window(win_close, win_open, win_mom5, win_gap, win_illiq, win_boll,
@@ -152,8 +152,8 @@ def run_window(win_close, win_open, win_mom5, win_gap, win_illiq, win_boll,
         cands.sort(key=lambda x: x[1], reverse=True)
         cands = [c for c, s in cands[:MH] if c not in holdings]
 
-        if cands and cash > IC * 0.1 and len(holdings) < MH:
-            avail = cash - IC * 0.1; nb = min(len(cands), MDB, MH - len(holdings))
+        if cands and cash > IC * 0.03 and len(holdings) < MH:
+            avail = cash - IC * 0.03; nb = min(len(cands), MDB, MH - len(holdings))
             per = min(avail / nb, IC * MP)
             for c in cands[:MDB]:
                 if len(holdings) >= MH or nb <= 0: break

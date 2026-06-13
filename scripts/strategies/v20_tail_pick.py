@@ -55,8 +55,8 @@ class V20Config:
 
     # 择时参数
     max_daily_buy = 6       # 每日最多买 6 只
-    max_holdings = 8        # 最大持仓 8 只
-    max_position = 0.20     # 单只最大仓位 20%
+    max_holdings = 12        # 最大持仓 12 只
+    max_position = 0.25     # 单只最大仓位 25%
     hold_days_max = 5       # 最大持仓天数
     hold_days_min = 1       # 最小持仓天数
 

@@ -62,8 +62,8 @@ STRATEGY_MAP = {
         "params": {
             "STOP_LOSS": -0.015,
             "TAKE_PROFIT": 0.03,
-            "MAX_HOLDINGS": 8,
-            "MAX_DAILY_BUY": 6,
+            "MAX_HOLDINGS": 12,
+            "MAX_DAILY_BUY": 8,
             "MAX_POSITION": 0.25,
             "HOLD_DAYS_MAX": 5,
             "HOLD_DAYS_MIN": 2,
@@ -82,8 +82,8 @@ STRATEGY_MAP = {
         "params": {
             "STOP_LOSS": -0.05,
             "TAKE_PROFIT": 0.25,
-            "MAX_HOLDINGS": 8,
-            "MAX_DAILY_BUY": 6,
+            "MAX_HOLDINGS": 12,
+            "MAX_DAILY_BUY": 8,
             "MAX_POSITION": 0.25,
             "HOLD_DAYS_MAX": 5,
         },

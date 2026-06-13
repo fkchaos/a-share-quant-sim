@@ -9,35 +9,80 @@
 ## 架构概览
 
 ```
-┌──────────────────┐          ┌──────────────────┐
-│  sim_account1.py │          │  run_backtest.py │
-│  (账户1 三阶段)   │          │  (回测引擎)       │
-│ 11:45信号13:00执行│          │ --exec-timing    │
-│ 15:30收盘报告     │          │ --walk-forward   │
-└────────┬─────────┘          └────────┬─────────┘
-         │ 调用                         │ 调用
-         ▼                             ▼
-┌─────────────────────────────────────────────┐
-│                  core/ (共享引擎)             │
-│  config.py  ← STRATEGY_PROFILES + MarketFilter│
-│  factors.py ← 40 技术因子计算                 │
-│  scoring.py ← Z-score + Ensemble 多组选股     │
-│  strategy.py← StrategyEngine (5种模式)        │
-│  account.py ← PortfolioState + buy/sell/风控  │
-│  db.py      ← SQLite 数据库层                 │
-└─────────────────────────────────────────────┘
-         ▲                             ▲
-         │ 数据                         │ 数据
-┌────────┴─────────┐          ┌────────┴─────────┐
-│ update_daily_    │          │ data/             │
-│ data_async.py    │          │ ├── daily/ (CSV)  │
-│ (腾讯 API → DB)  │          │ └── quant.db (DB) │
-└──────────────────┘          └──────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                     cron 调度层（7个任务）                      │
+│  账户1(v11b)  账户2(v27)  账户3(v20c)  收盘报告                 │
+└──────────┬──────────────────────────┬───────────────────────┘
+           │                          │
+           ▼                          ▼
+┌─────────────────────┐   ┌──────────────────────────────────┐
+│ scripts/sim/        │   │ core/strategy_map.py             │
+│ sim_account1.py     │   │  策略注册表（动态加载选股函数）      │
+│ (v11b legacy)       │   │  v11b → legacy 模式              │
+│                     │   │  v27  → v27_select.py           │
+│ account_runner.py   │◄──│  v20c → v20_tail_pick.py        │
+│ (统一入口)           │   └──────────────────────────────────┘
+│ --strategy v27|v20c │
+│ intraday_signal     │   ┌──────────────────────────────────┐
+│ intraday_execute    │   │ scripts/strategies/               │
+│ tail_signal         │   │  选股逻辑（可被回测+模拟盘共用）     │
+│ report_only         │   └──────────────────────────────────┘
+└──────────┬──────────┘
+           │
+           ▼
+┌──────────────────────────────────────────────┐
+│                  core/ (共享引擎)              │
+│  config.py   ← STRATEGY_PROFILES + MarketFilter│
+│  account.py  ← PortfolioState + buy/sell/风控  │
+│  db.py       ← SQLite 数据库层                 │
+│  factors.py  ← 40 技术因子计算                 │
+│  scoring.py  ← Z-score + Ensemble 评分         │
+│  strategy.py ← StrategyEngine                  │
+└──────────────────────────────────────────────┘
+           ▲
+           │ 数据
+┌──────────┴──────────┐
+│ /root/data/quant.db  │
+│  account/holdings/   │
+│  trade_log/daily_kline│
+└─────────────────────┘
+```
 
-┌──────────────────┐
-│  sim_account2.py │  账户2 (v13 中短线)
-│  sim_account3.py │  账户3 (v20 尾盘)
-└──────────────────┘
+## 目录结构
+
+```text
+a-share-quant-sim/
+├── core/                    # 共享引擎（回测+模拟盘共用）
+│   ├── config.py            # 策略配置、交易成本、风控参数
+│   ├── account.py           # PortfolioState + buy/sell 纯函数
+│   ├── db.py                # SQLite 数据库层
+│   ├── strategy_map.py      # 策略注册表（动态加载选股函数）
+│   ├── factors.py           # 40个技术因子计算
+│   ├── scoring.py           # Z-score + Ensemble 评分
+│   └── strategy.py          # StrategyEngine
+│
+├── scripts/
+│   ├── sim/                 # 模拟盘执行层
+│   │   ├── account_runner.py    # 统一入口（v27/v20c）
+│   │   ├── sim_account1.py      # v11b legacy
+│   │   └── sim_account2_v13.py  # v13 备份
+│   │
+│   ├── strategies/          # 选股逻辑模块
+│   │   ├── v27_select.py        # v27 价量共振选股
+│   │   └── v20_tail_pick.py     # v20c 尾盘缩量选股
+│   │
+│   ├── backtest/            # 回测脚本
+│   ├── tools/               # 工具脚本
+│   └── archive/             # 归档
+│
+└── docs/                    # 文档
+    ├── ARCHITECTURE.md      # 架构文档
+    ├── STRATEGY_REGISTRY.md # 策略注册表
+    ├── RESULTS_LOG.md       # 回测结果记录
+    ├── CONFIG_REFERENCE.md  # 参数参考
+    ├── DEPLOY.md            # 部署文档
+    ├── USER_MANUAL.md       # 用户手册
+    └── archive/             # 归档文档
 ```
 
 ## 特性

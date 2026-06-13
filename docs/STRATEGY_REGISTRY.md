@@ -575,3 +575,45 @@ v20 (尾盘缩量企稳) ✅
 - walk_forward 只关心"切片窗口 + 跑回测"
 
 **新增**：`scripts/v12_weight_scan.py` — 多策略权重扫描工具
+
+---
+
+## 九、架构重构记录（2026-07-13）
+
+### 9.1 账户-策略解耦
+
+**问题**：每个策略对应一个独立的 sim 脚本，切换策略 = 切换脚本，无法灵活组合。
+
+**方案**：
+- 新增 `core/strategy_map.py`：策略名称 → 选股函数的映射表
+- 新增 `scripts/sim/account_runner.py`：统一模拟盘入口（`--strategy v27|v20c`）
+- 选股逻辑独立到 `scripts/strategies/`，可被回测和模拟盘共用
+
+**结果**：新增策略只需写选股函数 + 注册映射表，不改账户脚本。
+
+### 9.2 目录重构
+
+`scripts/` 从平铺 100+ 文件改为分层结构：
+
+| 目录 | 内容 |
+|------|------|
+| `scripts/sim/` | 模拟盘执行层（account_runner + legacy 脚本） |
+| `scripts/strategies/` | 选股逻辑模块（v27_select, v20_tail_pick） |
+| `scripts/backtest/` | 回测脚本 |
+| `scripts/tools/` | 工具脚本（数据更新、导入等） |
+| `scripts/archive/` | 归档旧版本 |
+
+### 9.3 account_runner load/save 修复
+
+**问题**：原代码调用不存在的 `load_account_for_sim` / `save_account_for_sim`。
+
+**修复**：
+- `load_account(id)`：`get_account(id)` 读现金 + `get_holdings(id)` 读持仓，从 `added_at` 计算 `hold_days`
+- `save_account(state, id)`：`upsert_account` 写现金 + `upsert_holding` 写持仓 + `delete_holding` 删已清仓
+
+### 9.4 Cron 路径更新
+
+7 个 cron job 全部更新：
+- v27/v20c → `scripts/sim/account_runner.py --strategy X`
+- v11b → `scripts/sim/sim_account1.py`（legacy）
+- 回测脚本 → `scripts/backtest/run_backtest.py`

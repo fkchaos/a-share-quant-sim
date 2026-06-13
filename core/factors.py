@@ -556,3 +556,54 @@ def calc_factors_panel(
         factors['industry_rot'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
 
     return factors
+
+
+def calc_factors_panel_v11b(close_panel, volume_panel, high_panel, low_panel):
+    """v11b 专用 panel 因子计算（仅 13 个因子，无截面回归，飞快）
+
+    需要的因子：
+      momentum: mom_20, mom_10, rsi_14, high_low_range
+      volatility: vol_60, vol_20, vol_10, boll_width_20
+      reversal: rev_10, rev_5, rsi_6, boll_pos_10
+      extra: small_cap (log_market_cap)
+    """
+    returns = close_panel.pct_change()
+    eps = 1e-10
+    factors = {}
+
+    # Momentum
+    factors['mom_20'] = close_panel.pct_change(20)
+    factors['mom_10'] = close_panel.pct_change(10)
+
+    # Reversal
+    factors['rev_10'] = -close_panel.pct_change(10)
+    factors['rev_5'] = -close_panel.pct_change(5)
+
+    # Volatility
+    factors['vol_10'] = returns.rolling(10).std()
+    factors['vol_20'] = returns.rolling(20).std()
+    factors['vol_60'] = returns.rolling(60).std()
+
+    # RSI
+    for w, name in [(6, 'rsi_6'), (14, 'rsi_14')]:
+        delta = close_panel.diff()
+        gain = delta.where(delta > 0, 0).rolling(w).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(w).mean()
+        rs = gain / loss.replace(0, np.nan)
+        factors[name] = 100 - (100 / (1 + rs))
+
+    # high_low_range
+    factors['high_low_range'] = (high_panel - low_panel) / (close_panel + eps)
+
+    # Bollinger
+    ma10 = close_panel.rolling(10).mean()
+    std10 = close_panel.rolling(10).std()
+    factors['boll_pos_10'] = (close_panel - (ma10 - 2 * std10)) / (4 * std10 + eps)
+    ma20 = close_panel.rolling(20).mean()
+    std20 = close_panel.rolling(20).std()
+    factors['boll_width_20'] = (4 * std20) / (ma20 + eps)
+
+    # small_cap (用 close * volume 作为市值代理)
+    factors['small_cap'] = -(np.log(close_panel * volume_panel + eps))
+
+    return factors

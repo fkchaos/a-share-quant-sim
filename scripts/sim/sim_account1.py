@@ -240,28 +240,30 @@ def step_load_prices(intdb=False):
         return None, None, None, None
 
     if not intdb:
-        # ── 日终模式: 从 DB 获取最新一天收盘价 ──
-        # 采样第一只股票确定最新日期
-        sample_kl = get_kline(codes[0], limit=1)
-        if not sample_kl:
-            logger.error("DB 中没有 K 线数据")
-            return None, None, None, None
-        latest_date_str = sample_kl[0]["date"]
-        
-        price_data = pd.Series(dtype=float)
-        code_dataframes = {}
-        for code in codes:
-            kl = get_kline(code)
-            if kl:
-                df = pd.DataFrame(kl)
-                df['date'] = pd.to_datetime(df['date'])
-                df = df.set_index('date').sort_index()
-                code_dataframes[code] = df
-                # 用最新日期的收盘价
-                last_row = df.iloc[-1]
-                price_data[code] = last_row['close']
+        # ── 日终模式: 从 DB 获取最新一天收盘价（panel 向量化）──
+        # 一次加载全部数据（替代 715 次 get_kline）
+        from core.db import load_panel_from_db
+        _panels, _ = load_panel_from_db(need_hl=True)
+        _cp = _panels[0]
 
-        logger.info(f"📅 DB 数据: {len(codes)} 只 | 最新: {latest_date_str} | code_dataframes: {len(code_dataframes)} 只")
+        # 采样最后一行为最新日期截面
+        _latest_date = _cp.index[-1]
+        latest_date_str = str(_latest_date.date())
+
+        # price_data = 最新日期收盘价
+        price_data = _cp.loc[_latest_date]
+
+        # code_dataframes 保留接口兼容
+        # 存全部 panels 供后续因子计算复用（避免重复加载）
+        code_dataframes = {
+            '_panel': _cp,
+            '_panels': _panels,  # tuple of (close, volume, amount, open?, high?, low?)
+        }
+        if len(_cp) >= 2:
+            code_dataframes['_prev_close'] = _cp.iloc[-2]
+            code_dataframes['_last_close'] = _cp.iloc[-1]
+
+        logger.info(f"📅 DB 数据: {_cp.shape[1]} 只 | 最新: {latest_date_str} (panel 向量化)")
 
         return latest_date_str, price_data, code_dataframes, codes
 
@@ -288,24 +290,15 @@ def step_load_prices(intdb=False):
         date_str = f"{now.strftime('%Y-%m-%d')}_AM"
         logger.info(f"盘中数据时间: {now.strftime('%H:%M')}, 有效股票 {len(price_data)} 只")
 
-        # 同时从 DB 加载历史数据供因子计算用
-        code_dataframes = {}
-        latest_dates = {}
-        for code in codes:
-            kl = get_kline(code)
-            if kl:
-                df = pd.DataFrame(kl)
-                df['date'] = pd.to_datetime(df['date'])
-                df = df.set_index('date').sort_index()
-                code_dataframes[code] = df
-                if len(df) > 0:
-                    latest_dates[code] = df.index[-1]
-
-        if latest_dates:
-            newest = max(latest_dates.values())
-            today = datetime.now().date()
-            days_behind = (today - newest.date()).days
-            logger.info(f"📅 DB 数据: {len(latest_dates)} 只 | 最新: {newest.date()} | 滞后: {days_behind}天")
+        # 同时从 DB 加载历史数据供因子计算用（panel 向量化）
+        from core.db import load_panel_from_db
+        _panels_pm, _ = load_panel_from_db(need_open=False, need_hl=True)
+        _cp_pm = _panels_pm[0]
+        code_dataframes = {'_panel': _cp_pm, '_panels': _panels_pm}
+        if len(_cp_pm) >= 2:
+            code_dataframes['_prev_close'] = _cp_pm.iloc[-2]
+            code_dataframes['_last_close'] = _cp_pm.iloc[-1]
+        latest_dates = None
 
         return date_str, price_data, code_dataframes, codes
 
@@ -472,15 +465,35 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
     logger.info("🔄 调仓日 — 生成操作计划")
 
     # 生成因子（从 DB 读取历史数据）
+    # ── 因子计算（panel 向量化，替代逐只循环）──
+    from core.factors import calc_factors_panel_v11b
+
+    # 复用 step_load_prices 已加载的 panels（避免重复加载）
+    _panels = code_dataframes.get('_panels')
+    if _panels is None:
+        from core.db import load_panel_from_db
+        _panels, _ = load_panel_from_db(need_hl=True)
+    _cp = _panels[0]
+    _vp = _panels[1]
+    _hp = _panels[3] if len(_panels) > 3 else None
+    _lp = _panels[4] if len(_panels) > 4 else None
+
+    # v11b 专用因子（仅 13 个，无截面回归，飞快）
+    _factors_panel = calc_factors_panel_v11b(_cp, _vp, _hp, _lp)
+
+    # 转成 score_single 需要的 {code: {factor: float}} 格式
+    # 取最新日期的截面
+    _latest_date = _cp.index[-1]
     all_factors = {}
-    from core.db import get_kline
     for code in codes:
-        kl = get_kline(code)
-        if kl and len(kl) > 120:
-            df = pd.DataFrame(kl)
-            df['date'] = pd.to_datetime(df['date'])
-            df = df.set_index('date').sort_index()
-            all_factors[code] = calc_factors_single(df)
+        if code in _cp.columns:
+            all_factors[code] = {
+                fname: fpanel.loc[_latest_date, code]
+                for fname, fpanel in _factors_panel.items()
+                if _latest_date in fpanel.index and code in fpanel.columns
+            }
+
+    logger.info(f"因子计算: {len(all_factors)} 只, {len(_factors_panel)} 个因子 (panel 向量化)")
 
     # ── 评分（通过 Strategy Engine）──
     # 小市值择时：构造 dynamic_weights
@@ -710,14 +723,24 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
                 logger.warning(f"  ⚠️ {code} 价格无效 ({p}), 跳过")
                 continue
 
-            # P0-1: 涨跌停检查
-            if code in code_dataframes:
-                ctx = build_trade_context(code, code_dataframes[code], date)
-                if ctx:
-                    blocked, reason = ctx.is_sell_blocked()
-                    if blocked:
-                        logger.warning(f"  ⏭️ {code} {item['name']} 【{reason}】暂无法卖出")
-                        exec_report['results'].append({'code': code, 'action': 'sell', 'status': 'blocked', 'reason': reason})
+            # P0-1: 涨跌停检查（panel 向量化）
+            _prev_close = code_dataframes.get('_prev_close')
+            if _prev_close is not None and code in _prev_close.index:
+                _pc = _prev_close[code]
+                if pd.notna(_pc) and _pc > 0:
+                    from scripts.tools.constraints import _limit_pct_for_symbol
+                    _pct = _limit_pct_for_symbol(code)
+                    _limit_up = round(_pc * (1 + _pct), 2)
+                    _limit_down = round(_pc * (1 - _pct), 2)
+                    if p >= _limit_down * 1.001 and p <= _limit_down:
+                        pass  # 浮点误差宽容
+                    elif p <= _limit_down:
+                        logger.warning(f"  ⏭️ {code} {item['name']} 跌停(_limit_down), 暂无法卖出")
+                        exec_report['results'].append({'code': code, 'action': 'sell', 'status': 'blocked', 'reason': '跌停'})
+                        continue
+                    if p >= _limit_up:
+                        logger.warning(f"  ⏭️ {code} {item['name']} 涨停({_limit_up}), 暂无法卖出")
+                        exec_report['results'].append({'code': code, 'action': 'sell', 'status': 'blocked', 'reason': '涨停'})
                         continue
 
             old_shares = state.holdings[code]['shares']
@@ -762,14 +785,17 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
         if pd.isna(p) or p <= 0:
             continue
 
-        # P0-1: 涨跌停检查
-        if code in code_dataframes:
-            ctx = build_trade_context(code, code_dataframes[code], date)
-            if ctx:
-                blocked, reason = ctx.is_buy_blocked()
-                if blocked:
-                    logger.warning(f"  ⏭️ {code} {item['name']} 【{reason}】无法买入")
-                    exec_report['results'].append({'code': code, 'action': 'buy', 'status': 'blocked', 'reason': reason})
+        # P0-1: 涨跌停检查（panel 向量化）
+        _prev_close = code_dataframes.get('_prev_close')
+        if _prev_close is not None and code in _prev_close.index:
+            _pc = _prev_close[code]
+            if pd.notna(_pc) and _pc > 0:
+                from scripts.tools.constraints import _limit_pct_for_symbol
+                _pct = _limit_pct_for_symbol(code)
+                _limit_up = round(_pc * (1 + _pct), 2)
+                if p >= _limit_up:
+                    logger.warning(f"  ⏭️ {code} {item['name']} 涨停({_limit_up}), 无法买入")
+                    exec_report['results'].append({'code': code, 'action': 'buy', 'status': 'blocked', 'reason': '涨停'})
                     continue
 
         target_mv = item.get('target_amount', 0)

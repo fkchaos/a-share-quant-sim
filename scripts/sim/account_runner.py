@@ -72,18 +72,65 @@ def load_panel(codes, min_days=60):
 
 # ── 账户操作 ──────────────────────────────────────────────────────
 def load_account(account_id):
-    from core.db import load_account_for_sim, get_account
-    state, loaded = load_account_for_sim(account_id=account_id)
-    if loaded:
-        return state
+    """从 DB 加载账户状态，返回 PortfolioState"""
+    from core.db import get_account, get_holdings, upsert_account
     acct = get_account(account_id)
-    capital = acct["initial_capital"] if acct else 100000
-    return PortfolioState(cash=capital, initial_capital=capital, holdings={}, trade_log=[])
+    if not acct:
+        # 首次运行：在 DB 创建账户记录
+        init_cap = {1: 200000, 2: 100000, 3: 100000}.get(account_id, 100000)
+        upsert_account(account_id=account_id, cash=init_cap, initial_capital=init_cap)
+        return PortfolioState(cash=init_cap, initial_capital=init_cap, holdings={}, trade_log=[])
+
+    holdings_raw = get_holdings(account_id)
+    holdings = {}
+    for code, h in holdings_raw.items():
+        added = h.get("added_at", "")
+        hd = 0
+        if added:
+            try:
+                from datetime import datetime as dt
+                buy_dt = dt.strptime(added[:10], "%Y-%m-%d")
+                hd = max(0, (dt.now() - buy_dt).days)
+            except Exception:
+                pass
+        holdings[code] = {
+            "code": code,
+            "name": h.get("name", ""),
+            "shares": h.get("shares", 0),
+            "cost_price": h.get("cost_price", 0),
+            "hold_days": hd,
+            "added_at": added,
+        }
+
+    state = PortfolioState(
+        cash=acct["cash"],
+        initial_capital=acct["initial_capital"],
+        holdings=holdings,
+        trade_log=[],
+    )
+    logger.info(f"加载账户{account_id}: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
+    return state
 
 
 def save_account(state, account_id):
-    from core.db import save_account_for_sim
-    save_account_for_sim(state, account_id=account_id)
+    """保存账户状态到 DB"""
+    from core.db import upsert_account, upsert_holding, delete_holding, get_holdings
+    # 保存现金
+    upsert_account(account_id=account_id, cash=state.cash, initial_capital=state.initial_capital)
+    # 同步持仓
+    db_holdings = set(get_holdings(account_id).keys())
+    new_holdings = set(state.holdings.keys())
+    # 删除已清仓
+    for code in db_holdings - new_holdings:
+        delete_holding(account_id, code)
+    # 更新/新增持仓
+    for code, h in state.holdings.items():
+        upsert_holding(
+            account_id, code,
+            name=h.get("name", ""),
+            shares=h.get("shares", 0),
+            cost_price=h.get("cost_price", 0),
+        )
     logger.info(f"账户{account_id}已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
 
 
@@ -163,16 +210,24 @@ def run_signal(strategy_name, date):
         return
     cp, vp, ap, hp, lp, op = panels
 
-    # 计算因子
-    factors = strategy["calc_factors"](cp, vp, ap, hp, lp, op, params)
-
     # 风控
     state = load_account(account_id)
     price_data = cp.loc[date] if date in cp.index else pd.Series()
     to_sell = check_risk(state, date, price_data, params)
 
-    # 选股
-    cands = strategy["select_stocks"](factors, date, state.holdings, params)
+    # 选股（不同策略函数签名不同，分别适配）
+    if strategy_name == "v20c":
+        # v20c: calc_tail_pick_factors(cp, vp, ap, hp, lp) 无 params
+        #        select_stocks_tail_pick(factors, date, cp, vp, ap, hp, lp, holdings)
+        factors = strategy["calc_factors"](cp, vp, ap, hp, lp)
+        raw_cands = strategy["select_stocks"](factors, date, cp, vp, ap, hp, lp, state.holdings)
+        cands = [(c, 0.0) for c in raw_cands]  # v20c 返回 code list，补 score=0
+    else:
+        # v27: calc_factors(cp, vp, ap, hp, lp, op, params)
+        #       select_stocks(factors, date, holdings, params) → [(code, score)]
+        factors = strategy["calc_factors"](cp, vp, ap, hp, lp, op, params)
+        cands = strategy["select_stocks"](factors, date, state.holdings, params)
+
     cands = cands[:params.get("MAX_HOLDINGS", 8)]
 
     # 生成计划

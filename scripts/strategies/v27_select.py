@@ -15,8 +15,8 @@ import numpy as np
 DEFAULT_PARAMS = {
     "MOM_THRESHOLD": 0.02,
     "MAX_HOLDINGS": 8,
-    "MAX_DAILY_BUY": 6,
-    "MAX_POSITION": 0.20,
+    "MAX_DAILY_BUY": 8,
+    "MAX_POSITION": 0.30,
     "HOLD_DAYS_MAX": 5,
     "STOP_LOSS": -0.015,
     "TAKE_PROFIT": 0.03,

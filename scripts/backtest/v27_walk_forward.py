@@ -115,40 +115,51 @@ def run_window(win_close, win_open, win_mom5, win_gap, win_illiq, win_boll,
             h = holdings[c]; cash += h['shares'] * sp * (1 - CR - ST - SR); sold.add(c)
         for c in sold: holdings.pop(c, None)
 
-        # v27 选股
+        # v27 选股（向量化版本）
         cands = []
         if date in win_mom5.index:
             m5 = win_mom5.loc[date].dropna()
-            for code in m5.index:
-                m = m5[code]
-                if m > 0.02:
-                    # 排除：量价严重背离
-                    if date in win_pv10.index and code in win_pv10.columns:
-                        pv = win_pv10.loc[date, code]
-                        if not pd.isna(pv) and pv < -0.5: continue
-                    s = m * 100
-                    # 共振加分
-                    if date in win_pv20.index and code in win_pv20.columns:
-                        pv20 = win_pv20.loc[date, code]
-                        if not pd.isna(pv20) and pv20 > 0: s += 0.5
-                    # gap
-                    if date in win_gap.index and code in win_gap.columns:
-                        gr = win_gap.loc[date, code]
-                        if not pd.isna(gr) and gr > 0.02: s += 0.5
-                    # illiq
-                    if date in win_illiq.index and code in win_illiq.columns:
-                        il = win_illiq.loc[date, code]
-                        if not pd.isna(il) and il > 0: s += 0.8
-                    # boll
-                    if date in win_boll.index and code in win_boll.columns:
-                        bw = win_boll.loc[date, code]
-                        if not pd.isna(bw) and bw > 1.2: s += 0.3
+            # 初筛：mom_5 > 0.02
+            mask = m5 > 0.02
+            if mask.any():
+                codes = m5[mask].index
+                # 排除：量价严重背离 (pv10 < -0.5)
+                if date in win_pv10.index:
+                    pv10 = win_pv10.loc[date]
+                    pv_mask = pv10.reindex(codes, fill_value=0) >= -0.5
+                    codes = codes[pv_mask]
+                if len(codes) == 0:
+                    pass
+                else:
+                    # 向量化评分
+                    scores = m5[codes] * 100
+                    # 共振加分 (pv20 > 0)
+                    if date in win_pv20.index:
+                        pv20 = win_pv20.loc[date]
+                        scores += (pv20[codes] > 0).astype(float) * 0.5
+                    # gap 加分
+                    if date in win_gap.index:
+                        gr = win_gap.loc[date]
+                        scores += (gr[codes] > 0.02).astype(float) * 0.5
+                    # illiq 加分
+                    if date in win_illiq.index:
+                        il = win_illiq.loc[date]
+                        scores += (il[codes] > 0).astype(float) * 0.8
+                    # boll 加分
+                    if date in win_boll.index:
+                        bw = win_boll.loc[date]
+                        scores += (bw[codes] > 1.2).astype(float) * 0.3
                     # 排除退市风险
-                    if date in win_dr.index and code in win_dr.columns:
-                        dr_val = win_dr.loc[date, code]
-                        thr = win_dr.loc[date].quantile(0.9)
-                        if not pd.isna(dr_val) and dr_val > thr: continue
-                    cands.append((code, s))
+                    if date in win_dr.index:
+                        dr = win_dr.loc[date]
+                        thr = dr.quantile(0.9)
+                        dr_mask = dr.reindex(codes, fill_value=0) <= thr
+                        codes = codes[dr_mask]
+                    if len(codes) > 0:
+                        scores = scores.reindex(codes)
+                        cands = list(zip(codes, scores))
+                    else:
+                        cands = []
         cands.sort(key=lambda x: x[1], reverse=True)
         cands = [c for c, s in cands[:MH] if c not in holdings]
 
@@ -166,8 +177,14 @@ def run_window(win_close, win_open, win_mom5, win_gap, win_illiq, win_boll,
                 if sh <= 0 or sh * adj > cash: continue
                 cash -= sh * adj; holdings[c] = {'shares': sh, 'cost': bp, 'hold_days': 0}; nb -= 1
 
-        nav = cash + sum(h['shares'] * pd_[c] for c, h in holdings.items()
-                        if c in pd_.index and not pd.isna(pd_[c]) and pd_[c] > 0)
+        # NAV（向量化）
+        if holdings:
+            h_codes = list(holdings.keys())
+            h_shares = np.array([holdings[c]['shares'] for c in h_codes])
+            p = pd_.reindex(h_codes).fillna(0).values
+            nav = cash + (h_shares * p).sum()
+        else:
+            nav = cash
         nav_list.append(nav)
 
     nav_s = pd.Series(nav_list)

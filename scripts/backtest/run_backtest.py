@@ -922,7 +922,7 @@ def main():
     if _has_quality_profile:
         print(f"  📊 加载基本面质量因子...")
         try:
-            from scripts.quality_data import build_quality_factors
+            from scripts.tools.quality_data import build_quality_factors
             _quality = build_quality_factors(codes, close_panel.index, start_year="2019")
             factors.update(_quality)
             print(f"  ✅ 质量因子已加载（共 {len(factors)} 个因子）")

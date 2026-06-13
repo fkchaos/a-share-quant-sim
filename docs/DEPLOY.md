@@ -1,187 +1,187 @@
 # 部署指南
 
+> 最后更新：2026-07-13
+
+---
+
 ## 系统要求
 
 - Python 3.10+
-- Linux / macOS（Windows 需改路径分隔符）
+- Linux
 - 网络访问 `gtimg.cn`（腾讯行情接口，免费）
+- SQLite 3（Python 内置）
+
+---
 
 ## 安装
 
 ```bash
-git clone git@github.com:fkchaos/a-share-quant-sim.git
-cd a-share-quant-sim
-pip install -r requirements.txt
+# 1. 克隆仓库
+git clone git@github.com:fkchaos/a-share-quant-sim.git /root/a-share-quant-sim
+cd /root/a-share-quant-sim
+
+# 2. 安装依赖
+pip install pandas numpy requests
+
+# 3. 创建数据目录
+mkdir -p /root/data/portfolio
 ```
 
-依赖：`pandas`, `numpy`, `requests`
+依赖：`pandas`, `numpy, `requests`（无其他第三方库）
+
+---
 
 ## 配置
 
-策略参数在 `core/config.py` 的 `STRATEGY_PROFILES` 字典中定义。
-交易成本（初始资金/佣金/印花税/滑点）在 `core/config.py` 的 `TradingCosts` dataclass 中定义。
-
-数据目录通过环境变量或代码配置：
+### 环境变量
 
 ```bash
-# 数据目录（默认 data/daily/，也可设环境变量 BACKTEST_DATA_DIR）
 export BACKTEST_DATA_DIR=/root/data
+export PYTHONPATH=/root/a-share-quant-sim
 ```
+
+### 数据库
+
+数据库文件：`/root/data/quant.db`（首次运行自动创建）
+
+```bash
+# 查看账户
+PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
+
+# 修改初始资金
+sqlite3 /root/data/quant.db "UPDATE account SET initial_capital=200000 WHERE id=1;"
+```
+
+### 策略参数
+
+- 策略参数：各选股模块的 Config 类（如 `scripts/strategies/v27_select.py` 中的 `V27Config`）
+- 交易成本：`core/config.py` 中的 `TradingCosts` dataclass
+- 风控参数：`core/config.py` 中的 `RiskLimits` dataclass
+
+---
 
 ## 初始化数据
 
-首次运行需要下载日 K 线数据：
+首次运行需要下载日 K 线数据（中证 800 成分股，约 1 分钟）：
 
 ```bash
-python scripts/update_daily_data_async.py
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/tools/update_daily_data_async.py
 ```
 
-- 默认下载中证 800 成分股（~800 只），约 1 分钟
-- 数据直接 upsert 到 `/root/data/quant.db`（SQLite）
-- 每天收盘后运行两次更新（11:31 上午 + 14:30 下午）
+数据直接 upsert 到 `/root/data/quant.db`。
+
+---
 
 ## 验证安装
 
 ```bash
-# 回测 v11b 中线策略（close 模式，理想情况）
-python scripts/run_backtest.py --strategy v11b_zz800_union
+cd /root/a-share-quant-sim
+export PYTHONPATH=/root/a-share-quant-sim
+export BACKTEST_DATA_DIR=/root/data
 
-# 回测 v13 中短线策略
-python scripts/run_backtest.py --strategy v13_small_mid_short
+# 回测 v11b
+python scripts/backtest/run_backtest.py --strategy v11b_zz800_union
 
-# 回测（open 模式，接近实盘）
-python scripts/run_backtest.py --strategy v11b_zz800_union --exec-timing open
-
-# Walk-Forward 过拟合检测
-python scripts/run_backtest.py --strategy v13_small_mid_short --walk-forward
-
-# 运行测试
+# 快速测试
 python -m pytest tests/ -v -k "not slow"
 ```
 
-## 模拟盘（三账户）
+---
 
-三个账户对应三个独立脚本，共享同一个数据库（`/root/data/quant.db`）：
+## Cron 调度（Hermes）
 
-| 账户 | 脚本 | 策略 | account_id | 调度 |
-|------|------|------|------------|------|
-| 账户1 | `sim_account1.py` | v11b 截面因子 | 1 | 11:45信号/13:00执行 |
-| 账户2 | `sim_account2.py` | v13 小市值反转 | 2 | 11:45信号/13:00执行 |
-| 账户3 | `sim_account3.py` | v20 尾盘缩量企稳 | 3 | 14:40信号/14:55执行 |
+系统使用 Hermes cron 管理 7 个定时任务：
 
-### Cron 调度（Hermes）
+| 时间 | 任务 | 命令 |
+|------|------|------|
+| 11:45 工作日 | 账户1-上午信号 | `python scripts/sim/sim_account1.py intraday_signal` |
+| 11:45 工作日 | 账户2-上午信号 | `python scripts/sim/account_runner.py --strategy v27 intraday_signal` |
+| 13:00 工作日 | 账户1-下午执行 | `python scripts/sim/sim_account1.py intraday_execute` |
+| 13:00 工作日 | 账户2-下午执行 | `python scripts/sim/account_runner.py --strategy v27 intraday_execute` |
+| 14:45 工作日 | 账户3-尾盘信号 | `python scripts/sim/account_runner.py --strategy v20c tail_signal` |
+| 14:55 工作日 | 账户3-尾盘执行 | `python scripts/sim/account_runner.py --strategy v20c tail_execute` |
+| 15:30 工作日 | 收盘报告 | 三个账户 report_only |
 
+所有命令需加环境变量：
 ```
-11:31  数据更新-上午（update_daily_data_async.py，直接 upsert DB）
-11:45  账户1-上午信号（sim_account1.py intraday_signal）
-11:45  账户2-上午信号（sim_account2.py intraday_signal）
-13:00  账户1-下午执行（sim_account1.py intraday_execute）
-13:00  账户2-下午执行（sim_account2.py intraday_execute）
-14:30  数据更新-下午
-14:40  账户3-尾盘信号（sim_account3.py tail_signal）
-14:55  账户3-尾盘执行（sim_account3.py tail_execute）
-15:30  收盘报告（三账户 report_only）
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data
 ```
 
-### 方式一：crontab
+### 查看 cron 状态
 
-```cron
-# 数据更新
-31 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data_async.py
-30 14 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/update_daily_data_async.py
-
-# 账户1（v11b）
-45 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py intraday_signal
-0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py intraday_execute
-
-# 账户2（v13）
-45 11 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py intraday_signal
-0 13 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py intraday_execute
-
-# 账户3（v20）
-40 14 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py tail_signal
-55 14 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py tail_execute
-
-# 收盘报告
-30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account1.py report_only
-30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account2.py report_only
-30 15 * * 1-5 cd /path/to/project && BACKTEST_DATA_DIR=/root/data python scripts/sim_account3.py report_only
+```bash
+hermes cron list
 ```
+
+---
 
 ## 数据目录结构
 
 ```
-data/
-├── daily/              # 日K线 CSV（可选备份）
-│   ├── 000001.csv
-│   └── ...
-├── quant.db            # SQLite 数据库（主数据源）
-│   ├── stock_pool      # 股票池（800只中证800）
-│   ├── daily_kline     # 日K线（112万条）
-│   ├── account         # 账户（3个）
-│   ├── holdings        # 持仓
-│   ├── trade_log       # 交易记录
-│   └── indicators      # 技术指标
-├── portfolio/          # 交易计划（自动生成）
-│   ├── trade_plan_v13.json
-│   └── trade_plan_v20.json
-├── signals/            # 因子缓存
-├── ml_models/          # ML 模型
-└── logs/               # 运行日志
+/root/data/
+├── quant.db              # SQLite 数据库（主数据源）
+│   ├── stock_pool        # 股票池（800只中证800）
+│   ├── daily_kline       # 日K线（112万条，2020-01~2026-06）
+│   ├── account           # 账户（3个）
+│   │   ├── id=1: v11b, 20万
+│   │   ├── id=2: v27, 10万
+│   │   └── id=3: v20c, 10万
+│   ├── holdings          # 持仓（按 account_id 区分）
+│   ├── trade_log         # 交易记录
+│   └── indicators        # 技术指标
+└── portfolio/            # 交易计划 + 日志
+    ├── trade_plan_v27.json
+    ├── trade_plan_v20c.json
+    ├── sim_account1.log
+    └── account_runner.log
 ```
 
-## ML 模型管理
-
-### 策略模式切换
-
-`sim_account1.py`（v11b）通过 `StrategyEngine` 运行，模式固定为 `ensemble`。
-
-策略配置文件（`s_config.json`）兼容保留，但不影响三账户体系：
-- 账户1（v11b）：ensemble 模式，3组因子并集
-- 账户2（v13）：独立脚本，评分排序选股
-- 账户3（v20）：独立脚本，尾盘缩量企稳
-
-### 手动训练
-
-```bash
-# 全量 ML 训练（约 60s，生成 /root/data/ml_models/）
-python scripts/train_ml_model.py
-
-# CLI 操作 DB 数据
-python scripts/cli.py account    # 查看账户
-python scripts/cli.py holdings   # 查看持仓
-python scripts/cli.py trades     # 查看交易记录
-
-### 自动训练（Hermes cron）
-
-每周一 06:00 自动训练，确保在开盘前完成：
-- 拉取最新代码
-- 加载 2021-01 ~ 最新全量数据
-- 训练 LGB + XGB + Ridge 三模型
-- 验证模型可加载
-- 备份旧模型到 `ml_models/archive/`
+---
 
 ## 常见问题
 
 **Q: 数据更新失败？**
-A: 腾讯接口偶尔不稳定，重试即可。检查网络是否能访问 `http://web.ifzq.gtimg.cn`。
+A: 腾讯接口偶尔不稳定，重试即可。检查网络：`curl -s "http://qt.gtimg.cn/q=sh600000" | iconv -f GBK -t UTF-8 | head -1`
 
-**Q: 回测结果跟 README 里不一样？**
-A: 数据区间和股票池不同会导致结果差异。当前基准用中证800（800只），2021-01 ~ 2026-06。详见 [docs/STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md)。
+**Q: 回测结果跟预期不一样？**
+A: 检查选股池是否正确排除了科创板/北交所（688/689/8/4/2）。当前选股池 715 只。
 
 **Q: 模拟盘初始资金对不上？**
-A: 初始资金在 DB `account` 表的 `initial_capital` 字段中定义。账户1=200000，账户2/3=100000。修改：`UPDATE account SET initial_capital=xxx WHERE id=1;`
+A: 初始资金在 DB `account` 表中。查看：`SELECT * FROM account;`
 
 **Q: cron 没执行？**
-A: 检查 cron job 状态。查看 `data/logs/` 下的日志找错误原因。
+A: `hermes cron list` 查看状态。检查 `/root/data/portfolio/` 下的日志。
+
+**Q: ModuleNotFoundError？**
+A: 确认设置了 `PYTHONPATH=/root/a-share-quant-sim`。
 
 **Q: 策略参数改了但没生效？**
-A: 策略参数在脚本中硬编码（STOP_LOSS、TAKE_PROFIT 等）。账户参数（initial_capital、cash）从 DB 读取。
+A: 策略参数在脚本中硬编码。修改后需重新跑回测验证，再提交代码。
+
+---
 
 ## 回测记录规范
 
 每次回测完成后，将结果追加到 `docs/RESULTS_LOG.md`：
 
 - **Date 列必须精确到秒**：格式 `YYYY-MM-DD HH:MM:SS`（CST 时区）
-- 用途：未来追溯时可通过 `git log --since="2026-06-01 14:17:00"` 精确定位回测前后的代码变更
-- 之前无精确时间的条目标记为"时间不详"
+- 用途：`git log --since="2026-07-13 12:00:00"` 精确定位代码变更
+
+---
+
+## 备份
+
+### 数据库备份
+
+```bash
+# 手动备份
+cp /root/data/quant.db /root/data/quant.db.bak.$(date +%Y%m%d)
+
+# 导出 SQL
+sqlite3 /root/data/quant.db .dump > /root/data/quant_backup_$(date +%Y%m%d).sql
+```
+
+### 记忆备份
+
+Hermes 配置和 skill 备份在 `/root/hermes-memery/`（GitHub: fkchaos/hermes-memery）。

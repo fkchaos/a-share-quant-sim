@@ -31,14 +31,14 @@ from core.factors import calc_factors_single
 from core.db import get_kline, get_all_codes
 
 # ── Auxiliary modules ──────────────────────────────────────────────
-from constraints import build_trade_context
-from data_quality import DataQualityAuditor, print_quality_report
-from portfolio_controls import cap_daily_turnover
-from industry import get_industry, portfolio_industry_breakdown, cap_industry_weights
-from indices import get_index_trends, IndexBenchmarkService
+from scripts.tools.constraints import build_trade_context
+from scripts.tools.data_quality import DataQualityAuditor, print_quality_report
+from scripts.tools.portfolio_controls import cap_daily_turnover
+from scripts.tools.industry import get_industry, portfolio_industry_breakdown, cap_industry_weights
+from scripts.tools.indices import get_index_trends, IndexBenchmarkService
 
 # ── Logging ────────────────────────────────────────────────────────
-from sim_logging import get_logger
+from scripts.tools.sim_logging import get_logger
 
 # ── Config ─────────────────────────────────────────────────────────
 _sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", "/root/data")

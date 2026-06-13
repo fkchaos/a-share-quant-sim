@@ -3,10 +3,12 @@
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'strategies'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.dirname(__file__))
 
-from scripts.v20_tail_pick import (
+from v20_tail_pick import (
     V20Config, load_panel, calc_tail_pick_factors, select_stocks_tail_pick,
 )
 

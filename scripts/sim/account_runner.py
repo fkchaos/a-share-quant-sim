@@ -165,10 +165,10 @@ def execute_sells(state, to_sell, date, spot):
 def execute_buys(state, cands, date, spot, params):
     """执行买入，返回新 state"""
     max_buy = params.get("MAX_DAILY_BUY", 6)
-    max_pos = params.get("MAX_POSITION", 0.25)
+    max_pos = params.get("MAX_POSITION", 0.30)
     max_hold = params.get("MAX_HOLDINGS", 8)
 
-    available = state.cash - state.initial_capital * 0.05
+    available = state.cash - state.initial_capital * 0.03
     if available <= 0:
         return state
 

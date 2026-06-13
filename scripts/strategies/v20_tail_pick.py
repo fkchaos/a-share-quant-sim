@@ -54,9 +54,9 @@ class V20Config:
     recent_limit_up = 20      # N天内有涨停历史（股性好）
 
     # 择时参数
-    max_daily_buy = 6       # 每日最多买 6 只
-    max_holdings = 12        # 最大持仓 12 只
-    max_position = 0.25     # 单只最大仓位 25%
+    max_daily_buy = 8       # 每日最多买 8 只
+    max_holdings = 8        # 最大持仓 8 只
+    max_position = 0.30     # 单只最大仓位 30%
     hold_days_max = 5       # 最大持仓天数
     hold_days_min = 1       # 最小持仓天数
 

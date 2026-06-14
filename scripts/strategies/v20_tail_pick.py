@@ -38,8 +38,8 @@ REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 # ============================================================
 class V20Config:
     # 选股池
-    min_liquidity = 300     # 最小日均成交额 300万
-    max_liquidity = 10000   # 最大日均成交额 1亿
+    min_liquidity = 100     # 最小日均成交额 100万
+    max_liquidity = 20000   # 最大日均成交额 2亿
     exclude_st = True
     exclude_new_ipo_days = 60
 
@@ -49,7 +49,7 @@ class V20Config:
     vol_vs_avg_max = 1.0     # 当日成交量 < 5日均量 × 1.0（缩量，从0.8放宽）
     range_vs_avg = 1.0        # 当日振幅 < 5日平均振幅 × 1.0（振幅收窄，从0.8放宽）
     amount_vs_avg_min = 0.5   # 当日成交额 / 20日平均成交额 > 0.5（不太冷清）
-    amount_vs_avg_max = 3.0   # 排除异常放量
+    amount_vs_avg_max = 5.0   # 排除异常放量（2亿上限后大市值股成交额比更高）
     price_above_ma5 = True    # 收盘价 > 5日均线（短期趋势向上）
     recent_limit_up = 20      # N天内有涨停历史（股性好）
 

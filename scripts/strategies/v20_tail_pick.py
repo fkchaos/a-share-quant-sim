@@ -57,12 +57,12 @@ class V20Config:
     max_daily_buy = 8       # 每日最多买 8 只
     max_holdings = 8        # 最大持仓 8 只
     max_position = 0.30     # 单只最大仓位 30%
-    hold_days_max = 5       # 最大持仓天数
+    hold_days_max = 2       # 最大持仓天数（v20c优化：5→2，夏普5.74/回撤3%）
     hold_days_min = 1       # 最小持仓天数
 
     # 风控参数
     stop_loss = -0.05       # 个股止损 -5%
-    stop_profit = 0.25      # 个股止盈 25%
+    stop_profit = 0.15      # 个股止盈 15%（v20c优化：25%→15%，减少超时比例）
     initial_capital = 200000  # 初始资金 20万
 
     # 交易成本

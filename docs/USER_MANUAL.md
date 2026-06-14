@@ -18,9 +18,10 @@
 - [六、添加新策略](#六添加新策略)
 - [七、参数配置](#七参数配置)
 - [八、定时调度](#八定时调度)
-- [九、测试](#九测试)
-- [十、常见问题排查](#十常见问题排查)
-- [十一：完整工作流示例](#十一完整工作流示例)
+- [九、数据库操作（账户/持仓/买卖）](#九数据库操作账户持仓买卖)
+- [十、测试](#十测试)
+- [十一、常见问题排查](#十一常见问题排查)
+- [十二、完整工作流示例](#十二完整工作流示例)
 
 ---
 
@@ -505,7 +506,138 @@ grep CRON /etc/log/syslog  # 查看 cron 日志（Ubuntu）
 
 ---
 
-## 九、测试
+## 九、数据库操作（账户/持仓/买卖）
+
+所有数据库操作通过 `scripts/tools/cli.py` 完成。**不需要写 SQL**，直接命令行操作。
+
+先设置环境变量（只需一次）：
+```bash
+export PYTHONPATH=/root/a-share-quant-sim
+```
+
+然后所有命令都是 `python scripts/tools/cli.py <命令> [参数]` 的格式。
+
+### 9.1 查看账户
+
+```bash
+python scripts/tools/cli.py account              # 查看账户1
+python scripts/tools/cli.py account 2            # 查看账户2
+python scripts/tools/cli.py account 3            # 查看账户3
+```
+
+输出：
+```
+=== 账户 2: v27 ===
+  现金:     ¥100,384.20
+  持仓市值: ¥12,456.80
+  总资产:   ¥112,841.00
+  初始资金: ¥100,000.00
+  收益率:   +12.84%
+  持仓数:   3 只
+```
+
+### 9.2 新建账户
+
+```bash
+# 新建账户4：名称 v28，资金 10 万，关联模拟盘脚本策略名 v28
+python scripts/tools/cli.py new-account --id 4 --name v28 --cash 100000 --strategy v28
+
+# 新建账户5：名称 test，资金 50 万
+python scripts/tools/cli.py new-account --id 5 --name test --cash 500000
+```
+
+### 9.3 删除账户
+
+```bash
+# 删除账户（必须先清仓）
+python scripts/tools/cli.py clear-holdings --account 4    # 先清仓
+python scripts/tools/cli.py del-account --id 4           # 再删除
+```
+
+### 9.4 调整资金
+
+```bash
+# 把账户2的现金设为 5 万（直接覆盖，不增不减）
+python scripts/tools/cli.py adjust --account 2 --cash 50000
+
+# 把账户3的现金设为 20 万
+python scripts/tools/cli.py adjust --account 3 --cash 200000
+```
+
+### 9.5 查看持仓
+
+```bash
+python scripts/tools/cli.py holdings              # 账户1持仓
+python scripts/tools/cli.py holdings 2            # 账户2持仓
+```
+
+输出：
+```
+代码     名称       持仓    成本      现价      市值       盈亏
+-----------------------------------------------------------------
+600519   贵州茅台    100   1500.00   1680.00   ¥168,000   +12.00%
+601318   中国平安    500     45.00     48.20   ¥24,100   +7.11%
+```
+
+### 9.6 手动加仓/减仓
+
+```bash
+# 给账户2加 100 股贵州茅台，成本价 1500
+python scripts/tools/cli.py adjust --account 2 --add-stock 600519 100 1500
+
+# 给账户2加 50 股中国平安，成本价 45
+python scripts/tools/cli.py adjust --account 2 --add-stock 601318 50 45
+
+# 清掉账户2的贵州茅台持仓
+python scripts/tools/cli.py adjust --account 2 --del-stock 600519
+```
+
+### 9.7 全部清仓
+
+```bash
+python scripts/tools/cli.py clear-holdings --account 2
+```
+
+### 9.8 手动买卖
+
+```bash
+# 买入：账户1买入 100 股 600519，价格 1500
+python scripts/tools/cli.py buy 600519 100 1500.0
+
+# 买入到账户2
+python scripts/tools/cli.py buy 600519 100 1500.0 2
+
+# 卖出：账户1卖出 50 股 600519，价格 1600
+python scripts/tools/cli.py sell 600519 50 1600.0
+
+# 卖出（指定账户2 + 原因）
+python scripts/tools/cli.py sell 600519 50 1600.0 2 "止盈"
+```
+
+### 9.9 查看交易记录
+
+```bash
+python scripts/tools/cli.py trades              # 账户1最近30条
+python scripts/tools/cli.py trades 2            # 账户2最近30条
+python scripts/tools/cli.py trades 1 50       # 账户1最近50条
+```
+
+### 9.10 查看股票行情
+
+```bash
+python scripts/tools/cli.py kline 600519         # 茅台最近20日K线
+python scripts/tools/cli.py kline 601318 50     # 平安最近50日K线
+```
+
+### 9.11 数据库统计
+
+```bash
+python scripts/tools/cli.py stats
+```
+
+---
+
+## 十、测试
 
 ```bash
 # 快速测试（<1s，跳过慢的）
@@ -529,7 +661,7 @@ python -m pytest tests/test_ensemble.py -v     # 19 个 Ensemble 测试
 
 ---
 
-## 十、常见问题排查
+## 十一、常见问题排查
 
 ### Q: ModuleNotFoundError: No module named 'scripts' 或 'core'
 
@@ -590,7 +722,7 @@ journalctl -u cron -n 20
 
 ---
 
-## 十一、完整工作流示例
+## 十二、完整工作流示例
 
 ### 场景 1：新策略从零开发到上线
 

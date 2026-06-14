@@ -1,125 +1,80 @@
 # 用户手册
 
-> A股量化模拟交易系统 — 完整使用说明
-> 最后更新：2026-07-13
+> 最后更新：2026-07-15
+
+零基础也能看懂。每条命令都可以直接复制粘贴。
+
+先看 [DEPLOY.md](DEPLOY.md) 完成安装，再读这本手册。
 
 ---
 
-## 一、系统概览
+## 目录
 
-### 架构
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     cron 调度层（7个任务）                      │
-│  账户1(v11b)  账户2(v27)  账户3(v20c)  收盘报告                 │
-└──────────┬──────────────────────────┬───────────────────────┘
-           │                          │
-           ▼                          ▼
-┌─────────────────────┐   ┌──────────────────────────────────┐
-│ scripts/sim/        │   │ core/strategy_map.py             │
-│ sim_account1.py     │   │  策略注册表（动态加载选股函数）      │
-│ (v11b legacy)       │   │  v11b → legacy 模式              │
-│                     │   │  v27  → v27_select.py           │
-│ account_runner.py   │◄──│  v20c → v20_tail_pick.py        │
-│ (统一入口)           │   └──────────────────────────────────┘
-│ --strategy v27|v20c │
-└──────────┬──────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────┐
-│                  core/ (共享引擎)              │
-│  config.py   ← STRATEGY_PROFILES + MarketFilter│
-│  account.py  ← PortfolioState + buy/sell       │
-│  db.py       ← SQLite 数据库层                 │
-│  factors.py  ← 40 技术因子计算                 │
-│  scoring.py  ← Z-score + Ensemble 评分         │
-│  strategy.py ← StrategyEngine                  │
-└──────────────────────────────────────────────┘
-           ▲
-           │ 数据
-┌──────────┴──────────┐
-│ /root/data/quant.db  │
-│  account/holdings/   │
-│  trade_log/daily_kline│
-└─────────────────────┘
-```
-
-### 三账户体系
-
-| 账户 | ID | 策略 | 资金 | 脚本 | 调仓时间 |
-|------|-----|------|------|------|---------|
-| 账户1 | 1 | v11b (legacy) | 20万 | scripts/sim/sim_account1.py | 11:45信号/13:00执行 |
-| 账户2 | 2 | v27 (价量共振) | 10万 | scripts/sim/account_runner.py --strategy v27 | 11:45信号/13:00执行 |
-| 账户3 | 3 | v20c (尾盘缩量) | 10万 | scripts/sim/account_runner.py --strategy v20c | 14:45信号/14:55执行 |
-
-### 策略模式
-
-| 模式 | 说明 | 使用策略 |
-|------|------|---------|
-| `legacy` | 独立脚本，不走 account_runner | v11b |
-| `custom` | 通过 strategy_map 注册，走 account_runner | v27, v20c |
-
-新增策略只需：1) 在 `scripts/strategies/` 写选股模块 2) 在 `core/strategy_map.py` 注册一行
+- [一、环境准备](#一环境准备)
+- [二、数据管理](#二数据管理)
+- [三、回测引擎](#三回测引擎)
+- [四、Walk-Forward 验证](#四walk-forward-验证)
+- [五、模拟盘](#五模拟盘)
+- [六、添加新策略](#六添加新策略)
+- [七、参数配置](#七参数配置)
+- [八、定时调度](#八定时调度)
+- [九、测试](#九测试)
+- [十、常见问题排查](#十常见问题排查)
+- [十一：完整工作流示例](#十一完整工作流示例)
 
 ---
 
-## 二、环境配置
+## 一、环境准备
 
-### 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `BACKTEST_DATA_DIR` | `/root/data` | 数据目录（quant.db + portfolio） |
-| `PYTHONPATH` | 需设置 | 项目根目录 `/root/a-share-quant-sim` |
+### 1.1 一次性设置（每次新开终端都要执行）
 
 ```bash
-export BACKTEST_DATA_DIR=/root/data
 export PYTHONPATH=/root/a-share-quant-sim
+export BACKTEST_DATA_DIR=/root/data
 ```
 
-### 数据目录结构
+验证：
+```bash
+echo $PYTHONPATH          # 应输出 /root/a-share-quant-sim
+ls $BACKTEST_DATA_DIR/quant.db  # 应能看到 quant.db 文件
+```
 
-```
-/root/data/
-├── quant.db              # SQLite 数据库（主数据源）
-│   ├── stock_pool        # 股票池（800只中证800）
-│   ├── daily_kline       # 日K线（112万条）
-│   ├── account           # 账户（3个，id=1/2/3）
-│   ├── holdings          # 持仓
-│   ├── trade_log         # 交易记录
-│   └── indicators        # 技术指标
-└── portfolio/            # 交易计划 + 报告
-    ├── trade_plan_v27.json
-    ├── trade_plan_v20c.json
-    └── ...
-```
+如果 `quant.db` 不存在，先初始化数据（见下一节）。
+
+### 1.2 命令格式约定
+
+本手册所有命令都假设上面两个环境变量已设置。如果报错 `ModuleNotFoundError` 或 `找不到数据`，先检查这两个变量。
 
 ---
 
-## 三、数据管理
+## 二、数据管理
 
-### 初始化数据
-
-首次运行需要下载日 K 线数据（中证 800 成分股，约 1 分钟）：
+### 2.1 首次初始化（只需跑一次）
 
 ```bash
-cd /root/a-share-quant-sim
+mkdir -p /root/data
 PYTHONPATH=/root/a-share-quant-sim python scripts/tools/update_daily_data_async.py
 ```
 
-数据直接 upsert 到 `/root/data/quant.db`（SQLite），CSV 为可选备份。
+运行后输出：
+```
+正在更新日K线数据...
+已更新 800 只股票，1120000 条记录
+数据已写入 /root/data/quant.db
+```
 
-### 日常更新
+产物：`/root/data/quant.db`（140MB），包含中证 800 成分股 2020-01 至今的日 K 线。
 
-每天收盘后运行一次（由 cron 自动执行）：
+### 2.2 日常更新（每天收盘后）
 
 ```bash
 PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
   python scripts/tools/update_daily_data_async.py
 ```
 
-### CLI 操作数据库
+数据直接 upsert 到数据库，不会重复。
+
+### 2.3 查看数据库内容
 
 ```bash
 # 查看账户
@@ -128,256 +83,575 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
 # 查看持仓
 PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py holdings
 
-# 查看交易记录
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py trades
+# 查看交易记录（最近 10 条）
+PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py trades --limit 10
 
-# 手动买入/卖出
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py buy --code 600519 --shares 100 --price 1500
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py sell --code 600519 --shares 100 --price 1600
+# SQL 直连（高级用户）
+sqlite3 /root/data/quant.db "SELECT * FROM account;"
+sqlite3 /root/data/quant.db "SELECT COUNT(*) FROM daily_kline;"
+sqlite3 /root/data/quant.db "SELECT * FROM holdings WHERE account_id=1;"
+```
+
+### 2.4 修改账户资金
+
+```bash
+sqlite3 /root/data/quant.db "UPDATE account SET initial_capital=500000 WHERE id=1;"
 ```
 
 ---
 
-## 四、回测引擎
+## 三、回测引擎
 
-### 基本用法
+### 3.1 基本用法
 
 ```bash
-cd /root/a-share-quant-sim
-export PYTHONPATH=/root/a-share-quant-sim
-export BACKTEST_DATA_DIR=/root/data
+# 跑单个策略
+python scripts/backtest/run_backtest.py --strategy v27
 
-# 回测单个策略
-python scripts/backtest/run_backtest.py --strategy v11b_zz800_union
+# 跑所有策略
+python scripts/backtest/run_backtest.py
 
 # 指定回测区间
-python scripts/backtest/run_backtest.py --strategy v11b_zz800_union --start 2023-01-01 --end 2024-12-31
+python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
 
-# Walk-Forward 验证
-python scripts/backtest/run_backtest.py --strategy v11b_zz800_union --walk-forward
+# 用开盘价执行（更接近实盘）
+python scripts/backtest/run_backtest.py --strategy v27 --exec-timing open
 ```
 
-### 完整参数列表
+### 3.2 完整参数列表
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--strategy` | `all` | 策略名（或 `all` 跑全部） |
-| `--start` | `2021-01-01` | 回测起始日期 |
-| `--end` | 今天 | 回测结束日期 |
-| `--exec-timing` | `close` | `close`=收盘价(理想) / `open`=开盘价(接近实盘) |
-| `--walk-forward` | off | Walk-Forward 过拟合检测 |
-| `--log` | off | 自动追加结果到 docs/RESULTS_LOG.md |
+| 参数 | 默认值 | 说明 | 示例 |
+|------|--------|------|------|
+| `--strategy` | `all` | 策略名，或 `all` 跑全部 | `--strategy v27` |
+| `--start` | `2021-01-01` | 回测起始日期 | `--start 2023-01-01` |
+| `--end` | 今天 | 回测结束日期 | `--end 2025-06-30` |
+| `--exec-timing` | `close` | `close`=收盘价(理想) / `open`=开盘价(接近实盘) | `--exec-timing open` |
+| `--walk-forward` | 关闭 | 启用 Walk-Forward 验证 | `--walk-forward` |
+| `--log` | 关闭 | 自动追加结果到 RESULTS_LOG.md | `--log` |
+| `--param` | 无 | 覆盖单个参数（可多次使用） | `--param top_n=15 rebalance_freq=10` |
 
-### 输出结果
+### 3.3 有哪些策略？
 
-回测结果保存在 `data/backtest_results/YYYYMMDD_HHMMSS/`：
-
+```bash
+# 查看帮助（列出所有可用策略）
+python scripts/backtest/run_backtest.py --help
 ```
-data/backtest_results/20260713_120000/
-├── summary.json          # 全部策略绩效指标
+
+当前可用策略：
+
+| 策略名 | 风格 | 全量年化 | 状态 |
+|--------|------|---------|------|
+| `v11b_zz800_union` | 多因子 Ensemble | ~30% | legacy 模式 |
+| `v27` | 价量共振 | ~252% | 推荐，WF 最优 |
+| `v20c` | 尾盘缩量 | ~59% | 推荐，WF 通过 |
+| `v13_small_mid_short` | 小市值反转 | ~68% | 独立运行 |
+
+### 3.4 输出在哪？
+
+每次回测结果保存在 `data/backtest_results/` 下，按时间戳命名：
+
+```bash
+# 查看最新的回测结果目录
+ls -lt /root/data/backtest_results/ | head -5
+
+# 查看某个回测的绩效摘要
+cat /root/data/backtest_results/20260715_120000/summary.json
+
+# 查看回测报告（Markdown）
+cat /root/data/backtest_results/20260715_120000/report.md
+```
+
+目录内容：
+```
+20260715_120000/
+├── summary.json          # 全部策略绩效指标（JSON）
 ├── comparison.csv        # 策略对比表
-├── nav_v11b.csv          # 净值曲线
-├── trades_v11b.csv       # 交易记录
-├── monthly_returns_v11b.csv  # 月度收益
-├── walk_forward.csv      # WF 结果
-└── report.md             # Markdown 报告
+├── nav_v27.csv           # 净值曲线（可用 Excel 打开画图）
+├── trades_v27.csv        # 全部交易记录
+├── monthly_returns_v27.csv  # 月度收益
+├── walk_forward.csv      # WF 结果（如有 --walk-forward）
+└── report.md             # Markdown 报告（人看的）
 ```
+
+### 3.5 单次回测需要多久？
+
+单策略全量回测（2020-2026，715 只股票）约 **50 秒**，内存占用约 **1GB**。
+
+如果需要扫描参数范围（保存到 `data/backtest_results/` 的 summary.json）：
+```bash
+# 扫描 lookback 在 12~24 个月、threshold 在 0.8~1.2 之间的所有组合
+python scripts/backtest/sweep_lookback_threshold.py
+```
+
+---
+
+## 四、Walk-Forward 验证
+
+### 4.1 什么是 Walk-Forward？
+
+Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段，用前一段训练参数，下一段验证，轮流滚动。
+
+如果在样本外也能赚钱，说明策略不是过拟合。
+
+### 4.2 运行 WF
+
+```bash
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v27_walk_forward.py
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20_walk_forward.py
+```
+
+### 4.3 怎么看结果
+
+```bash
+cat /root/data/backtest_results/wf_v27_latest.json
+```
+
+结果示例：
+```json
+{
+  "n_folds": 15,
+  "test_ann_return": "48.77%",
+  "test_sharpe": "8.61",
+  "test_max_dd": "-1.88%",
+  "positive_folds": "15/15 (100%)",
+  "pass": true
+}
+```
+
+### 4.4 判断标准
+
+| 指标 | 通过阈值 | 含义 |
+|------|---------|------|
+| 正收益 fold 比例 | ≥ 60% | 至少 10/16 folds 正收益 |
+| WF 平均 Sharpe | ≥ 0.5 | 样本外风险调整收益 |
+| 最差 fold | > -30% | 不能有一个 fold 亏太多 |
+
+全部满足 = **WF 通过**，策略可以上线模拟盘。
 
 ---
 
 ## 五、模拟盘
 
-### 账户1：v11b 中线策略（legacy）
+### 5.1 运行模式
+
+模拟盘分三步：**信号 → 执行 → 报告**，对应三个命令。每天按顺序跑。
+
+### 5.2 账户1：v11b（independent 模式）
 
 ```bash
-export PYTHONPATH=/root/a-share-quant-sim
-export BACKTEST_DATA_DIR=/root/data
+# 上午出信号（11:45 执行）
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/sim_account1.py intraday_signal
 
-# 上午信号（11:45）
-python scripts/sim/sim_account1.py intraday_signal
+# 下午开盘执行（13:00 执行）
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/sim_account1.py intraday_execute
 
-# 下午执行（13:00）
-python scripts/sim/sim_account1.py intraday_execute
-
-# 收盘报告（15:30）
-python scripts/sim/sim_account1.py report_only
+# 收盘报告（15:30 执行）
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/sim_account1.py report_only
 ```
 
-### 账户2：v27 价量共振（统一入口）
+### 5.3 账户2：v27（统一入口）
 
 ```bash
-export PYTHONPATH=/root/a-share-quant-sim
-export BACKTEST_DATA_DIR=/root/data
+# 上午出信号
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/account_runner.py --strategy v27 intraday_signal
 
-# 上午信号（11:45）
-python scripts/sim/account_runner.py --strategy v27 intraday_signal
+# 下午开盘执行
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/account_runner.py --strategy v27 intraday_execute
 
-# 下午执行（13:00）
-python scripts/sim/account_runner.py --strategy v27 intraday_execute
-
-# 收盘报告（15:30）
-python scripts/sim/account_runner.py --strategy v27 report_only
+# 收盘报告
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/account_runner.py --strategy v27 report_only
 ```
 
-### 账户3：v20c 尾盘缩量（统一入口）
+### 5.4 账户3：v20c（尾盘模式）
 
 ```bash
-export PYTHONPATH=/root/a-share-quant-sim
-export BACKTEST_DATA_DIR=/root/data
+# 尾盘出信号（14:45 执行）
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/account_runner.py --strategy v20c tail_signal
 
-# 尾盘信号（14:45）
-python scripts/sim/account_runner.py --strategy v20c tail_signal
+# 尾盘执行（14:55 执行）
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/account_runner.py --strategy v20c tail_execute
 
-# 尾盘执行（14:55）
-python scripts/sim/account_runner.py --strategy v20c tail_execute
-
-# 收盘报告（15:30）
-python scripts/sim/account_runner.py --strategy v20c report_only
+# 收盘报告（15:30 执行）
+PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+  python scripts/sim/account_runner.py --strategy v20c report_only
 ```
 
-### 新增策略
+### 5.5 执行后看结果
 
-1. 在 `scripts/strategies/` 创建选股模块，实现 `calc_factors()` + `select_stocks()`
-2. 在 `core/strategy_map.py` 注册：
+```bash
+# 查看交易计划（执行后生成）
+cat /root/data/portfolio/trade_plan_v27.json
+cat /root/data/portfolio/trade_plan_v20c.json
+
+# 查看运行日志
+tail -50 /root/data/portfolio/sim_account1.log
+tail -50 /root/data/portfolio/account_runner.log
+
+# 查看账户状态
+PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
+```
+
+### 5.6 一个账户只用跑一次怎么办？
+
+如果只想快速测试，不需要完整的三步流程，可以直接：
+```bash
+# 信号 + 执行一步完成
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v27 intraday_signal
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v27 intraday_execute
+```
+
+---
+
+## 六、添加新策略
+
+### 6.1 三步走
+
+**第 1 步：写选股模块**
+
+在 `scripts/strategies/` 下创建 `xxx_select.py`，实现两个函数：
+
 ```python
-"v27": {
-    "mode": "custom",
-    "select_fn": "scripts.strategies.v27_select.select_stocks_v27",
-    "calc_factors_fn": "scripts.strategies.v27_select.calc_factors",
-    "account_id": 2,
-    "timing": "intraday",
+# scripts/strategies/my_strategy.py
+
+def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel):
+    """计算因子"""
+    import pandas as pd
+    factors = {}
+    factors['my_factor'] = close_panel.pct_change(5)  # 示例：5日动量
+    return factors
+
+def select_stocks_my(factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, current_holdings=None):
+    """选股：返回股票代码列表"""
+    if date not in factors['my_factor'].index:
+        return []
+
+    # 获取当日因子
+    f = factors['my_factor'].loc[date].dropna()
+    # 排除当前持仓
+    if current_holdings:
+        f = f.drop(index=current_holdings.keys(), errors='ignore')
+    # 取 top 8
+    return f.nlargest(8).index.tolist()
+```
+
+**第 2 步：在 strategy_map.py 注册**
+
+```python
+# core/strategy_map.py
+STRATEGY_MAP = {
+    # ... 已有条目 ...
+    "my_strategy": {
+        "mode": "custom",
+        "description": "我的策略",
+        "account_id": 2,
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.my_strategy.select_stocks_my",
+        "calc_factors_fn": "scripts.strategies.my_strategy.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.15,
+            "MAX_HOLDINGS": 8,
+            "MAX_DAILY_BUY": 6,
+            "MAX_POSITION": 0.25,
+        },
+    },
 }
 ```
-3. 运行：`python scripts/sim/account_runner.py --strategy v27 intraday_signal`
 
----
-
-## 六、配置参数
-
-### 策略参数
-
-策略参数在各选股模块的 Config 类中定义（如 `scripts/strategies/v27_select.py` 中的 `V27Config`）。
-
-### 账户参数
-
-账户资金在 DB `account` 表中：
-
-```sql
--- 查看
-SELECT id, name, cash, initial_capital, strategy FROM account;
-
--- 修改初始资金
-UPDATE account SET initial_capital=200000 WHERE id=1;
-```
-
-### 交易成本
-
-在 `core/config.py` 的 `TradingCosts` dataclass 中定义：
-
-```python
-@dataclass
-class TradingCosts:
-    commission_rate: float = 0.0003   # 佣金万3
-    stamp_tax_rate: float = 0.001     # 印花税千1（卖出）
-    slippage_rate: float = 0.001      # 滑点千1
-```
-
----
-
-## 七、测试
+**第 3 步：回测验证**
 
 ```bash
-cd /root/a-share-quant-sim
+# 先模拟盘试试能不能跑通
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py \
+  --strategy my_strategy intraday_signal
 
-# 快速测试（<1s）
+# 没问题再跑回测（需要在 run_backtest.py 或相关脚本中注册全量回测入口）
+```
+
+如果选股逻辑不依赖回测引擎，也可以先用独立脚本跑回测。参考 `scripts/strategies/v20_tail_pick.py` 的结构：`calc_tail_pick_factors()` + `select_stocks_tail_pick()` + 自己的回测引擎。
+
+### 6.2 常见踩坑
+
+1. **Config 类属性 vs 实例属性**：如果选股函数从 `XxxConfig` 类读取参数，修改参数时直接改类属性 `XxxConfig.xxx = value`，不要创建实例再修改。
+2. **factor 必须是 DataFrame**：索引是日期，列是股票代码。
+3. **select_stocks 返回 list[str]**：股票代码字符串列表。
+4. **`current_holdings` 参数**：是 dict `{code: {...}}` 或 None，选股时要排除。
+
+---
+
+## 七、参数配置
+
+### 7.1 参数在哪改？
+
+| 策略 | 配置文件 | 参数类 |
+|------|---------|--------|
+| v27 | `scripts/strategies/v27_select.py` | `V27Config` |
+| v20c | `scripts/strategies/v20_tail_pick.py` | `V20Config` |
+| v13 | `scripts/strategies/v13_small_mid_short.py` | `V13Config` |
+| v11b | `scripts/sim/sim_account1.py` | `CONFIG` 字典 |
+| 回测通用 | `core/config.py` | `CONFIG` 字典 |
+
+### 7.2 常用参数说明
+
+| 参数 | 含义 | 建议范围 | 改哪个文件 |
+|------|------|---------|-----------|
+| `stop_loss` | 止损线 | -0.01 ~ -0.10 | 各策略 Config |
+| `stop_profit` | 止盈线 | 0.05 ~ 0.30 | 各策略 Config |
+| `hold_days_max` | 最大持仓天数 | 2 ~ 8 | 各策略 Config |
+| `max_holdings` | 最大同时持仓数 | 4 ~ 15 | 各策略 Config |
+| `max_position` | 单只最大仓位 | 0.10 ~ 0.30 | 各策略 Config |
+| `min_liquidity` | 最小日均成交额（万） | 100 ~ 1000 | 各策略 Config |
+| `max_liquidity` | 最大日均成交额（万） | 5000 ~ 50000 | 各策略 Config |
+| `initial_capital` | 初始资金（元） | 100000 ~ 1000000 | DB account 表 |
+
+### 7.3 v20c 完整参数参考
+
+```python
+class V20Config:
+    # 选股池
+    min_liquidity = 100      # 最小日均成交额 100万
+    max_liquidity = 20000    # 最大日均成交额 2亿
+
+    # 因子参数
+    vol_vs_avg_max = 1.0     # 量比上限（软约束）
+    range_vs_avg = 1.0       # 振幅收窄上限
+    amount_vs_avg_min = 0.5  # 成交额倍数下限
+    amount_vs_avg_max = 5.0  # 成交额倍数上限
+
+    # 执行参数
+    max_daily_buy = 8        # 每日最多买 8 只
+    max_holdings = 8         # 最大持仓 8 只
+    max_position = 0.30      # 单只最大仓位 30%
+    hold_days_max = 2        # 最大持仓天数（优化后）
+    hold_days_min = 1        # 最小持仓天数
+
+    # 风控
+    stop_loss = -0.05        # 止损 -5%
+    stop_profit = 0.15       # 止盈 15%（优化后）
+    initial_capital = 200000 # 回测用 20万
+
+    # 交易成本
+    commission_rate = 0.0003 # 佣金万3
+    stamp_tax = 0.001        # 印花税千1（卖出）
+    slippage_rate = 0.002    # 滑点千2
+```
+
+### 7.4 v27 完整参数参考
+
+```python
+class V27Config:
+    # 风控
+    STOP_LOSS = -0.015       # 止损 -1.5%
+    TAKE_PROFIT = 0.03       # 止盈 3%
+    MAX_HOLDINGS = 12        # 最大持仓 12 只
+    MAX_DAILY_BUY = 8        # 每日最多买 8 只
+    MAX_POSITION = 0.25      # 单只最大仓位 25%
+    HOLD_DAYS_MAX = 5        # 最大持仓天数
+    HOLD_DAYS_MIN = 2        # 最小持仓天数
+
+    # 选股
+    MOM_THRESHOLD = 0.02     # 动量阈值 2%
+```
+
+---
+
+## 八、定时调度
+
+### 8.1 使用系统 crontab
+
+```bash
+crontab -e
+```
+
+添加以下内容（根据你的交易时间调整）：
+
+```cron
+# 工作日 11:35 — 数据更新
+35 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
+
+# 工作日 11:45 — 上午信号（账户1 + 账户2）
+45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/sim_account1.py intraday_signal >> /root/data/portfolio/sim_account1.log 2>&1
+45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 intraday_signal >> /root/data/portfolio/account_runner.log 2>&1
+
+# 工作日 13:00 — 下午执行（账户1 + 账户2）
+0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/sim_account1.py intraday_execute >> /root/data/portfolio/sim_account1.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 intraday_execute >> /root/data/portfolio/account_runner.log 2>&1
+
+# 工作日 14:45 — 尾盘信号（账户3）
+45 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v20c tail_signal >> /root/data/portfolio/account_runner.log 2>&1
+
+# 工作日 14:55 — 尾盘执行（账户3）
+55 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v20c tail_execute >> /root/data/portfolio/account_runner.log 2>&1
+
+# 工作日 15:30 — 收盘报告
+30 15 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 report_only >> /root/data/portfolio/account_runner.log 2>&1
+```
+
+### 8.2 验证 crontab
+
+```bash
+crontab -l          # 查看当前 crontab
+grep CRON /etc/log/syslog  # 查看 cron 日志（Ubuntu）
+```
+
+---
+
+## 九、测试
+
+```bash
+# 快速测试（<1s，跳过慢的）
 python -m pytest tests/ -v -k "not slow"
 
-# 全部测试
+# 全部测试（约 10s）
 python -m pytest tests/ -v
 
-# 按模块
-python -m pytest tests/test_golden.py -v      # 12 个 Golden 测试
+# 按模块跑
+python -m pytest tests/test_golden.py -v      # 12 个 Golden 测试（核心逻辑）
 python -m pytest tests/test_sim_trading.py -v  # 39 个模拟盘测试
 python -m pytest tests/test_ensemble.py -v     # 19 个 Ensemble 测试
 ```
 
----
-
-## 八、Cron 调度
-
-| 时间 | 命令 | 说明 |
-|------|------|------|
-| 11:45 | `python scripts/sim/sim_account1.py intraday_signal` | 账户1 v11b 上午信号 |
-| 11:45 | `python scripts/sim/account_runner.py --strategy v27 intraday_signal` | 账户2 v27 上午信号 |
-| 13:00 | `python scripts/sim/sim_account1.py intraday_execute` | 账户1 v11b 下午执行 |
-| 13:00 | `python scripts/sim/account_runner.py --strategy v27 intraday_execute` | 账户2 v27 下午执行 |
-| 14:45 | `python scripts/sim/account_runner.py --strategy v20c tail_signal` | 账户3 v20c 尾盘信号 |
-| 14:55 | `python scripts/sim/account_runner.py --strategy v20c tail_execute` | 账户3 v20c 尾盘执行 |
-| 15:30 | 三个账户 report_only | 收盘报告 |
-
-所有 cron 命令需加 `PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data`。
-
----
-
-## 九、常用工作流
-
-### 新策略开发
-
-```bash
-# 1. 在 scripts/strategies/ 写选股模块
-# 2. 在 core/strategy_map.py 注册
-# 3. 回测验证
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/run_backtest.py --strategy v27 --log
-
-# 4. Walk-Forward 验证
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/run_backtest.py --strategy v27 --walk-forward
-
-# 5. 通过后接入模拟盘
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v27 intraday_signal
+测试通过的标准输出：
+```
+========================= 70 passed in 2.34s =========================
 ```
 
-### 日常运维
+如果有 FAILED，看失败信息排查。常见原因：数据库路径不对、PYTHONPATH 未设置。
+
+---
+
+## 十、常见问题排查
+
+### Q: ModuleNotFoundError: No module named 'scripts' 或 'core'
 
 ```bash
+export PYTHONPATH=/root/a-share-quant-sim
+```
+
+### Q: 找不到 quant.db
+
+```bash
+# 初始化数据
+PYTHONPATH=/root/a-share-quant-sim python scripts/tools/update_daily_data_async.py
+# 确认文件存在
+ls -la /root/data/quant.db
+```
+
+### Q: 回测结果全是负数 / 和之前记录不一致
+
+1. 检查选股池是否正确排除了科创板（688/689 前缀）：
+```bash
+sqlite3 /root/data/quant.db "SELECT COUNT(*) FROM stock_pool WHERE code LIKE '688%';"
+# 应该返回 0
+```
+
+2. 检查数据是否最新：
+```bash
+sqlite3 /root/data/quant.db "SELECT MAX(trade_date) FROM daily_kline;"
+```
+
+3. 检查数据源差异：不同数据源的"前复权"算法不同，可能导致结果差异
+
+### Q: 模拟盘没有交易（plan 为空）
+
+1. 看日志：`tail -100 /root/data/portfolio/account_runner.log`
+2. 确认上午信号先跑了：`account_runner.py intraday_signal`
+3. 确认市场是交易日（非节假日）
+
+### Q: cron 没执行
+
+```bash
+# 查看 cron 日志
+grep CRON /var/log/syslog | tail -20
+# 或
+journalctl -u cron -n 20
+```
+
+### Q: 编程修改参数后没生效
+
+- `select_stocks_xxx` 读取 `XxxConfig` 类属性，不是实例属性
+- 正确改法：`XxxConfig.param = value`
+- 错误改法：`cfg = XxxConfig(); cfg.param = value`（不影响类属性）
+
+### Q: MemoryError
+
+回测需要约 1GB 内存（715 只 × 1560 天）。如果内存不足：
+1. 缩短回测区间：`--start 2023-01-01`
+2. 减少股票数量
+
+---
+
+## 十一、完整工作流示例
+
+### 场景 1：新策略从零开发到上线
+
+```bash
+# 1. 写选股模块
+cat > scripts/strategies/my_strategy.py << 'EOF'
+def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel):
+    factors = {}
+    factors['mom_5'] = close_panel.pct_change(5)
+    return factors
+
+def select_stocks_my(factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, current_holdings=None):
+    if date not in factors['mom_5'].index: return []
+    f = factors['mom_5'].loc[date].dropna()
+    if current_holdings:
+        f = f.drop(index=current_holdings.keys(), errors='ignore')
+    return f.nlargest(8).index.tolist()
+EOF
+
+# 2. 注册到 strategy_map.py（编辑 core/strategy_map.py）
+
+# 3. 模拟盘试试
+export PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data
+python scripts/sim/account_runner.py --strategy my_strategy intraday_signal
+
+# 4. 跑回测验证（需要写独立回测脚本或接入回测引擎）
+# 5. 跑 Walk-Forward
+# 6. 通过后接入 cron
+```
+
+### 场景 2：改个参数看效果
+
+```bash
+# 修改 v20c 的止盈从 15% 改为 10%
+# 编辑 scripts/strategies/v20_tail_pick.py：
+#   stop_profit = 0.15 → stop_profit = 0.10
+
+# 跑回测
+export PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data
+python scripts/backtest/run_backtest.py --strategy v20c
+
+# 对比结果
+cat /root/data/backtest_results/$(ls -t /root/data/backtest_results/ | head -1)/summary.json
+```
+
+### 场景 3：日常运维
+
+```bash
+# 早上：更新数据
+PYTHONPATH=/root/a-share-quant-sim python scripts/tools/update_daily_data_async.py
+
 # 查看账户状态
 PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
 
 # 查看持仓
 PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py holdings
 
-# 查看最新回测结果
-ls -lt /root/data/backtest_results/ | head -5
+# 查看最近的回测记录
+ls -lt /root/data/backtest_results/ | head -10
 
-# 查看运行日志
-tail -100 /root/data/portfolio/sim_account1.log
+# 查看模拟盘日志
+tail -20 /root/data/portfolio/account_runner.log
 ```
-
-### 问题排查
-
-```bash
-# 数据问题
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/fill_daily_gaps.py
-
-# 回测结果异常
-# 检查 data/backtest_results/最新目录/summary.json
-
-# 模拟盘执行失败
-# 检查 trade_plan_v27.json 是否存在
-# 检查 /root/data/portfolio/ 下的日志
-```
-
----
-
-## 十、文档索引
-
-| 文档 | 内容 |
-|------|------|
-| [README.md](../README.md) | 项目概览、架构图、快速开始 |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 完整架构文档（解耦后） |
-| [USER_MANUAL.md](USER_MANUAL.md) | 本文件 — 完整使用说明 |
-| [DEPLOY.md](DEPLOY.md) | 部署指南 |
-| [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) | 配置参数详解 |
-| [STRATEGY_REGISTRY.md](STRATEGY_REGISTRY.md) | 策略注册表（参数+绩效） |
-| [STRATEGIES_DISCARDED.md](STRATEGIES_DISCARDED.md) | 已证伪策略记录 |
-| [RESULTS_LOG.md](RESULTS_LOG.md) | 回测结果记录 |
-| [BACKLOG.md](BACKLOG.md) | 待办事项 |

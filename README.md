@@ -117,36 +117,29 @@ a-share-quant-sim/
 
 ## 快速开始
 
+> 完整部署指南见 [docs/DEPLOY.md](docs/DEPLOY.md)
+
 ```bash
-# 安装
+# 1. 克隆 + 安装（3 个依赖）
 git clone git@github.com:fkchaos/a-share-quant-sim.git
 cd a-share-quant-sim
 pip install pandas numpy requests
 
-# 初始化数据（首次运行，约 1 分钟）
+# 2. 初始化数据（首次运行，约 1 分钟）
+export PYTHONPATH=$(pwd)
 export BACKTEST_DATA_DIR=/root/data
-export PYTHONPATH=/root/a-share-quant-sim
+mkdir -p $BACKTEST_DATA_DIR
 python scripts/tools/update_daily_data_async.py
 
-# 回测 + Walk-Forward 验证
-python scripts/backtest/run_backtest.py --strategy v27 --walk-forward
+# 3. 跑回测
+python scripts/backtest/run_backtest.py --strategy v27
 
-# 模拟盘 — 账户1（v11b legacy）
-python scripts/sim/sim_account1.py intraday_signal   # 11:45
-python scripts/sim/sim_account1.py intraday_execute  # 13:00
-python scripts/sim/sim_account1.py report_only       # 15:30
+# 4. 跑模拟盘（三选一）
+python scripts/sim/account_runner.py --strategy v27 intraday_signal   # 上午信号
+python scripts/sim/account_runner.py --strategy v27 intraday_execute  # 下午执行
+python scripts/sim/account_runner.py --strategy v27 report_only       # 收盘报告
 
-# 模拟盘 — 账户2（v27 价量共振）
-python scripts/sim/account_runner.py --strategy v27 intraday_signal
-python scripts/sim/account_runner.py --strategy v27 intraday_execute
-python scripts/sim/account_runner.py --strategy v27 report_only
-
-# 模拟盘 — 账户3（v20c 尾盘缩量）
-python scripts/sim/account_runner.py --strategy v20c tail_signal
-python scripts/sim/account_runner.py --strategy v20c tail_execute
-python scripts/sim/account_runner.py --strategy v20c report_only
-
-# 测试
+# 5. 测试
 python -m pytest tests/ -v -k "not slow"  # 70 tests, <1s
 ```
 

@@ -12,6 +12,7 @@ import os
 import json
 from contextlib import contextmanager
 from pathlib import Path
+from datetime import datetime
 
 DB_PATH = os.environ.get("QUANT_DB", "/root/data/quant.db")
 
@@ -247,21 +248,23 @@ def upsert_account(account_id=1, name="main", cash=200000, initial_capital=20000
     with get_conn() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO account(id,name,cash,initial_capital,strategy,params_json,updated_at)
-               VALUES(?,?,?,?,?,?,datetime('now'))""",
+               VALUES(?,?,?,?,?,?,?)""",
             (account_id, name, cash, initial_capital, strategy,
-             json.dumps(params or {})),
+             json.dumps(params or {}),
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         )
 
 
 def update_cash(account_id=1, cash=None, delta=None):
     """更新现金：直接设值 或 增减"""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
         if cash is not None:
-            conn.execute("UPDATE account SET cash=?, updated_at=datetime('now') WHERE id=?",
-                         (cash, account_id))
+            conn.execute("UPDATE account SET cash=?, updated_at=? WHERE id=?",
+                         (cash, now_str, account_id))
         elif delta is not None:
-            conn.execute("UPDATE account SET cash=cash+?, updated_at=datetime('now') WHERE id=?",
-                         (delta, account_id))
+            conn.execute("UPDATE account SET cash=cash+?, updated_at=? WHERE id=?",
+                         (delta, now_str, account_id))
 
 
 # ── 持仓 ───────────────────────────────────────────────────
@@ -279,8 +282,9 @@ def upsert_holding(account_id, code, name, shares, cost_price):
     with get_conn() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO holdings(account_id,code,name,shares,cost_price,added_at)
-               VALUES(?,?,?,?,?,COALESCE((SELECT added_at FROM holdings WHERE account_id=? AND code=?), datetime('now')))""",
-            (account_id, code, name, shares, cost_price, account_id, code),
+               VALUES(?,?,?,?,?,COALESCE((SELECT added_at FROM holdings WHERE account_id=? AND code=?), ?))""",
+            (account_id, code, name, shares, cost_price, account_id, code,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         )
 
 
@@ -300,9 +304,10 @@ def clear_holdings(account_id=1):
 def add_trade(account_id, code, name, action, shares, price, amount, reason=""):
     with get_conn() as conn:
         conn.execute(
-            """INSERT INTO trade_log(account_id,code,name,action,shares,price,amount,reason)
-               VALUES(?,?,?,?,?,?,?,?)""",
-            (account_id, code, name, action, shares, price, amount, reason),
+            """INSERT INTO trade_log(account_id,code,name,action,shares,price,amount,reason,created_at)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (account_id, code, name, action, shares, price, amount, reason,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         )
 
 
@@ -416,11 +421,12 @@ def load_account_for_sim(account_id=1):
 
 def save_account_for_sim(state, account_id=1):
     """从 sim 的 PortfolioState 写回 DB"""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # 更新账户现金
     with get_conn() as conn:
         conn.execute(
-            "UPDATE account SET cash=?, updated_at=datetime('now') WHERE id=?",
-            (state.cash, account_id),
+            "UPDATE account SET cash=?, updated_at=? WHERE id=?",
+            (state.cash, now_str, account_id),
         )
     # 清空并重建持仓
     clear_holdings(account_id)

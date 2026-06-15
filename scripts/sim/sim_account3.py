@@ -265,22 +265,28 @@ def save_portfolio(state):
     """保存账户状态（写数据库，account_id=3）"""
     from core.db import get_conn, clear_holdings, get_stock_name_map
     name_map = get_stock_name_map()
+    # 先查所有已有的 added_at（在 clear 之前）
+    existing_added = {}
     with get_conn() as conn:
+        for row in conn.execute("SELECT code, added_at FROM holdings WHERE account_id=3").fetchall():
+            existing_added[row[0]] = row[1]
         conn.execute(
-            "UPDATE account SET cash=?, updated_at=datetime('now') WHERE id=3",
-            (state["cash"],),
+            "UPDATE account SET cash=?, updated_at=? WHERE id=3",
+            (state["cash"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         )
     clear_holdings(3)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for code, h in state.get("holdings", {}).items():
         name = h.get("name", "") if isinstance(h, dict) else ""
         if not name or name == code:
             name = name_map.get(code, code)
         shares = h.get("shares", 0) if isinstance(h, dict) else 0
         cost = h.get("cost_price", 0) if isinstance(h, dict) else 0
+        added_at = existing_added.get(code, now_str)
         with get_conn() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO holdings(account_id,code,name,shares,cost_price) VALUES(?,?,?,?,?)",
-                (3, code, name, int(shares), float(cost)),
+                "INSERT OR REPLACE INTO holdings(account_id,code,name,shares,cost_price,added_at) VALUES(?,?,?,?,?,?)",
+                (3, code, name, int(shares), float(cost), added_at),
             )
     # 写入 trade_log
     trade_log = state.get("trade_log", [])

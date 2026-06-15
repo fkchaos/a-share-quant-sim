@@ -230,12 +230,69 @@ def run_signal(strategy_name, date):
 
     cands = cands[:params.get("MAX_HOLDINGS", 8)]
 
-    # 生成计划
+    # 估算每只买入预算（用于资金容量过滤和计算股数）
+    max_buy = params.get("MAX_DAILY_BUY", 8)
+    sell_codes = [c for c, _, _ in to_sell]
+    sell_cash = 0
+    if date in cp.index:
+        sell_cash = sum(
+            price_data.get(c, 0) * state.holdings[c].get('shares', state.holdings[c].get('qty', 0))
+            for c in sell_codes if c in state.holdings and c in price_data.index
+        )
+    available = state.cash + sell_cash
+    per_stock_filter = available / max_buy if max_buy > 0 else available  # 资金容量过滤用
+
+    # 资金容量过滤：买不起（1手都买不起）的票排除
+    if date in cp.index:
+        filtered = []
+        for code, score in cands:
+            if code in cp.columns:
+                price = cp.loc[date, code]
+                if pd.isna(price) or price <= 0:
+                    continue
+                min_cost = price * 100  # 至少1手
+                if min_cost > per_stock_filter:
+                    logger.info(f"资金过滤排除 {code}: 1手需{min_cost:.0f} > 预算{per_stock_filter:.0f}")
+                    continue
+            filtered.append((code, score))
+        cands = filtered
+
+    # 生成计划：等权分配仓位
+    max_buy_final = params.get("MAX_DAILY_BUY", 6)
+    buy_list = cands[:max_buy_final]
+    n = len(buy_list)
+    per_stock = available / n if n > 0 else available  # 每份仓位金额
+    buy_plan = []
+    for code, score in buy_list:
+        qty = 0
+        price = 0
+        if date in cp.index and code in cp.columns:
+            price = cp.loc[date, code]
+            if not pd.isna(price) and price > 0 and per_stock > 0:
+                qty = int(per_stock / price / 100) * 100
+                if qty == 0:
+                    qty = 100  # 至少1手
+        buy_plan.append({
+            'code': code,
+            'score': round(score, 2),
+            'price': round(price, 2),
+            'qty': qty,
+            'target_amount': round(per_stock, 2),
+            'position_ratio': round(1.0 / n, 4) if n > 0 else 0,
+        })
     plan = {
         'date': str(date),
         'strategy': strategy_name,
-        'sell_plan': [c for c, _, _ in to_sell],
-        'buy_plan': [{'code': c, 'score': round(s, 2)} for c, s in cands[:params.get("MAX_DAILY_BUY", 6)]],
+        'sell_plan': [
+            {
+                'code': c,
+                'qty': state.holdings[c].get('shares', state.holdings[c].get('qty', 0)),
+                'reason': reason,
+                'pnl': round(pnl, 4),
+            }
+            for c, reason, pnl in to_sell if c in state.holdings
+        ],
+        'buy_plan': buy_plan,
         'timestamp': datetime.now().isoformat(),
     }
     plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{strategy_name}.json")

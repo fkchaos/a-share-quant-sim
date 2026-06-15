@@ -65,7 +65,7 @@ STRATEGY_MAP = {
             "MAX_HOLDINGS": 12,
             "MAX_DAILY_BUY": 8,
             "MAX_POSITION": 0.25,
-            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MAX": 2,
             "HOLD_DAYS_MIN": 2,
             "MOM_THRESHOLD": 0.02,
         },
@@ -85,7 +85,7 @@ STRATEGY_MAP = {
             "MAX_HOLDINGS": 12,
             "MAX_DAILY_BUY": 8,
             "MAX_POSITION": 0.25,
-            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MAX": 2,
         },
     },
 }

@@ -341,7 +341,8 @@ def run_execute(strategy_name, date):
         except: pass
 
     # 先卖
-    for code in plan.get('sell_plan', []):
+    for item in plan.get('sell_plan', []):
+        code = item['code']
         if code in state.holdings and code in spot:
             state = sell(state, code, spot[code], date, 'plan')
 

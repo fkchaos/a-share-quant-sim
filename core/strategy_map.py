@@ -41,14 +41,24 @@ def load_strategy(name):
 
 
 STRATEGY_MAP = {
-    # ── v11b: Ensemble 截面因子（账户1，legacy 模式）──
+    # ── v11b: Ensemble 截面因子（账户1）──
     "v11b": {
-        "mode": "legacy",
+        "mode": "custom",
         "description": "Ensemble 截面因子选股（Momentum+Volatility+Reversal 3组并集）",
         "account_id": 1,
         "timing": "intraday",
-        "script": "scripts.sim.sim_account1",  # 直接调用原脚本
-        "note": "v11b 使用 StrategyEngine + 逐只加载，暂不走统一入口",
+        "select_fn": "scripts.strategies.v11b_select.select_stocks",
+        "calc_factors_fn": "scripts.strategies.v11b_select.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "MAX_HOLDINGS": 12,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.30,
+            "HOLD_DAYS_MAX": 5,
+            "REBAL_FREQ": 5,
+            "TOP_N": 8,
+        },
     },
 
     # ── v27: 价量共振动量（账户2）──

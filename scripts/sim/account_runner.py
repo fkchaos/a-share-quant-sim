@@ -101,6 +101,9 @@ def load_account(account_id):
             "cost_price": h.get("cost_price", 0),
             "hold_days": hd,
             "added_at": added,
+            "entry_date": added[:10] if added else str(datetime.now().date()),
+            "tp_taken": json.loads(h.get("tp_taken", "[]")) if isinstance(h.get("tp_taken"), str) else [],
+            "highest_profit": 0.0,
         }
 
     state = PortfolioState(
@@ -243,10 +246,13 @@ def run_signal(strategy_name, date):
         raw_cands = strategy["select_stocks"](factors, date, cp, vp, ap, hp, lp, state.holdings)
         cands = [(c, 0.0) for c in raw_cands]  # v20c 返回 code list，补 score=0
     else:
-        # v27: calc_factors(cp, vp, ap, hp, lp, op, params)
-        #       select_stocks(factors, date, holdings, params) → [(code, score)]
+        # v27/v11b: calc_factors(cp, vp, ap, hp, lp, op, params)
+        #            select_stocks(factors, date, holdings, params) → [(code, score)]
         factors = strategy["calc_factors"](cp, vp, ap, hp, lp, op, params)
-        cands = strategy["select_stocks"](factors, date, state.holdings, params)
+        # 确保 params 里有 initial_capital（v11b select_stocks 需要）
+        _params = dict(params)
+        _params.setdefault("initial_capital", state.initial_capital)
+        cands = strategy["select_stocks"](factors, date, state.holdings, _params)
 
     cands = cands[:params.get("MAX_HOLDINGS", 8)]
 
@@ -323,6 +329,34 @@ def run_signal(strategy_name, date):
 
     logger.info(f"计划: 卖 {len(plan['sell_plan'])} 只, 买 {len(plan['buy_plan'])} 只, 耗时 {time.time()-t0:.1f}s")
 
+    # ── 输出信号摘要（print 到 stdout，cron 捕获）──
+    print("=" * 60)
+    print(f"{strategy_name} 信号 — {date}")
+    print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
+    print("-" * 60)
+    if plan.get('sell_plan'):
+        print(f"🔴 卖出 {len(plan['sell_plan'])} 只:")
+        for item in plan['sell_plan']:
+            print(f"  {item['code']} {item.get('name', '')} — {item.get('shares', 'all')}股 @ {item.get('price', 0):.2f} ({item.get('reason', '')})")
+    if plan.get('buy_plan'):
+        print(f"🟢 买入 {len(plan['buy_plan'])} 只:")
+        for item in plan['buy_plan']:
+            est_shares = int(item.get('target_amount', 0) / item.get('reference_price', item.get('price', 1)) / 100) * 100 if item.get('reference_price', item.get('price', 0)) > 0 else 0
+            print(f"  {item['code']} {item.get('name', '')} — ≈{est_shares}股 @ {item.get('reference_price', item.get('price', 0)):.2f} (目标¥{item.get('target_amount', 0):,.0f})")
+    if plan.get('hold_plan'):
+        add_items = [h for h in plan['hold_plan'] if h.get('action') == 'add']
+        hold_items = [h for h in plan['hold_plan'] if h.get('action') != 'add']
+        if add_items:
+            print(f"🟡 补仓 {len(add_items)} 只:")
+            for item in add_items:
+                add_shares = int(item.get('add_amount', 0) / item.get('price', 1) / 100) * 100
+                print(f"  {item['code']} {item.get('name', '')} — {add_shares}股 @ {item.get('price', 0):.2f}")
+        if hold_items:
+            print(f"➡️ 持有 {len(hold_items)} 只不动")
+    if not plan.get('sell_plan') and not plan.get('buy_plan'):
+        print("⚪ 无操作")
+    print("=" * 60)
+
 
 def run_execute(strategy_name, date):
     """执行交易：先卖后买"""
@@ -363,17 +397,57 @@ def run_execute(strategy_name, date):
         except: pass
 
     # 先卖
+    sold = []
     for item in plan.get('sell_plan', []):
         code = item['code']
         if code in state.holdings and code in spot:
+            h = state.holdings[code]
             state = sell(state, code, spot[code], date, 'plan')
+            sold.append((code, h.get('name', code), h.get('shares', 0), spot[code]))
 
     # 后买
+    bought = []
     cands = [(b['code'], b.get('score', 0)) for b in plan.get('buy_plan', [])]
-    state = execute_buys(state, cands, date, spot, params)
+    for code, score in cands:
+        if code in spot and code not in state.holdings and spot[code] > 0:
+            price = spot[code]
+            adj = price * (1 + COMMISSION_RATE + SLIPPAGE_RATE)
+            max_pos = params.get("MAX_POSITION", 0.30)
+            max_hold = params.get("MAX_HOLDINGS", 12)
+            max_buy = params.get("MAX_DAILY_BUY", 5)
+            available = state.cash - state.initial_capital * 0.03
+            if available <= 0:
+                break
+            nb = min(max_buy, max_hold - len(state.holdings))
+            if nb <= 0:
+                break
+            per_stock = min(available / nb, state.initial_capital * max_pos)
+            shares = int(per_stock / adj / 100) * 100
+            if shares <= 0 or shares * adj > state.cash:
+                continue
+            state = buy(state, code, price, date, shares)
+            bought.append((code, price, shares))
 
     save_account(state, account_id)
-    logger.info(f"执行完成: 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
+
+    # ── 输出摘要（print 到 stdout，cron 捕获）──
+    print("=" * 60)
+    print(f"{strategy_name} 执行 — {date}")
+    print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
+    print("-" * 60)
+    if sold:
+        print(f"🔴 卖出 {len(sold)} 只:")
+        for code, name, shares, price in sold:
+            print(f"  {code} {name} — {shares}股 @ {price:.2f}")
+    if bought:
+        print(f"🟢 买入 {len(bought)} 只:")
+        for code, price, shares in bought:
+            print(f"  {code} — {shares}股 @ {price:.2f}")
+    if not sold and not bought:
+        print("⚪ 无操作")
+    print("=" * 60)
+
+    logger.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
 
 
 def run_report(strategy_name, date):

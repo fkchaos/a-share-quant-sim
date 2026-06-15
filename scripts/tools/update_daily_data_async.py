@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, SCRIPT_DIR)
-sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+sys.path.insert(0, PROJECT_ROOT)
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")

@@ -258,8 +258,10 @@ def run_signal(strategy_name, date):
         cands = filtered
 
     # 生成计划：等权分配仓位
-    max_buy_final = params.get("MAX_DAILY_BUY", 6)
-    buy_list = cands[:max_buy_final]
+    remaining_after_sell = len(state.holdings) - len(to_sell)
+    max_new_buys = min(params.get("MAX_DAILY_BUY", 6), params.get("MAX_HOLDINGS", 8) - remaining_after_sell)
+    max_new_buys = max(max_new_buys, 0)
+    buy_list = cands[:max_new_buys]
     n = len(buy_list)
     per_stock = available / n if n > 0 else available  # 每份仓位金额
     buy_plan = []

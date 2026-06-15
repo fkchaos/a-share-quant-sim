@@ -163,8 +163,15 @@ def intraday_execute(date):
                     try: spot[p[2]] = float(p[3])
                     except: pass
         except: pass
+
+    sold = []
     for code in plan.get('sell_plan', []):
-        if code in state.holdings and code in spot: sell(state, code, spot[code], date, 'plan')
+        if code in state.holdings and code in spot:
+            h = state.holdings[code]
+            sell(state, code, spot[code], date, 'plan')
+            sold.append((code, h.get('name', code), h.get('shares', 0), spot[code]))
+
+    bought = []
     for bp in plan.get('buy_plan', []):
         code = bp['code']
         if code in spot and code not in state.holdings and spot[code] > 0:
@@ -175,8 +182,28 @@ def intraday_execute(date):
             sh = int(per / adj / 100) * 100
             if sh > 0 and sh * adj <= state.cash:
                 buy(state, code, spot[code], date, sh)
+                bought.append((code, bp.get('name', code), sh, spot[code]))
+
     save_account(state)
-    logger.info(f"执行完成: 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
+
+    # ── 输出摘要（print 到 stdout，cron 捕获）──
+    print("=" * 50)
+    print(f"v27 下午执行 — {date}")
+    print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
+    print("-" * 50)
+    if sold:
+        print(f"🔴 卖出 {len(sold)} 只:")
+        for code, name, shares, price in sold:
+            print(f"  {code} {name} — {shares}股 @ {price:.2f}")
+    if bought:
+        print(f"🟢 买入 {len(bought)} 只:")
+        for code, name, shares, price in bought:
+            print(f"  {code} {name} — {shares}股 @ {price:.2f}")
+    if not sold and not bought:
+        print("⚪ 无操作")
+    print("=" * 50)
+
+    logger.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
 
 
 def report_only(date):

@@ -546,7 +546,7 @@ def cmd_tail_execute():
                 "reason": item.get("reason", ""),
             })
             del holdings[code]
-            sold.append((code, item.get("name", code), item.get("reason", ""), sell_price))
+            sold.append((code, item.get("name", code), item.get("reason", ""), sell_price, h["shares"], round(sv, 2)))
             log.info(f"  卖出 {code}: {item.get('reason','')} @ {sell_price:.2f}")
 
     # ── 后买 ──
@@ -592,7 +592,7 @@ def cmd_tail_execute():
                 "amount": round(cost, 2),
                 "reason": "AUTO",
             })
-            bought.append((code, item.get("name", code), shares, buy_price))
+            bought.append((code, item.get("name", code), shares, buy_price, round(cost, 2)))
             log.info(f"  买入 {code}: {shares}股 @ {buy_price:.2f}")
 
     state["cash"] = cash
@@ -609,20 +609,21 @@ def cmd_tail_execute():
     save_plan(plan)
 
     # 输出摘要
-    print("=" * 50)
-    print(f"v20 尾盘执行完成")
+    print("=" * 60)
+    print(f"v20 尾盘执行 — {date}")
+    print(f"现金: ¥{cash:,.0f}  持仓: {len(holdings)} 只")
+    print("-" * 60)
     if sold:
         print(f"🔴 卖出 {len(sold)} 只:")
-        for code, name, reason, price in sold:
-            print(f"  {code} {name} — {reason} @ {price:.2f}")
+        for code, name, reason, price, shares, amount in sold:
+            print(f"  {code} {name} — {shares}股 @ {price:.2f} = ¥{amount:,.0f} ({reason})")
     if bought:
         print(f"🟢 买入 {len(bought)} 只:")
-        for code, name, shares, price in bought:
-            print(f"  {code} {name} — {shares}股 @ {price:.2f}")
+        for code, name, shares, price, cost in bought:
+            print(f"  {code} {name} — {shares}股 @ {price:.2f} = ¥{cost:,.0f}")
     if not sold and not bought:
         print("⚪ 无操作")
-    print(f"现金: ¥{cash:,.0f}  持仓: {len(holdings)} 只")
-    print("=" * 50)
+    print("=" * 60)
 
     log.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 现金 ¥{cash:,.0f}")
 

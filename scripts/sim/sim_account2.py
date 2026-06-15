@@ -44,9 +44,15 @@ logger = logging.getLogger("sim_v27")
 
 
 def load_account():
-    from core.db import load_account_for_sim, get_account
+    from core.db import load_account_for_sim, get_account, get_stock_name_map
     state, loaded = load_account_for_sim(account_id=2)
-    if loaded: return state
+    if loaded:
+        # 补全 holdings name
+        name_map = get_stock_name_map()
+        for code, h in state.holdings.items():
+            if not h.get("name") or h["name"] == code:
+                h["name"] = name_map.get(code, code)
+        return state
     acct = get_account(2)
     capital = acct["initial_capital"] if acct else 100000
     return PortfolioState(cash=capital, initial_capital=capital, holdings={}, trade_log=[])

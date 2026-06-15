@@ -226,16 +226,17 @@ def select_stocks(panels, factors, date, current_holdings=None):
 # ── Portfolio State ────────────────────────────────────────────────
 def load_portfolio():
     """加载账户状态（从数据库，account_id=3）"""
-    from core.db import get_account, get_holdings
+    from core.db import get_account, get_holdings, get_stock_name_map
     acct = get_account(3)
     if acct:
         holdings = get_holdings(3)
+        name_map = get_stock_name_map()
         holdings_out = {}
         for code, h in holdings.items():
             holdings_out[code] = {
                 "shares": h["shares"],
                 "cost_price": h["cost_price"],
-                "name": h.get("name", code),
+                "name": h.get("name") or name_map.get(code, code),
                 "cost": h["cost_price"],  # 兼容字段
                 "hold_days": h.get("hold_days", 0),
                 "buy_date": h.get("buy_date", ""),
@@ -281,6 +282,23 @@ def save_portfolio(state):
                 "INSERT OR REPLACE INTO holdings(account_id,code,name,shares,cost_price) VALUES(?,?,?,?,?)",
                 (3, code, name, int(shares), float(cost)),
             )
+    # 写入 trade_log
+    trade_log = state.get("trade_log", [])
+    if trade_log:
+        with get_conn() as conn:
+            for t in trade_log:
+                code = t.get("code", "")
+                name = t.get("name", "") or name_map.get(code, code)
+                action = t.get("action", "")
+                shares = t.get("shares", 0)
+                price = t.get("price", 0)
+                amount = t.get("amount", 0)
+                reason = t.get("reason", "")
+                trade_date = t.get("date", "")
+                conn.execute(
+                    "INSERT INTO trade_log(account_id,code,name,action,shares,price,amount,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (3, code, name, action, shares, price, amount, reason, trade_date),
+                )
     log.info(f"账户已保存: 现金 ¥{state['cash']:,.0f}, 持仓 {len(state.get('holdings', {}))} 只")
 
 
@@ -492,6 +510,7 @@ def cmd_tail_execute():
 
     # ── 先卖 ──
     sold = []
+    trade_log = []
     if plan.get("sell_plan"):
         from core.db import get_kline_df
         for item in plan["sell_plan"]:
@@ -509,6 +528,17 @@ def cmd_tail_execute():
                     continue
             sv = h["shares"] * sell_price * (1 - COMMISSION_RATE - STAMP_TAX - SLIPPAGE_RATE)
             cash += sv
+            # 记录交易日志
+            trade_log.append({
+                "date": str(datetime.now().date()),
+                "code": code,
+                "name": item.get("name", code),
+                "action": "SELL",
+                "shares": h["shares"],
+                "price": round(sell_price, 2),
+                "amount": round(sv, 2),
+                "reason": item.get("reason", ""),
+            })
             del holdings[code]
             sold.append((code, item.get("name", code), item.get("reason", ""), sell_price))
             log.info(f"  卖出 {code}: {item.get('reason','')} @ {sell_price:.2f}")
@@ -545,11 +575,23 @@ def cmd_tail_execute():
                 "hold_days": 0,
                 "buy_date": str(datetime.now().date()),
             }
+            # 记录交易日志
+            trade_log.append({
+                "date": str(datetime.now().date()),
+                "code": code,
+                "name": item.get("name", code),
+                "action": "BUY",
+                "shares": shares,
+                "price": round(buy_price, 2),
+                "amount": round(cost, 2),
+                "reason": "AUTO",
+            })
             bought.append((code, item.get("name", code), shares, buy_price))
             log.info(f"  买入 {code}: {shares}股 @ {buy_price:.2f}")
 
     state["cash"] = cash
     state["holdings"] = holdings
+    state["trade_log"] = trade_log
     save_portfolio(state)
 
     # 清空计划（防止 tail_signal 误判"已存在"）

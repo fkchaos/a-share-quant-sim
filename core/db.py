@@ -437,6 +437,22 @@ def save_account_for_sim(state, account_id=1):
                 (account_id, code, name, int(h["shares"]), float(h["cost_price"]),
                  json.dumps(tp) if isinstance(tp, list) else str(tp)),
             )
+    # 写入 trade_log
+    if state.trade_log:
+        with get_conn() as conn:
+            for t in state.trade_log:
+                code = t.get("code", "")
+                name = t.get("name", "") or name_map.get(code, code)
+                action = t.get("action", "")
+                shares = t.get("shares", 0)
+                price = t.get("price", 0)
+                amount = t.get("amount", 0)
+                reason = t.get("reason", "")
+                trade_date = t.get("date", "")
+                conn.execute(
+                    "INSERT INTO trade_log(account_id,code,name,action,shares,price,amount,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (account_id, code, name, action, shares, price, amount, reason, trade_date),
+                )
 
 
 def load_kline_for_sim(codes=None, lookback=250):

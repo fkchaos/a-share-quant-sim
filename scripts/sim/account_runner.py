@@ -73,7 +73,7 @@ def load_panel(codes, min_days=60):
 # ── 账户操作 ──────────────────────────────────────────────────────
 def load_account(account_id):
     """从 DB 加载账户状态，返回 PortfolioState"""
-    from core.db import get_account, get_holdings, upsert_account
+    from core.db import get_account, get_holdings, upsert_account, get_stock_name_map
     acct = get_account(account_id)
     if not acct:
         # 首次运行：在 DB 创建账户记录
@@ -82,6 +82,7 @@ def load_account(account_id):
         return PortfolioState(cash=init_cap, initial_capital=init_cap, holdings={}, trade_log=[])
 
     holdings_raw = get_holdings(account_id)
+    name_map = get_stock_name_map()
     holdings = {}
     for code, h in holdings_raw.items():
         added = h.get("added_at", "")
@@ -95,7 +96,7 @@ def load_account(account_id):
                 pass
         holdings[code] = {
             "code": code,
-            "name": h.get("name", ""),
+            "name": h.get("name") or name_map.get(code, code),
             "shares": h.get("shares", 0),
             "cost_price": h.get("cost_price", 0),
             "hold_days": hd,
@@ -114,7 +115,7 @@ def load_account(account_id):
 
 def save_account(state, account_id):
     """保存账户状态到 DB"""
-    from core.db import upsert_account, upsert_holding, delete_holding, get_holdings
+    from core.db import upsert_account, upsert_holding, delete_holding, get_holdings, get_conn, get_stock_name_map
     # 保存现金
     upsert_account(account_id=account_id, cash=state.cash, initial_capital=state.initial_capital)
     # 同步持仓
@@ -123,14 +124,33 @@ def save_account(state, account_id):
     # 删除已清仓
     for code in db_holdings - new_holdings:
         delete_holding(account_id, code)
+    # 从 stock_pool 获取名称
+    name_map = get_stock_name_map()
     # 更新/新增持仓
     for code, h in state.holdings.items():
+        name = h.get("name", "") or name_map.get(code, code)
         upsert_holding(
             account_id, code,
-            name=h.get("name", ""),
+            name=name,
             shares=h.get("shares", 0),
             cost_price=h.get("cost_price", 0),
         )
+    # 写入 trade_log
+    if state.trade_log:
+        with get_conn() as conn:
+            for t in state.trade_log:
+                code = t.get("code", "")
+                name = t.get("name", "") or name_map.get(code, code)
+                action = t.get("action", "")
+                shares = t.get("shares", 0)
+                price = t.get("price", 0)
+                amount = t.get("amount", 0)
+                reason = t.get("reason", "")
+                trade_date = t.get("date", "")
+                conn.execute(
+                    "INSERT INTO trade_log(account_id,code,name,action,shares,price,amount,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (account_id, code, name, action, shares, price, amount, reason, trade_date),
+                )
     logger.info(f"账户{account_id}已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
 
 

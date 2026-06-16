@@ -290,6 +290,19 @@ def run_signal(strategy_name, date):
     buy_list = cands[:max_new_buys]
     n = len(buy_list)
     per_stock = available / n if n > 0 else available  # 每份仓位金额
+    # 查股票名称（从 holdings 或 stock_pool）
+    name_map = {}
+    for c in state.holdings:
+        nm = state.holdings[c].get('name', '')
+        if nm:
+            name_map[c] = nm
+    if not name_map:
+        try:
+            from core.db import get_stock_name_map
+            name_map = get_stock_name_map()
+        except Exception:
+            pass
+
     buy_plan = []
     for code, score in buy_list:
         qty = 0
@@ -302,6 +315,7 @@ def run_signal(strategy_name, date):
                     qty = 100  # 至少1手
         buy_plan.append({
             'code': code,
+            'name': name_map.get(code, ''),
             'score': round(score, 2),
             'price': round(price, 2),
             'qty': qty,
@@ -314,6 +328,7 @@ def run_signal(strategy_name, date):
         'sell_plan': [
             {
                 'code': c,
+                'name': name_map.get(c, ''),
                 'qty': state.holdings[c].get('shares', state.holdings[c].get('qty', 0)),
                 'reason': reason,
                 'pnl': round(pnl, 4),

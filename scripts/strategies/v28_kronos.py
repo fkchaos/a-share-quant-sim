@@ -55,9 +55,9 @@ def _load_kronos_model(params):
     try:
         from model import Kronos, KronosTokenizer, KronosPredictor
     except ImportError:
-        print("[v28] Kronos 模型代码不可用，跳过 AI 增强")
-        cache["predictor"] = None
-        return None, False
+        sys.path.insert(0, '/root/Kronos')
+        sys.path.insert(0, '/root/Kronos/model')
+        from model import Kronos, KronosTokenizer, KronosPredictor
 
     model_name = params.get("KRONOS_MODEL", "small")
     device = params.get("KRONOS_DEVICE", "cpu")
@@ -120,14 +120,14 @@ def _predict_single(predictor, df_hist, pred_len, params):
 
         # 准备输入
         x_timestamp = df_hist['date']
-        # 生成未来时间戳（按交易日近似 = 自然日 * 5/7）
+        x_timestamp = pd.Series(df_hist['date'])
         last_date = df_hist['date'].iloc[-1]
         future_dates = pd.date_range(
             start=last_date + pd.Timedelta(days=1),
             periods=pred_len,
-            freq='B'  # 工作日
+            freq='B'
         )
-        y_timestamp = future_dates[:pred_len]
+        y_timestamp = pd.Series(future_dates[:pred_len])
 
         # 调用预测
         pred_df = predictor.predict(

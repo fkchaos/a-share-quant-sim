@@ -34,8 +34,18 @@ os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 V27_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v27.json")
 
-STOP_LOSS = -0.015; TAKE_PROFIT = 0.03; MAX_HOLDINGS = 8; MAX_DAILY_BUY = 4
-MAX_POSITION = 0.20; HOLD_DAYS_MAX = 5; HOLD_DAYS_MIN = 1; MOM_THRESHOLD = 0.02
+from core.strategy_map import load_strategy
+
+# v27 策略参数（从 strategy_map 统一读取）
+_sp = load_strategy("v27")["params"]
+STOP_LOSS = _sp["STOP_LOSS"]
+TAKE_PROFIT = _sp["TAKE_PROFIT"]
+MAX_HOLDINGS = _sp["MAX_HOLDINGS"]
+MAX_DAILY_BUY = _sp["MAX_DAILY_BUY"]
+MAX_POSITION = _sp["MAX_POSITION"]
+HOLD_DAYS_MAX = _sp["HOLD_DAYS_MAX"]
+HOLD_DAYS_MIN = _sp["HOLD_DAYS_MIN"]
+MOM_THRESHOLD = _sp["MOM_THRESHOLD"]
 _costs = TradingCosts(); SLIPPAGE_RATE = _costs.slippage_rate
 COMMISSION_RATE = _costs.commission_rate; STAMP_TAX = 0.001
 

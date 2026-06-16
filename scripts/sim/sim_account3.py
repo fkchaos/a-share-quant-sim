@@ -25,6 +25,7 @@ sys.path.insert(0, SCRIPT_DIR)
 sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 
 from core.config import TradingCosts
+from core.strategy_map import load_strategy
 
 # ── Config ─────────────────────────────────────────────────────────
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
@@ -33,13 +34,15 @@ os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 V20_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v20.json")
 
-STOP_LOSS = -0.03
-TAKE_PROFIT = 0.15
-MAX_HOLDINGS = 8
-MAX_DAILY_BUY = 4
-MAX_POSITION = 0.20
-HOLD_DAYS_MAX = 5
-HOLD_DAYS_MIN = 1
+# v20c 策略参数（从 strategy_map 统一读取）
+_sp = load_strategy("v20c")["params"]
+STOP_LOSS = _sp["STOP_LOSS"]
+TAKE_PROFIT = _sp["TAKE_PROFIT"]
+MAX_HOLDINGS = _sp["MAX_HOLDINGS"]
+MAX_DAILY_BUY = _sp["MAX_DAILY_BUY"]
+MAX_POSITION = _sp["MAX_POSITION"]
+HOLD_DAYS_MAX = _sp["HOLD_DAYS_MAX"]
+HOLD_DAYS_MIN = _sp["HOLD_DAYS_MIN"]
 
 _costs = TradingCosts()
 SLIPPAGE_RATE = _costs.slippage_rate

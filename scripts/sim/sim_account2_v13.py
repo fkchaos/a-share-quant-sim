@@ -39,16 +39,20 @@ V13_ACCOUNT_FILE = os.path.join(PORTFOLIO_DIR, "account_v13.json")
 V13_TRADE_COUNT_FILE = os.path.join(PORTFOLIO_DIR, "trade_count_v13.txt")
 V13_PLAN_FILE = os.path.join(PORTFOLIO_DIR, "trade_plan_v13.json")
 
-# v13 策略参数
-STOP_LOSS = -0.02
-TAKE_PROFIT = 0.10
-MAX_HOLDINGS = 8
-MAX_DAILY_BUY = 6
-MAX_POSITION = 0.20
-HOLD_DAYS_MAX = 8
-HOLD_DAYS_MIN = 2
-HOLD_DAYS_EXTEND = 7          # 浮盈达标后的最大持仓天数
-HOLD_DAYS_EXTEND_PNL = 0.03   # 浮盈 3% 可延长持仓
+from core.strategy_map import load_strategy
+
+# v13 策略参数（从 strategy_map 统一读取）
+_strategy = load_strategy("v27")
+_sp = _strategy["params"]
+STOP_LOSS = _sp["STOP_LOSS"]
+TAKE_PROFIT = _sp["TAKE_PROFIT"]
+MAX_HOLDINGS = _sp["MAX_HOLDINGS"]
+MAX_DAILY_BUY = _sp["MAX_DAILY_BUY"]
+MAX_POSITION = _sp["MAX_POSITION"]
+HOLD_DAYS_MAX = _sp["HOLD_DAYS_MAX"]
+HOLD_DAYS_MIN = _sp["HOLD_DAYS_MIN"]
+HOLD_DAYS_EXTEND = _sp["HOLD_DAYS_EXTEND"]
+HOLD_DAYS_EXTEND_PNL = _sp["HOLD_DAYS_EXTEND_PNL"]
 
 # 交易成本
 _costs = TradingCosts()

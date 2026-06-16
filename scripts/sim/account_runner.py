@@ -368,12 +368,12 @@ def run_signal(strategy_name, date):
     if plan.get('sell_plan'):
         print(f"🔴 卖出 {len(plan['sell_plan'])} 只:")
         for item in plan['sell_plan']:
-            print(f"  {item['code']} {item.get('name', '')} — {item.get('shares', 'all')}股 @ {item.get('price', 0):.2f} ({item.get('reason', '')})")
+            print(f"  {item['code']} {item.get('name', '')} — {item.get('qty', 0)}股 ({item.get('reason', '')} {item.get('pnl', 0)*100:+.1f}%)")
     if plan.get('buy_plan'):
         print(f"🟢 买入 {len(plan['buy_plan'])} 只:")
         for item in plan['buy_plan']:
-            est_shares = int(item.get('target_amount', 0) / item.get('reference_price', item.get('price', 1)) / 100) * 100 if item.get('reference_price', item.get('price', 0)) > 0 else 0
-            print(f"  {item['code']} {item.get('name', '')} — ≈{est_shares}股 @ {item.get('reference_price', item.get('price', 0)):.2f} (目标¥{item.get('target_amount', 0):,.0f})")
+            est_shares = item.get('qty', 0)
+            print(f"  {item['code']} {item.get('name', '')} — {est_shares}股 @ {item.get('price', 0):.2f} (目标¥{item.get('target_amount', 0):,.0f})")
     if plan.get('hold_plan'):
         add_items = [h for h in plan['hold_plan'] if h.get('action') == 'add']
         hold_items = [h for h in plan['hold_plan'] if h.get('action') != 'add']
@@ -386,7 +386,7 @@ def run_signal(strategy_name, date):
             print(f"➡️ 持有 {len(hold_items)} 只:")
             for item in hold_items:
                 print(f"  {item['code']} {item.get('name', '')} — {item.get('current_shares', item.get('qty', '?'))}股 @ {item.get('price', 0):.2f}")
-    if not plan.get('sell_plan') and not plan.get('buy_plan'):
+    if not plan.get('sell_plan') and not plan.get('buy_plan') and not plan.get('hold_plan'):
         print("⚪ 无操作")
     print("=" * 60)
 
@@ -500,7 +500,36 @@ def run_report(strategy_name, date):
             latest = df[df['date'] <= pd.Timestamp(date)].sort_values('date').iloc[-1]
             nav += h.get('shares', 0) * latest['close']
 
-    logger.info(f"=== {strategy_name} 收盘报告 {date} === 持仓 {len(state.holdings)} 只 现金 ¥{state.cash:,.0f} 净值 ¥{nav:,.0f}")
+    # 计算盈亏
+    total_mv = nav - state.cash
+    pnl = nav - state.initial_capital
+    pnl_pct = pnl / state.initial_capital * 100 if state.initial_capital > 0 else 0
+
+    # ── 输出收盘报告（print 到 stdout，cron 捕获）──
+    print("=" * 60)
+    print(f"{strategy_name} 收盘报告 — {date}")
+    print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
+    print(f"持仓市值: ¥{total_mv:,.0f}  净值: ¥{nav:,.0f}")
+    print(f"总收益: ¥{pnl:+,.0f} ({pnl_pct:+.2f}%)")
+    print("-" * 60)
+    if state.holdings:
+        print(f"持仓明细:")
+        for code, h in state.holdings.items():
+            shares = h.get('shares', 0)
+            cost = h.get('cost_price', 0)
+            mv = 0
+            kl = get_kline(code)
+            if kl:
+                df = pd.DataFrame(kl)
+                df['date'] = pd.to_datetime(df['date'])
+                latest = df[df['date'] <= pd.Timestamp(date)].sort_values('date').iloc[-1]
+                mv = shares * latest['close']
+            pnl_i = mv - cost * shares
+            pnl_i_pct = pnl_i / (cost * shares) * 100 if cost * shares > 0 else 0
+            print(f"  {code} {h.get('name', '')} — {shares}股 成本{cost:.2f} 市值¥{mv:,.0f} ({pnl_i_pct:+.1f}%)")
+    print("=" * 60)
+
+    logger.info(f"=== {strategy_name} 收盘报告 {date} === 持仓 {len(state.holdings)} 只 现金 ¥{state.cash:,.0f} 净值 ¥{nav:,.0f} 收益 {pnl_pct:+.2f}%")
 
 
 # ── 入口 ─────────────────────────────────────────────────────────

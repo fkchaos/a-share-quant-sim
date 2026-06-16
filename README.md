@@ -54,8 +54,8 @@ a-share-quant-sim/
 │
 ├── scripts/
 │   ├── sim/                 # 模拟盘执行层
-│   │   ├── account_runner.py    # 统一入口（v27/v20c）
-│   │   └── sim_account1.py      # v11b legacy
+│   │   ├── account_runner.py    # 统一入口（v11b/v27/v20c）
+│   │   └── sim_account1.py      # v11b legacy（备份，不再被 cron 调用）
 │   ├── strategies/          # 选股逻辑模块
 │   │   ├── v27_select.py        # v27 价量共振选股
 │   │   └── v20_tail_pick.py     # v20c 尾盘缩量选股

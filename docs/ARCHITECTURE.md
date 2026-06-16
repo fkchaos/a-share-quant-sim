@@ -1,6 +1,6 @@
 # 系统架构文档
 
-> 最后更新：2026-07-13（账户-策略解耦重构完成）
+> 最后更新：2026-07-16（三账户统一走 account_runner）
 
 ## 一、整体架构
 
@@ -60,8 +60,8 @@ a-share-quant-sim/
 │
 ├── scripts/
 │   ├── sim/                 # 模拟盘执行层
-│   │   ├── account_runner.py    # 统一入口（v27/v20c）
-│   │   ├── sim_account1.py      # v11b legacy（保持原样）
+│   │   ├── account_runner.py    # 统一入口（v11b/v27/v20c）
+│   │   ├── sim_account1.py      # v11b legacy（备份，不再被 cron 调用）
 │   │   └── sim_account2_v13.py  # v13 备份
 │   │
 │   ├── strategies/          # 选股逻辑（可独立测试）
@@ -148,25 +148,25 @@ cron → account_runner.py --strategy v27 intraday_signal
 
 ## 五、三账户体系
 
-| 账户 | ID | 策略 | 初始资金 | 调仓时间 | 脚本 |
+| 账户 | ID | 策略 | 初始资金 | 调仓时间 | 入口 |
 |------|-----|------|---------|---------|------|
-| 账户1 | 1 | v11b (legacy) | 20万 | 11:45信号/13:00执行 | sim_account1.py |
-| 账户2 | 2 | v27 (价量共振) | 10万 | 11:45信号/13:00执行 | account_runner --strategy v27 |
-| 账户3 | 3 | v20c (尾盘缩量) | 10万 | 14:45信号/14:55执行 | account_runner --strategy v20c |
+| 账户1 | 1 | v11b (legacy) | 20万 | 11:45信号/13:00执行 | `account_runner --strategy v11b` |
+| 账户2 | 2 | v27 (价量共振) | 10万 | 11:45信号/13:00执行 | `account_runner --strategy v27` |
+| 账户3 | 3 | v20c (尾盘缩量) | 10万 | 14:45信号/14:55执行 | `account_runner --strategy v20c` |
 
 ## 六、Cron 调度
 
 | 任务 | 时间 | 命令 |
 |------|------|------|
-| 账户1-上午信号 | 11:45 工作日 | `python scripts/sim/sim_account1.py intraday_signal` |
-| 账户1-下午执行 | 13:00 工作日 | `python scripts/sim/sim_account1.py intraday_execute` |
+| 账户1-上午信号 | 11:45 工作日 | `python scripts/sim/account_runner.py --strategy v11b intraday_signal` |
+| 账户1-下午执行 | 13:00 工作日 | `python scripts/sim/account_runner.py --strategy v11b intraday_execute` |
 | 账户2-上午信号 | 11:45 工作日 | `python scripts/sim/account_runner.py --strategy v27 intraday_signal` |
 | 账户2-下午执行 | 13:00 工作日 | `python scripts/sim/account_runner.py --strategy v27 intraday_execute` |
 | 账户3-尾盘信号 | 14:45 工作日 | `python scripts/sim/account_runner.py --strategy v20c tail_signal` |
 | 账户3-尾盘执行 | 14:55 工作日 | `python scripts/sim/account_runner.py --strategy v20c tail_execute` |
 | 收盘报告 | 15:30 工作日 | 三个账户 report_only |
 
-所有 cron 命令需加 `PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data`。
+> 2026-07-16 起，所有三个账户统一走 `account_runner.py`，旧 `sim_account1.py` 保留为备份。
 
 ## 七、回测与模拟盘一致性
 

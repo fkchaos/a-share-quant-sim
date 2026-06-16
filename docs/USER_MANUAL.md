@@ -393,13 +393,14 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py \
 
 ### 7.1 参数在哪改？
 
-| 策略 | 配置文件 | 参数类 |
-|------|---------|--------|
-| v27 | `scripts/strategies/v27_select.py` | `V27Config` |
-| v20c | `scripts/strategies/v20_tail_pick.py` | `V20Config` |
-| v13 | `scripts/strategies/v13_small_mid_short.py` | `V13Config` |
-| v11b | `scripts/sim/sim_account1.py` | `CONFIG` 字典 |
-| 回测通用 | `core/config.py` | `CONFIG` 字典 |
+**策略参数统一在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中管理。** 修改 `params` 字典即可，无需去各脚本里改。
+
+| 策略 | 账户 | 参数位置 |
+|------|------|---------|
+| v11b | 账户1 | `strategy_map.py` → `STRATEGY_MAP["v11b"]["params"]` |
+| v27 | 账户2 | `strategy_map.py` → `STRATEGY_MAP["v27"]["params"]` |
+| v20c | 账户3 | `strategy_map.py` → `STRATEGY_MAP["v20c"]["params"]` |
+| 回测通用 | — | `core/config.py` → `CONFIG` 字典（因子权重、交易成本等） |
 
 ### 7.2 常用参数说明
 
@@ -414,53 +415,33 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py \
 | `max_liquidity` | 最大日均成交额（万） | 5000 ~ 50000 | 各策略 Config |
 | `initial_capital` | 初始资金（元） | 100000 ~ 1000000 | DB account 表 |
 
-### 7.3 v20c 完整参数参考
+### 7.3 v20c 完整参数参考（strategy_map.py）
 
 ```python
-class V20Config:
-    # 选股池
-    min_liquidity = 100      # 最小日均成交额 100万
-    max_liquidity = 20000    # 最大日均成交额 2亿
-
-    # 因子参数
-    vol_vs_avg_max = 1.0     # 量比上限（软约束）
-    range_vs_avg = 1.0       # 振幅收窄上限
-    amount_vs_avg_min = 0.5  # 成交额倍数下限
-    amount_vs_avg_max = 5.0  # 成交额倍数上限
-
-    # 执行参数
-    max_daily_buy = 8        # 每日最多买 8 只
-    max_holdings = 8         # 最大持仓 8 只
-    max_position = 0.30      # 单只最大仓位 30%
-    hold_days_max = 2        # 最大持仓天数（优化后）
-    hold_days_min = 1        # 最小持仓天数
-
-    # 风控
-    stop_loss = -0.05        # 止损 -5%
-    stop_profit = 0.15       # 止盈 15%（优化后）
-    initial_capital = 200000 # 回测用 20万
-
-    # 交易成本
-    commission_rate = 0.0003 # 佣金万3
-    stamp_tax = 0.001        # 印花税千1（卖出）
-    slippage_rate = 0.002    # 滑点千2
+# core/strategy_map.py → STRATEGY_MAP["v20c"]["params"]
+STOP_LOSS      = -0.02    # 止损 -2%
+TAKE_PROFIT   = 0.05     # 止盈 +5%
+MAX_HOLDINGS   = 8        # 最大持仓 8 只
+MAX_DAILY_BUY  = 4        # 每日最多买 4 只
+MAX_POSITION   = 0.20     # 单只最大仓位 20%
+HOLD_DAYS_MAX  = 5        # 最大持仓天数 5
+HOLD_DAYS_MIN  = 1        # 最小持仓天数 1
 ```
 
-### 7.4 v27 完整参数参考
+### 7.4 v27 完整参数参考（strategy_map.py）
 
 ```python
-class V27Config:
-    # 风控
-    STOP_LOSS = -0.015       # 止损 -1.5%
-    TAKE_PROFIT = 0.03       # 止盈 3%
-    MAX_HOLDINGS = 12        # 最大持仓 12 只
-    MAX_DAILY_BUY = 8        # 每日最多买 8 只
-    MAX_POSITION = 0.25      # 单只最大仓位 25%
-    HOLD_DAYS_MAX = 5        # 最大持仓天数
-    HOLD_DAYS_MIN = 2        # 最小持仓天数
-
-    # 选股
-    MOM_THRESHOLD = 0.02     # 动量阈值 2%
+# core/strategy_map.py → STRATEGY_MAP["v27"]["params"]
+STOP_LOSS        = -0.02    # 止损 -2%
+TAKE_PROFIT     = 0.05     # 止盈 +5%
+MAX_HOLDINGS     = 8        # 最大持仓 8 只
+MAX_DAILY_BUY    = 4        # 每日最多买 4 只
+MAX_POSITION     = 0.20     # 单只最大仓位 20%
+HOLD_DAYS_MAX    = 5        # 最大持仓天数 5
+HOLD_DAYS_MIN    = 1        # 最小持仓天数 1
+HOLD_DAYS_EXTEND = 7        # 浮盈延长最大天数
+HOLD_DAYS_EXTEND_PNL = 0.03 # 浮盈延长触发阈值 3%
+MOM_THRESHOLD    = 0.02     # 动量阈值 2%
 ```
 
 ---

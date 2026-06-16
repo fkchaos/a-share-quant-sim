@@ -178,15 +178,15 @@ hermes cron list    # 查看状态
 
 ## 9. 修改策略参数
 
-策略参数在各脚本的 `Config` 类中，直接改代码：
+策略参数统一在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中管理，修改 `params` 字典即可：
 
-| 策略 | 配置文件 | 关键参数 |
-|------|---------|---------|
-| v27 | `scripts/strategies/v27_select.py` → `V27Config` | MOM_THRESHOLD, MAX_HOLDINGS |
-| v20c | `scripts/strategies/v20_tail_pick.py` → `V20Config` | hold_days_max, stop_profit |
-| v11b | `scripts/sim/sim_account1.py` → `CONFIG` 字典 | 集中配置 |
+| 策略 | 账户 | 关键参数（strategy_map.py 中的 params） |
+|------|------|----------------------------------------|
+| v11b | 账户1 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX |
+| v27 | 账户2 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD |
+| v20c | 账户3 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX |
 
-改完后跑回测验证，再提交代码。
+改完后跑回测验证，再提交代码。旧脚本（`sim_account1/2/3.py`）保留作为备份，不再被 cron 调用。
 
 ---
 

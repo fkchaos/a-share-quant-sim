@@ -2,7 +2,7 @@
 
 > 所有策略参数定义在 `core/config.py` 的 `STRATEGY_PROFILES`
 > 回测入口：`scripts/run_backtest.py --strategy <name>`
-> 模拟盘入口：`scripts/sim_account1.py` / `sim_account2.py` / `sim_account3.py`
+> 模拟盘入口：`scripts/sim/account_runner.py --strategy <name>`（三账户统一入口，2026-07-16 起）
 > 评分引擎：`core/strategy.py` → `StrategyEngine`（factor/ensemble/ml/hybrid/multi 五种模式）
 > 配置参考：[CONFIG_REFERENCE.md](CONFIG_REFERENCE.md)
 
@@ -212,14 +212,14 @@
 || **单只上限** | 20% |
 || **初始资金** | 20万 |
 || **账户** | DB `account` 表（account_id=2） |
-|| **模拟盘脚本** | `scripts/sim_account2.py`（intraday_signal/intraday_execute/report_only） |
+|| **模拟盘脚本** | `scripts/sim/account_runner.py --strategy v13`（intraday_signal/intraday_execute/report_only） |
 || **回测脚本** | `scripts/v13_small_mid_short.py` |
 || **WF 脚本** | `scripts/v13_walk_forward.py` |
 || **状态** | ✅ 模拟盘运行中（2026-06-10 起），独立于账户1 |
 || **架构** | 评分排序选股 + 可配置 bonus 因子（显式传参，不修改类属性） |
 || **数据源** | DB（`/root/data/quant.db`，CSV 导入，腾讯 qfq 前复权） |
 
-**与 v11b 的关系**：完全独立运行，不同的脚本、不同的账户文件、不同的 cron job。两者互不影响。
+**与 v11b 的关系**：完全独立运行，不同的策略、不同的账户（DB 中不同 account_id）、不同的 cron job。两者互不影响。
 
 **回测结果（close, 2021-01~2026-05, DB加载715只+流动性, SL=-1.5% TP=3% hold_max=5）：**
 
@@ -268,14 +268,15 @@
 
 **弱周期**：2023全年、2024Q1-Q2、2025Q1（震荡市表现弱）
 
-**路径配置**（2026-06-11 统一）：
+**路径配置**（2026-07-16 统一）：
 
 | 变量 | 默认值 | 环境变量 |
 |------|--------|------|
 | `DATA_DIR` | `/root/data` | `BACKTEST_DATA_DIR` |
 | `PORTFOLIO_DIR` | `/root/data/portfolio` | `PORTFOLIO_DIR` |
-| v13 账户 | `account_v13.json` | — |
-| v11b 账户 | `account.json` | — |
+| 账户数据 | DB `account` / `holdings` 表 | —（统一由 account_runner 读写） |
+
+> 旧版 JSON 账户文件（`account.json`、`account_v13.json`）已不再使用，账户数据统一存储在 SQLite 中。
 
 **优化历史（2026-06-06 ~ 2026-06-14）**：
 
@@ -306,7 +307,7 @@
 | **单只上限** | 20% |
 | **初始资金** | 20万（⚠️ V20Config 硬编码 20万，但模拟盘账户实际10万，回测需显式覆盖） |
 | **账户** | DB `account` 表（account_id=3） |
-| **模拟盘脚本** | `scripts/sim_account3.py`（tail_signal/tail_execute/report_only） |
+| **模拟盘脚本** | `scripts/sim/account_runner.py --strategy v20c`（tail_signal/tail_execute/report_only） |
 | **回测脚本** | `scripts/v20_tail_pick.py` |
 | **WF 脚本** | `scripts/v20_walk_forward.py` |
 | **状态** | ✅ 模拟盘运行中（v20c 已上线 2026-07-12） |

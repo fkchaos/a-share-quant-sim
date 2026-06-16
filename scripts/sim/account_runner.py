@@ -372,7 +372,9 @@ def run_signal(strategy_name, date):
                 add_shares = int(item.get('add_amount', 0) / item.get('price', 1) / 100) * 100
                 print(f"  {item['code']} {item.get('name', '')} — {add_shares}股 @ {item.get('price', 0):.2f}")
         if hold_items:
-            print(f"➡️ 持有 {len(hold_items)} 只不动")
+            print(f"➡️ 持有 {len(hold_items)} 只:")
+            for item in hold_items:
+                print(f"  {item['code']} {item.get('name', '')} — {item.get('current_shares', item.get('qty', '?'))}股 @ {item.get('price', 0):.2f}")
     if not plan.get('sell_plan') and not plan.get('buy_plan'):
         print("⚪ 无操作")
     print("=" * 60)
@@ -427,6 +429,7 @@ def run_execute(strategy_name, date):
 
     # 后买
     bought = []
+    buy_plan_map = {b['code']: b for b in plan.get('buy_plan', [])}
     cands = [(b['code'], b.get('score', 0)) for b in plan.get('buy_plan', [])]
     for code, score in cands:
         if code in spot and code not in state.holdings and spot[code] > 0:
@@ -446,7 +449,8 @@ def run_execute(strategy_name, date):
             if shares <= 0 or shares * adj > state.cash:
                 continue
             state = buy(state, code, price, date, shares)
-            bought.append((code, price, shares))
+            bname = buy_plan_map.get(code, {}).get('name', code)
+            bought.append((code, bname, price, shares))
 
     save_account(state, account_id)
 
@@ -461,8 +465,8 @@ def run_execute(strategy_name, date):
             print(f"  {code} {name} — {shares}股 @ {price:.2f}")
     if bought:
         print(f"🟢 买入 {len(bought)} 只:")
-        for code, price, shares in bought:
-            print(f"  {code} — {shares}股 @ {price:.2f}")
+        for code, bname, price, shares in bought:
+            print(f"  {code} {bname} — {shares}股 @ {price:.2f}")
     if not sold and not bought:
         print("⚪ 无操作")
     print("=" * 60)

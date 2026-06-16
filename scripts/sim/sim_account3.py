@@ -391,6 +391,9 @@ def cmd_tail_signal():
     # ── 选股 ──
     current_holding_codes = set(holdings.keys()) - set(to_remove)
     candidates = select_stocks(panels, factors, today, current_holding_codes)
+    # 限制选股数量：卖出后持仓 + 新股 <= MAX_HOLDINGS
+    max_new = max(0, MAX_HOLDINGS - len(current_holding_codes))
+    candidates = candidates[:max_new]
 
     # ── 生成 buy_plan ──
     buy_plan = []

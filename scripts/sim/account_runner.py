@@ -254,7 +254,11 @@ def run_signal(strategy_name, date):
         _params.setdefault("initial_capital", state.initial_capital)
         cands = strategy["select_stocks"](factors, date, state.holdings, _params)
 
-    cands = cands[:params.get("MAX_HOLDINGS", 8)]
+    # 限制选股数量：卖出后持仓 + 新股 <= MAX_HOLDINGS
+    sell_codes_set = set(sell_codes)
+    remaining_after_sell = {c for c in state.holdings if c not in sell_codes_set}
+    max_new = max(0, params.get("MAX_HOLDINGS", 8) - len(remaining_after_sell))
+    cands = cands[:max_new]
 
     # 估算每只买入预算（用于资金容量过滤和计算股数）
     max_buy = params.get("MAX_DAILY_BUY", 8)

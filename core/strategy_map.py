@@ -81,6 +81,37 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v28: Kronos AI 增强（v27 + 预测因子）──
+    "v28": {
+        "mode": "custom",
+        "description": "Kronos AI 增强选股（v27初筛 + kronos_ret/conf/trend二次排序）",
+        "account_id": 4,
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v28_kronos.select_stocks_v28",
+        "calc_factors_fn": "scripts.strategies.v28_kronos.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "MAX_HOLDINGS": 12,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.25,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MIN": 2,
+            "MOM_THRESHOLD": 0.02,
+            "KRONOS_ENABLED": True,
+            "KRONOS_ALPHA": 0.5,
+            "KRONOS_CANDIDATE_N": 50,
+            "KRONOS_PRED_LEN": 5,
+            "KRONOS_LOOKBACK": 200,
+            "KRONOS_T": 0.8,
+            "KRONOS_TOP_P": 0.85,
+            "KRONOS_SAMPLE_COUNT": 5,
+            "KRONOS_DEVICE": "cpu",
+            "KRONOS_MODEL": "small",
+            "KRONOS_CONF_THRESHOLD": 0.3,
+        },
+    },
+
     # ── v20c: 尾盘缩量企稳（账户3）──
     "v20c": {
         "mode": "custom",

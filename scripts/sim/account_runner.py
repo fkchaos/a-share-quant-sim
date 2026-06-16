@@ -290,18 +290,23 @@ def run_signal(strategy_name, date):
     buy_list = cands[:max_new_buys]
     n = len(buy_list)
     per_stock = available / n if n > 0 else available  # 每份仓位金额
-    # 查股票名称（从 holdings 或 stock_pool）
+    # 查股票名称（先取 holdings 已有的，再从 DB 补齐新选股的）
     name_map = {}
     for c in state.holdings:
         nm = state.holdings[c].get('name', '')
-        if nm:
+        if nm and nm != c:
             name_map[c] = nm
-    if not name_map:
-        try:
-            from core.db import get_stock_name_map
-            name_map = get_stock_name_map()
-        except Exception:
-            pass
+    try:
+        from core.db import get_stock_name_map
+        db_names = get_stock_name_map()
+        for c in sell_codes:
+            if c not in name_map:
+                name_map[c] = db_names.get(c, c)
+        for c, _ in buy_list:
+            if c not in name_map:
+                name_map[c] = db_names.get(c, c)
+    except Exception:
+        pass
 
     buy_plan = []
     for code, score in buy_list:

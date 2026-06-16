@@ -121,12 +121,12 @@ STRATEGY_MAP = {
         "select_fn": "scripts.strategies.v20_tail_pick.select_stocks_tail_pick",
         "calc_factors_fn": "scripts.strategies.v20_tail_pick.calc_tail_pick_factors",
         "params": {
-            "STOP_LOSS": -0.05,
-            "TAKE_PROFIT": 0.25,
+            "STOP_LOSS": -0.02,
+            "TAKE_PROFIT": 0.05,
             "MAX_HOLDINGS": 12,
             "MAX_DAILY_BUY": 5,
             "MAX_POSITION": 0.25,
-            "HOLD_DAYS_MAX": 2,
+            "HOLD_DAYS_MAX": 5,
         },
     },
 }

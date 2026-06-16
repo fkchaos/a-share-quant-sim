@@ -1084,6 +1084,40 @@ def run_intraday_execute():
     # Step 6: 报告
     report = step_report(state, date, price_data, names, mode="intraday_pm")
 
+    # ── 输出执行摘要（print 到 stdout，cron 捕获）──
+    sold_results = [r for r in exec_report['results'] if r['action'] == 'sell' and r['status'] == 'done']
+    bought_results = [r for r in exec_report['results'] if r['action'] == 'buy' and r['status'] == 'done']
+    add_results = [r for r in exec_report['results'] if r['action'] == 'add' and r['status'] == 'done']
+    blocked_results = [r for r in exec_report['results'] if r['status'] == 'blocked']
+
+    print("=" * 60)
+    print(f"v11b 下午执行 — {date}")
+    print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
+    print("-" * 60)
+    if sold_results:
+        print(f"🔴 卖出 {len(sold_results)} 只:")
+        for r in sold_results:
+            name = names.get(r['code'], r['code'])
+            print(f"  {r['code']} {name} — {r['shares']}股 @ {r['price']:.2f}")
+    if bought_results:
+        print(f"🟢 买入 {len(bought_results)} 只:")
+        for r in bought_results:
+            name = names.get(r['code'], r['code'])
+            print(f"  {r['code']} {name} — {r['shares']}股 @ {r['price']:.2f}")
+    if add_results:
+        print(f"🟡 补仓 {len(add_results)} 只:")
+        for r in add_results:
+            name = names.get(r['code'], r['code'])
+            print(f"  {r['code']} {name} — {r['shares']}股 @ {r['price']:.2f}")
+    if blocked_results:
+        print(f"⛔ 被阻塞 {len(blocked_results)} 只:")
+        for r in blocked_results:
+            name = names.get(r['code'], r['code'])
+            print(f"  {r['code']} {name} — {r['reason']}")
+    if not sold_results and not bought_results and not add_results and not blocked_results:
+        print("⚪ 无操作")
+    print("=" * 60)
+
     logger.info("=" * 70)
     return report
 

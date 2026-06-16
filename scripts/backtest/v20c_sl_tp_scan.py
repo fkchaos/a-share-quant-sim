@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""v20c 止损止盈参数扫描"""
-import sys, os, time, json, numpy as np, pandas as pd
-from datetime import datetime
-
+"""
+v20c 止损止盈参数扫描（正确版：每天根据实际持仓选股）
+"""
+import sys, os, numpy as np, pandas as pd, datetime
 sys.path.insert(0, '/root/a-share-quant-sim')
 sys.path.insert(0, '/root/a-share-quant-sim/scripts/strategies')
 
@@ -12,190 +12,153 @@ from scripts.strategies.v20_tail_pick import V20Config, calc_tail_pick_factors, 
 REPORT_DIR = "/root/data/backtest_results"
 os.makedirs(REPORT_DIR, exist_ok=True)
 
-log_path = os.path.join(REPORT_DIR, "v20c_sl_tp_scan.txt")
-def log(msg):
-    ts = datetime.now().strftime("%H:%M:%S")
-    line = f"[{ts}] {msg}"
-    print(line, flush=True)
-    with open(log_path, 'a') as f:
-        f.write(line + '\n')
-
-log("📥 加载数据...")
+print("📥 加载数据...")
 panels, codes = load_panel_from_db(need_hl=True)
-close_panel, volume_panel, amount_panel = panels[0], panels[1], panels[2]
-high_panel, low_panel = panels[3], panels[4]
+close_panel = panels[0]
+volume_panel = panels[1]
+amount_panel = panels[2]
+high_panel = panels[3]
+low_panel = panels[4]
+open_panel = panels[5] if len(panels) > 5 else panels[0]
+dates = close_panel.index
+print(f"  {len(dates)} 天 × {close_panel.shape[1]} 只")
+
+print("  计算 v20c 因子...")
 factors = calc_tail_pick_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel)
-log(f"  {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只")
+print("  因子就绪")
 
-# 保存原始参数
-ORIG = {
-    'stop_loss': V20Config.stop_loss,
-    'stop_profit': V20Config.stop_profit,
-    'hold_days_max': V20Config.hold_days_max,
-    'max_holdings': V20Config.max_holdings,
-    'max_daily_buy': V20Config.max_daily_buy,
-    'max_position': V20Config.max_position,
-    'initial_capital': V20Config.initial_capital,
-}
+SL_RANGE = [-0.02, -0.03, -0.04, -0.05, -0.07, -0.10]
+TP_RANGE = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
 
-def run_bt(sl, tp, hdm=5):
-    V20Config.stop_loss = sl
-    V20Config.stop_profit = tp
-    V20Config.hold_days_max = hdm
-    cfg = V20Config()
-    ic = cfg.initial_capital
+results = []
 
-    holdings = {}  # code -> {shares, cost_price, buy_date, hold_days}
-    cash = ic
-    trade_log = []
-    nav_history = []
-    pending = []  # 待买入列表
+for sl in SL_RANGE:
+    for tp in TP_RANGE:
+        V20Config.stop_loss = sl
+        V20Config.stop_profit = tp
+        V20Config.hold_days_max = 2
+        V20Config.max_holdings = 12
+        V20Config.max_daily_buy = 5
+        V20Config.max_position = 0.25
+        cfg = V20Config()
+        ic = cfg.initial_capital
+        cash = ic
+        holdings = {}
+        nav_list = []
+        sells = {'TP': 0, 'SL': 0, 'TO': 0}
+        nbuy = 0
+        pending = []
 
-    dates = close_panel.index[60:]  # 从第60天开始（因子预热）
-
-    for di, date in enumerate(dates):
-        cp = close_panel.loc[date] if date in close_panel.index else pd.Series()
-
-        # 风控检查
-        to_sell = []
-        for code, h in list(holdings.items()):
-            if code not in cp.index:
+        for i, date in enumerate(dates):
+            if i < 20:
+                nav_list.append(ic)
                 continue
-            p = cp[code]
-            if pd.isna(p) or p <= 0:
-                continue
-            pnl = (p - h['cost_price']) / h['cost_price']
-            if pnl <= sl:
-                to_sell.append((code, 'SL', pnl))
-            elif pnl >= tp:
-                to_sell.append((code, 'TP', pnl))
-            elif h['hold_days'] >= hdm:
-                to_sell.append((code, 'TO', pnl))
 
-        # 卖出
-        for code, reason, pnl in to_sell:
-            if code in holdings and code in cp.index:
-                p = cp[code]
-                if not pd.isna(p) and p > 0:
-                    h = holdings[code]
-                    proceeds = h['shares'] * p
-                    cash += proceeds
-                    trade_log.append({'date': str(date), 'code': code, 'action': 'SELL',
-                                      'reason': reason, 'pnl': round(pnl, 4), 'proceeds': proceeds})
-                    del holdings[code]
+            pd_ = close_panel.loc[date]
+            od_ = open_panel.loc[date]
 
-        # 选股（每5天一次，或持仓为空时）
-        if di % 5 == 0 or (not holdings and not pending):
+            # 买入
+            if pending and cash > ic * 0.05 and len(holdings) < cfg.max_holdings:
+                nb = min(len(pending), cfg.max_daily_buy, cfg.max_holdings - len(holdings))
+                ac = cash - ic * 0.05
+                ps = ac / nb if nb else 0
+                ps = min(ps, ic * cfg.max_position)
+                for code in pending[:nb]:
+                    if code not in od_.index:
+                        continue
+                    bp = od_[code]
+                    if np.isnan(bp) or bp <= 0:
+                        continue
+                    if i > 0:
+                        pc = close_panel.iloc[i-1].get(code)
+                        if pc and not np.isnan(pc) and pc > 0 and bp >= pc * 1.09:
+                            continue
+                    adj = bp * 1.0023
+                    sh = int(ps / adj / 100) * 100
+                    if sh <= 0:
+                        continue
+                    c = sh * adj
+                    if c > cash:
+                        continue
+                    cash -= c
+                    holdings[code] = {'sh': sh, 'cost': bp, 'days': 0}
+                    nbuy += 1
+            pending = []
+
+            # 卖出
+            to_remove = []
+            for code, h in holdings.items():
+                h['days'] += 1
+                if code not in pd_.index:
+                    continue
+                cp = pd_[code]
+                if np.isnan(cp) or cp <= 0:
+                    continue
+                pnl = (cp - h['cost']) / h['cost']
+                reason = None
+                if pnl <= cfg.stop_loss:
+                    reason = 'SL'
+                elif pnl >= cfg.stop_profit:
+                    reason = 'TP'
+                elif h['days'] >= cfg.hold_days_max:
+                    reason = 'TO'
+                if reason:
+                    sv = h['sh'] * cp * 0.9967
+                    cash += sv
+                    sells[reason] += 1
+                    to_remove.append(code)
+            for code in to_remove:
+                holdings.pop(code, None)
+
+            # 选股（传给下一天）
             try:
-                cands = select_stocks_tail_pick(factors, date, close_panel, volume_panel, amount_panel, high_panel, low_panel, holdings)
-                pending = cands[:cfg.max_daily_buy]
+                cands = select_stocks_tail_pick(factors, date, close_panel, volume_panel, amount_panel,
+                                                high_panel, low_panel, current_holdings=list(holdings.keys()))
+                if cands and len(cands) > 0:
+                    # 过滤已持有的
+                    cands_new = [c for c in cands if c not in holdings][:cfg.max_daily_buy]
+                    pending = cands_new
+                else:
+                    pending = []
             except:
                 pending = []
 
-        # 买入
-        if pending and cash > ic * 0.1 and len(holdings) < cfg.max_holdings:
-            ac = cash - ic * 0.1
-            nb = min(len(pending), cfg.max_daily_buy, cfg.max_holdings - len(holdings))
-            ps = ac / nb if nb > 0 else 0
-            ps = min(ps, ic * cfg.max_position)
-            bought = []
-            for code in pending:
-                if code not in cp.index:
-                    continue
-                p = cp[code]
-                if pd.isna(p) or p <= 0:
-                    continue
-                shares = int(ps / p / 100) * 100
-                if shares <= 0:
-                    continue
-                cost = shares * p
-                if cost > ac:
-                    continue
-                holdings[code] = {'shares': shares, 'cost_price': p, 'buy_date': date, 'hold_days': 0}
-                cash -= cost
-                ac -= cost
-                trade_log.append({'date': str(date), 'code': code, 'action': 'BUY', 'shares': shares, 'price': p})
-                bought.append(code)
-                if len(holdings) >= cfg.max_holdings:
-                    break
-            pending = [c for c in pending if c not in bought]
+            nav = cash
+            for code, h in holdings.items():
+                if code in pd_.index:
+                    p = pd_[code]
+                    if not np.isnan(p) and p > 0:
+                        nav += h['sh'] * p
+            nav_list.append(nav)
 
-        # 更新持有天数
-        for code in holdings:
-            holdings[code]['hold_days'] += 1
+        nav_arr = np.array(nav_list)
+        daily_ret = np.diff(nav_arr) / nav_arr[:-1]
+        tr = nav_arr[-1] / nav_arr[0] - 1
+        n = len(daily_ret)
+        ar = (1 + tr) ** (252 / max(n, 1)) - 1
+        sh = daily_ret.mean() / daily_ret.std() * np.sqrt(252) if daily_ret.std() > 1e-10 else 0
+        cm = np.maximum.accumulate(nav_arr)
+        mdd = ((nav_arr - cm) / cm).min()
+        ts = max(sells['TP'] + sells['SL'] + sells['TO'], 1)
 
-        # 记录 NAV
-        mv = sum(h['shares'] * cp.get(code, 0) for code, h in holdings.items() if code in cp.index and not pd.isna(cp.get(code, 0)))
-        nav = cash + mv
-        nav_history.append({'date': str(date), 'nav': nav, 'cash': cash, 'holdings': len(holdings)})
+        r = {
+            'SL': f"{sl:.0%}", 'TP': f"{tp:.0%}",
+            '年化': f"{ar:.1%}", '夏普': f"{sh:.2f}", '回撤': f"{mdd:.1%}",
+            'TP率': f"{sells['TP']/ts:.1%}",
+            'SL率': f"{sells['SL']/ts:.1%}",
+            '超时率': f"{sells['TO']/ts:.1%}",
+            '买入': nbuy,
+        }
+        results.append(r)
+        print(f"  SL={r['SL']:>4} TP={r['TP']:>4} → 年化={r['年化']:>6} 夏普={r['夏普']:>5} 回撤={r['回撤']:>6} TP={r['TP率']} SL={r['SL率']} 超时={r['超时率']}")
 
-    # 计算指标
-    nav_series = pd.Series([n['nav'] for n in nav_history])
-    returns = nav_series.pct_change().dropna()
-    if len(returns) < 10:
-        return None
+print(f"\n{'='*60}")
+print("📊 v20c 结果（按夏普降序）")
+print("="*60)
+df = pd.DataFrame(results)
+df['sv'] = df['夏普'].astype(float)
+print(df.sort_values('sv', ascending=False)[['SL','TP','年化','夏普','回撤','TP率','SL率','超时率','买入']].to_string(index=False))
 
-    ann_return = (nav_series.iloc[-1] / nav_series.iloc[0]) ** (252 / len(returns)) - 1
-    sharpe = returns.mean() / (returns.std() + 1e-10) * np.sqrt(252)
-    max_dd = ((nav_series.cummax() - nav_series) / nav_series.cummax()).max()
-
-    sells = [t for t in trade_log if t['action'] == 'SELL']
-    tp_count = len([t for t in sells if t['reason'] == 'TP'])
-    sl_count = len([t for t in sells if t['reason'] == 'SL'])
-    to_count = len([t for t in sells if t['reason'] == 'TO'])
-    total_sells = max(len(sells), 1)
-
-    return {
-        'ann_return': ann_return,
-        'sharpe': sharpe,
-        'max_dd': max_dd,
-        'tp_rate': tp_count / total_sells,
-        'sl_rate': sl_count / total_sells,
-        'to_rate': to_count / total_sells,
-        'total_trades': len(trade_log),
-        'final_nav': nav_series.iloc[-1],
-    }
-
-# 恢复原始参数
-for k, v in ORIG.items():
-    setattr(V20Config, k, v)
-
-# 扫描矩阵
-log("🔬 开始扫描止损止盈参数...")
-experiments = []
-for sl in [-0.03, -0.05, -0.08, -0.10, -0.15]:
-    for tp in [0.05, 0.08, 0.10, 0.15, 0.20, 0.25, 0.30]:
-        experiments.append((sl, tp))
-
-results = []
-for i, (sl, tp) in enumerate(experiments):
-    r = run_bt(sl, tp)
-    if r is None:
-        continue
-    label = f"SL={sl*100:.0f}% TP={tp*100:.0f}%"
-    results.append({'sl': sl, 'tp': tp, **r})
-    log(f"  [{i+1}/{len(experiments)}] {label:25s}: 年化={r['ann_return']*100:6.1f}% 夏普={r['sharpe']:5.2f} 回撤={r['max_dd']*100:6.1f}% TP={r['tp_rate']*100:5.1f}% SL={r['sl_rate']*100:5.1f}%")
-
-# 排序
-results.sort(key=lambda x: x['sharpe'], reverse=True)
-
-log(f"\n{'='*100}")
-log("结果汇总（按夏普降序）")
-log(f"{'='*100}")
-log(f"{'SL':>6s} | {'TP':>5s} | {'年化':>7s} | {'夏普':>5s} | {'回撤':>7s} | {'TP%':>6s} | {'SL%':>6s} | {'TO%':>6s} | {'交易数':>6s}")
-log(f"{'-'*6}-+-{'-'*5}-+-{'-'*7}-+-{'-'*5}-+-{'-'*7}-+-{'-'*6}-+-{'-'*6}-+-{'-'*6}-+-{'-'*6}")
-for r in results:
-    log(f"{r['sl']*100:5.0f}% | {r['tp']*100:4.0f}% | {r['ann_return']*100:7.1f}% | {r['sharpe']:5.2f} | {r['max_dd']*100:7.1f}% | {r['tp_rate']*100:6.1f}% | {r['sl_rate']*100:6.1f}% | {r['to_rate']*100:6.1f}% | {r['total_trades']:6d}")
-
-best = results[0]
-log(f"\n🏆 最优夏普: SL={best['sl']*100:.0f}% TP={best['tp']*100:.0f}% (夏普={best['sharpe']:.2f}, 年化={best['ann_return']*100:.1f}%)")
-
-best2 = max(results, key=lambda x: x['ann_return'])
-log(f"🏆 最高年化: SL={best2['sl']*100:.0f}% TP={best2['tp']*100:.0f}% (年化={best2['ann_return']*100:.1f}%, 夏普={best2['sharpe']:.2f})")
-
-# 保存
-ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-out = os.path.join(REPORT_DIR, f"v20c_sl_tp_scan_{ts}.json")
-with open(out, "w") as f:
-    json.dump(results, f, indent=2, ensure_ascii=False, default=str)
-log(f"\n✅ {out}")
+ts = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+df.to_csv(f"{REPORT_DIR}/v20c_sl_tp_scan_{ts}.csv", index=False)
+print(f"\n✅ 结果已保存")

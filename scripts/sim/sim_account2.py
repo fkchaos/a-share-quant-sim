@@ -144,12 +144,27 @@ def intraday_signal(date):
     cp, vp, ap, hp, lp, op = panels
     factors = calc_factors(cp, vp, ap, hp, lp, op)
     state = load_account()
-    to_sell = [(c, 'timeout') for c, h in state.holdings.items() if h.get('hold_days', 0) >= HOLD_DAYS_MAX]
+    to_sell = []
+    for code, h in state.holdings.items():
+        if code not in cp.columns:
+            continue
+        price = cp.loc[date, code] if date in cp.index else None
+        if price is None or pd.isna(price) or price <= 0:
+            continue
+        pnl = (price - h.get('cost_price', price)) / h.get('cost_price', price)
+        hd = h.get('hold_days', 0)
+        if pnl <= STOP_LOSS:
+            to_sell.append((code, 'stop_loss'))
+        elif pnl >= TAKE_PROFIT:
+            to_sell.append((code, 'take_profit'))
+        elif hd >= HOLD_DAYS_MAX:
+            to_sell.append((code, 'timeout'))
     sell_codes = {c for c, _ in to_sell}
     cands = select_stocks(factors, date)
     # 排除卖出后仍持有的股票（卖出的不算占用仓位）
     remaining_after_sell = {c for c in state.holdings if c not in sell_codes}
-    cands = [(c, s) for c, s in cands if c not in remaining_after_sell][:MAX_HOLDINGS]
+    max_new = max(0, MAX_HOLDINGS - len(remaining_after_sell))
+    cands = [(c, s) for c, s in cands if c not in remaining_after_sell][:max_new]
     plan = {'date': str(date), 'strategy': 'v27', 'sell_plan': [c for c, _ in to_sell],
             'buy_plan': [{'code': c, 'score': round(s, 2)} for c, s in cands[:MAX_DAILY_BUY]],
             'timestamp': datetime.now().isoformat()}
@@ -188,7 +203,7 @@ def intraday_execute(date):
     for bp in plan.get('buy_plan', []):
         code = bp['code']
         if code in spot and code not in state.holdings and spot[code] > 0:
-            avail = state.cash - state.initial_capital * 0.1
+            avail = state.cash - state.initial_capital * 0.03
             if avail <= 0: break
             per = min(avail / MAX_DAILY_BUY, state.initial_capital * MAX_POSITION)
             adj = spot[code] * (1 + COMMISSION_RATE + SLIPPAGE_RATE)

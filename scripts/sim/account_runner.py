@@ -159,8 +159,11 @@ def save_account(state, account_id):
 
 # ── 风控 ──────────────────────────────────────────────────────────
 def check_risk(state, date, price_data, params):
-    """风控检查：止损/止盈/超时"""
+    """风控检查：止损/止盈/超时（浮盈延长）"""
     to_sell = []
+    hold_max = params["HOLD_DAYS_MAX"]
+    hold_ext = params.get("HOLD_DAYS_EXTEND", hold_max)
+    hold_ext_pnl = params.get("HOLD_DAYS_EXTEND_PNL", 0.03)
     for code, h in list(state.holdings.items()):
         if code not in price_data.index:
             continue
@@ -168,12 +171,15 @@ def check_risk(state, date, price_data, params):
         if pd.isna(cp) or cp <= 0:
             continue
         pnl = (cp - h['cost_price']) / h['cost_price']
-        if pnl <= params.get("STOP_LOSS", -0.05):
+        if pnl <= params["STOP_LOSS"]:
             to_sell.append((code, 'stop_loss', pnl))
-        elif pnl >= params.get("TAKE_PROFIT", 0.10):
+        elif pnl >= params["TAKE_PROFIT"]:
             to_sell.append((code, 'take_profit', pnl))
-        elif h.get('hold_days', 0) >= params.get("HOLD_DAYS_MAX", 8):
-            to_sell.append((code, 'timeout', pnl))
+        else:
+            hd = h.get('hold_days', 0)
+            limit = hold_ext if pnl >= hold_ext_pnl else hold_max
+            if hd >= limit:
+                to_sell.append((code, 'timeout', pnl))
     return to_sell
 
 
@@ -187,9 +193,9 @@ def execute_sells(state, to_sell, date, spot):
 
 def execute_buys(state, cands, date, spot, params):
     """执行买入，返回新 state"""
-    max_buy = params.get("MAX_DAILY_BUY", 6)
-    max_pos = params.get("MAX_POSITION", 0.30)
-    max_hold = params.get("MAX_HOLDINGS", 8)
+    max_buy = params["MAX_DAILY_BUY"]
+    max_pos = params["MAX_POSITION"]
+    max_hold = params["MAX_HOLDINGS"]
 
     available = state.cash - state.initial_capital * 0.03
     if available <= 0:
@@ -254,15 +260,16 @@ def run_signal(strategy_name, date):
         _params.setdefault("initial_capital", state.initial_capital)
         cands = strategy["select_stocks"](factors, date, state.holdings, _params)
 
+    sell_codes = [c for c, _, _ in to_sell]
+
     # 限制选股数量：卖出后持仓 + 新股 <= MAX_HOLDINGS
     sell_codes_set = set(sell_codes)
     remaining_after_sell = {c for c in state.holdings if c not in sell_codes_set}
-    max_new = max(0, params.get("MAX_HOLDINGS", 8) - len(remaining_after_sell))
+    max_new = max(0, params["MAX_HOLDINGS"] - len(remaining_after_sell))
     cands = cands[:max_new]
 
     # 估算每只买入预算（用于资金容量过滤和计算股数）
-    max_buy = params.get("MAX_DAILY_BUY", 8)
-    sell_codes = [c for c, _, _ in to_sell]
+    max_buy = params["MAX_DAILY_BUY"]
     sell_cash = 0
     if date in cp.index:
         sell_cash = sum(

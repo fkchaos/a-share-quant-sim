@@ -403,12 +403,12 @@ def cmd_tail_signal():
     hold_plan = []
 
     if candidates and state["cash"] > 0:
-        # 按评分排序，取前 MAX_DAILY_BUY 只生成计划（不限制 available_slots，由执行时决定）
         n_plan = min(len(candidates), MAX_DAILY_BUY)
-        per_stock = min(
-            state["cash"] * 0.9 / n_plan,
-            state["cash"] * MAX_POSITION,
-        )
+        available = state["cash"] - state["initial_capital"] * 0.03
+        if available <= 0:
+            buy_plan = []
+        else:
+            per_stock = min(available / n_plan, state["initial_capital"] * MAX_POSITION)
         for code in candidates[:n_plan]:
             if code not in close.columns:
                 continue

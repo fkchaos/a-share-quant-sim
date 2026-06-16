@@ -946,7 +946,7 @@ def run_intraday_signal():
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv("/root/zz800_constituents.csv")
+        zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
@@ -1043,7 +1043,7 @@ def run_intraday_execute():
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv("/root/zz800_constituents.csv")
+        zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
@@ -1155,7 +1155,7 @@ def run_day_end(report_only=False):
         # 股票名称
         names = {}
         try:
-            zz800 = pd.read_csv("/root/zz800_constituents.csv")
+            zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
             names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
         except Exception:
             pass
@@ -1179,7 +1179,7 @@ def run_day_end(report_only=False):
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv("/root/zz800_constituents.csv")
+        zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass

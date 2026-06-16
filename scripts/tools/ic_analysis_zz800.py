@@ -14,7 +14,7 @@ from pathlib import Path
 
 DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', '/root/data'))
 DAILY_DIR = DATA_DIR / 'daily'
-CONSTITUENTS_CSV = Path('/root/zz800_constituents.csv')
+CONSTITUENTS_CSV = Path('/root/data/zz800_constituents.csv')
 
 # ── 加载选股池 ─────────────────────────────────────────────────
 def load_zz800_codes():

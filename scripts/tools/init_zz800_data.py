@@ -127,7 +127,7 @@ def main():
     args = parser.parse_args()
     
     # 读取中证800成分股列表
-    csv_path = '/root/zz800_constituents.csv'
+    csv_path = '/root/data/zz800_constituents.csv'
     if not os.path.exists(csv_path):
         print(f"❌ 成分股列表不存在: {csv_path}")
         print("   请先运行生成脚本")

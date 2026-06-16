@@ -4,6 +4,8 @@
 
 ## 结果记录（按时间倒序）
 
+2026-07-17 16:00:00 | **v28 Kronos AI 增强（调研完成，代码就绪，暂缓上线）** | close+WF | 2022-01~2026-05 | — | — | — | — | Kronos(financial K线基础模型, AAAI 2026)零样本对A股完全无效：kronos_ret全部为负，kronos_conf全部=5.0(截断)。代码已提交(feature/v28-kronos)，需GPU微调后才能验证。已安装agent-reach/last30days/ai-daily-news三个skill 🔬
+
 2026-07-14 12:00:00 | **v27 价量共振（WF 通过，采纳）** | close+WF | 2022-01~2026-05 | **251%** | **5.72** | **-6.7%** | **8.66** | mom_5>2% + pv_corr_20价量共振 + gap/illiq/boll。WF: 15/15(100%)正收益，夏普8.66，回撤1.74% ✅ 已上线账户2
 2026-07-14 12:00:00 | **v28 滴水穿石（证伪）** | close | 2022-01~2026-05 | 125% | 5.65 | -5.8% | — | 日内成交量周期代理因子，IC太弱（最高IR=0.066），日K线无法代理日内周期 ❌
 2026-07-14 12:00:00 | **v29 球队硬币（证伪）** | close | 2022-01~2026-05 | 124% | 5.62 | -5.8% | — | 市场状态自适应动量，adaptive_mom IC_IR=0.049（弱）❌
@@ -321,9 +323,47 @@
 
 ---
 
+## v28 Kronos AI 增强选股（2026-07-17）
+
+### 背景
+Kronos（清华大学，AAAI 2026）是首个开源金融 K 线基础模型。把 OHLCV 数据当"语言"处理：
+- Stage 1: K线 Tokenizer（层级向量量化，Hierarchical VQ）
+- Stage 2: Decoder-only Transformer（自回归预训练）
+- 预训练规模: 120亿条 K 线，45 个全球交易所
+- 零样本 RankIC 比最强 TSFM 高 93%
+
+### 集成方案
+- v27 初筛 Top 50 → Kronos 预测（~2s/只 CPU）→ 综合评分
+- 综合评分: `final = v27_score + alpha × kronos_ret × kronos_conf`
+- 不对 800 只全量跑（40min），只对候选股跑（2.5min）
+
+### Demo 结果
+- 模型加载: 0.7s
+- 50/50 预测成功，101s（~2s/只）
+- **kronos_ret 全部为负**（-0.7% ~ -22.9%），模型认为所有股票未来 5 天都跌
+- **kronos_conf 全部 = 5.0**（截断上限），不确定性极高无区分度
+- v27 和 v28 Top 20 完全一致（负 ret 只拉低分数不改变排序）
+
+### 方案 B（排除法）验证
+- 用 kronos_conf 排除高不确定性股票 → 不可行
+- conf 全等于 5.0，无法区分"确定"和"不确定"的股票
+
+### 结论
+- **零样本 Kronos 对 A 股完全无效**——A 股特有模式（涨跌停、T+1、散户主导）无法从全球数据零样本迁移
+- **微调是唯一出路**，但需要 GPU（small 模型 ~2h）
+- 服务器当前无 GPU，暂缓上线
+- 代码已提交 `feature/v28-kronos` 分支，等 GPU 资源到位即可激活
+
+### 已安装 skill
+- agent-reach: 13 平台搜索路由（小红书/Twitter/B站/Reddit/GitHub 等）
+- last30days: 最近 30 天社区讨论研究工具
+- ai-daily-news: AI 行业新闻 RSS 摘要
+
+---
+
 ## 已舍弃方向
 
-新闻情感因子 / IC-IR 加权(v8全集) / 系统择时(MA60/120) / 短线高频交易(v9 freq=5) / 简单多策略并行 / ML分组stacking / ML regime switching / ML 因子权重预测 / ML hybrid(样本外IC≈0) / 小市值因子(v10_small_cap, 仅2025年有效) / vol_ratio_20+amount_ratio(v6b原始因子, 中证800上IR<0.05) / 自适应因子权重(v10g) / 趋势filter(MA60) / 评分加权(线性/指数) / 换手率控制 / 收盘报告做完整流程(应纯只读) / 拥挤度过滤(v11b_crowd, WF 8/16) / HMM 因子择时(v11b_hmm, WF 5/16) / 残差动量(v14_resid, WF 8/16, 熊市fold -69%) / 质量因子(v15_quality, 全量 13.20%/0.64/-24.87%) / 行业轮动(东方财富/申万接口不可用，暂缓) / 动量+反转混合(v16_mom_rev_hybrid, 全量 12.98%/0.56/-30.93%) / 分级止盈短周期(v13_tp, WF 69%) / 动态持仓天数(v13_dynamic, WF 88%)
+新闻情感因子 / IC-IR 加权(v8全集) / 系统择时(MA60/120) / 短线高频交易(v9 freq=5) / 简单多策略并行 / ML分组stacking / ML regime switching / ML 因子权重预测 / ML hybrid(样本外IC≈0) / 小市值因子(v10_small_cap, 仅2025年有效) / vol_ratio_20+amount_ratio(v6b原始因子, 中证800上IR<0.05) / 自适应因子权重(v10g) / 趋势filter(MA60) / 评分加权(线性/指数) / 换手率控制 / 收盘报告做完整流程(应纯只读) / 拥挤度过滤(v11b_crowd, WF 8/16) / HMM 因子择时(v11b_hmm, WF 5/16) / 残差动量(v14_resid, WF 8/16, 熊市fold -69%) / 质量因子(v15_quality, 全量 13.20%/0.64/-24.87%) / 行业轮动(东方财富/申万接口不可用，暂缓) / 动量+反转混合(v16_mom_rev_hybrid, 全量 12.98%/0.56/-30.93%) / 分级止盈短周期(v13_tp, WF 69%) / 动态持仓天数(v13_dynamic, WF 88%) / Kronos零样本(v28, 对A股完全无效, 代码保留待微调)
 
 ---
 

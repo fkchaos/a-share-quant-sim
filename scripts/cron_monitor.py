@@ -224,7 +224,15 @@ def check_jobs():
             # 检查文件是否是今天的
             file_date = os.path.basename(filepath)[:10] if filepath else ""
             if file_date == today:
-                summary[job_id] = {"name": name, "state": "no_marker_today"}
+                # 检查输出内容是否包含错误信息
+                has_error = any(kw in content for kw in ["Error", "FAILED", "RuntimeError", "Traceback", "HTTP 429", "Provider returned error"])
+                if has_error:
+                    summary[job_id] = {"name": name, "state": "error_no_marker"}
+                    if not is_suppressed(job_id):
+                        alerts.append(f"🔴 执行失败（agent 异常）：{name} — 今日输出含错误信息，无 [CRON_STATUS] 标记")
+                        set_suppressed(job_id)
+                else:
+                    summary[job_id] = {"name": name, "state": "no_marker_today"}
             else:
                 summary[job_id] = {"name": name, "state": "no_marker"}
             continue
@@ -330,6 +338,8 @@ def format_heartbeat_report(summary):
             ok_jobs.append(f"  ✅ {name}  {duration}s")
         elif state == "error":
             error_jobs.append(f"  ❌ {name}")
+        elif state == "error_no_marker":
+            error_jobs.append(f"  ❌ {name}（agent 异常，无状态标记）")
         elif state == "paused":
             paused_jobs.append(f"  ⏸️ {name}")
         elif state in ("not_today", "no_marker", "no_marker_today"):

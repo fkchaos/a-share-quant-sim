@@ -111,6 +111,17 @@ async def async_update_all(write_csv=False):
     total = time.time() - t0
     print(f"  ─────────────────────────────")
     print(f"  总耗时: {total:.1f}s")
+
+    # ── 更新上证指数 ──
+    try:
+        from fetch_index_data import fetch_index_kline, save_to_db
+        print(f"\n📈 更新上证指数...")
+        idx_records = fetch_index_kline()
+        if idx_records:
+            save_to_db(idx_records)
+    except Exception as e:
+        print(f"  ⚠️ 上证指数更新失败: {e}")
+
     return total
 
 

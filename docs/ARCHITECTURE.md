@@ -1,6 +1,6 @@
 # 系统架构文档
 
-> 最后更新：2026-07-17（市场状态识别 + 动态仓位）
+> 最后更新：2026-06-17（cron 极简 prompt + 监控增强 + 报告格式统一）
 
 ## 一、整体架构
 
@@ -158,17 +158,66 @@ cron → account_runner.py --strategy v27 intraday_signal
 
 ## 六、Cron 调度
 
-| 任务 | 时间 | 命令 |
-|------|------|------|
-| 账户1-上午信号 | 11:45 工作日 | `python scripts/sim/account_runner.py --strategy v11b intraday_signal` |
-| 账户1-下午执行 | 13:00 工作日 | `python scripts/sim/account_runner.py --strategy v11b intraday_execute` |
-| 账户2-上午信号 | 11:45 工作日 | `python scripts/sim/account_runner.py --strategy v27 intraday_signal` |
-| 账户2-下午执行 | 13:00 工作日 | `python scripts/sim/account_runner.py --strategy v27 intraday_execute` |
-| 账户3-尾盘信号 | 14:45 工作日 | `python scripts/sim/account_runner.py --strategy v20c tail_signal` |
-| 账户3-尾盘执行 | 14:55 工作日 | `python scripts/sim/account_runner.py --strategy v20c tail_execute` |
-| 收盘报告 | 15:30 工作日 | 三个账户 report_only |
+### 6.1 任务清单
 
-> 2026-07-16 起，所有三个账户统一走 `account_runner.py`，旧 `sim_account1.py` 保留为备份。
+| 任务 | 时间 | 命令 | 备注 |
+|------|------|------|------|
+| 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` | 含上证指数更新 |
+| 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` | 含上证指数更新 |
+| 账户1-上午信号 | 11:45 工作日 | `--strategy v11b intraday_signal` | ⏸️ 已暂停 |
+| 账户1-下午执行 | 13:00 工作日 | `--strategy v11b intraday_execute` | ⏸️ 已暂停 |
+| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` | |
+| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` | |
+| 账户3-尾盘信号 | 14:45 工作日 | `--strategy v20c tail_signal` | |
+| 账户3-尾盘执行 | 14:55 工作日 | `--strategy v20c tail_execute` | |
+| 收盘报告 | 15:30 工作日 | `--strategy all report_only` | 三账户统一 |
+| Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` | 漏执行/失败/超时检测 |
+| Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` | 每日汇总 |
+| 每日记忆整理 | 08:00 每日 | hermes-memery 备份 | ⏸️ 已暂停 |
+
+> 2026-06-17 起，所有 cron 统一为极简 prompt（一条命令 + 整理报告 + CRON_STATUS 标记），避免 agent 推理消耗 API 导致 429 限流。
+
+### 6.2 Cron Prompt 设计原则
+
+**核心原则：脚本做所有工作，agent 只负责格式化输出。**
+
+每个 cron prompt 固定结构：
+```
+执行<任务名>。
+
+运行命令：
+cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 <脚本> <参数>
+
+整理为报告，包含股票代码和名称。
+
+[CRON_STATUS] job_id=<id> status=ok duration=0 ts=<时间>
+```
+
+**为什么这样设计：**
+- 旧 prompt 有 3-5 步操作（git pull + 跑脚本 + 读文件 + 整理报告），每步都触发 API 调用
+- OpenRouter Stealth provider 有严格速率限制，下午密集时段（14:40-15:30）容易打满 429
+- 新 prompt 只需 1 次 API 调用（跑命令 + 格式化输出），大幅降低 429 风险
+
+### 6.3 报告格式规范
+
+所有信号/执行/报告 cron 的输出必须包含：
+- 市场状态（牛/熊/震荡 + 仓位乘数）
+- 现金 + 持仓数
+- 卖出明细：代码 + 名称 + 股数 + 价格 + 原因
+- 买入明细：代码 + 名称 + 股数 + 价格 + 目标金额
+- 持仓明细：代码 + 名称 + 股数 + 成本 + 市值 + 盈亏%
+
+### 6.4 Cron 监控系统
+
+`scripts/cron_monitor.py` 功能：
+- 解析每个 job 输出中的 `[CRON_STATUS]` 标记
+- 检测漏执行（计划时间 + 容忍窗口后仍未运行）
+- 检测连续失败（可配置阈值，默认 2 次）
+- 检测超时（超过历史均值 2 倍）
+- 告警抑制（30 分钟内不重复告警）
+- 心跳报告（每日 16:00 汇总所有 job 状态）
+
+**无标记失败检测**：当 agent 在写 CRON_STATUS 之前崩溃（如 HTTP 429），输出文件存在但无标记。监控脚本会检查文件内容是否含 `Error`/`FAILED`/`RuntimeError`/`HTTP 429` 等关键词，标记为 `error_no_marker` 并告警。
 
 ## 七、回测与模拟盘一致性
 

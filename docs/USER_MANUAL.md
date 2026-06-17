@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-07-17（上证指数市场状态 + 数据更新同步）
+> 最后更新：2026-06-17（cron 极简 prompt + 监控增强 + Hermes cron 方案）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -464,41 +464,81 @@ REGIME_BEAR_ALLOC = 0.3     # 熊市可用资金比例
 
 ## 八、定时调度
 
-### 8.1 使用系统 crontab
+### 8.1 方案选择
+
+| 方案 | 适用场景 | 优点 | 缺点 |
+|------|---------|------|------|
+| **Hermes cron**（推荐） | 已部署 Hermes Agent | 自动重试、失败告警、QQ 推送、集中管理 | 依赖 Hermes 服务 |
+| **系统 crontab** | 纯 Linux 环境 | 零依赖、稳定 | 无告警、无重试、需手动查日志 |
+
+### 8.2 Hermes cron 方案（推荐）
+
+所有 cron 任务通过 `hermes cron` 管理，每个任务只需一条命令 + 格式化输出：
+
+```bash
+# 查看所有 cron 任务
+hermes cron list
+
+# 手动触发某个任务（测试用）
+hermes cron run <job_id>
+
+# 暂停/恢复
+hermes cron pause <job_id>
+hermes cron resume <job_id>
+```
+
+**当前任务清单：**
+
+| 任务 | 时间 | 命令 | 备注 |
+|------|------|------|------|
+| 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` | 含上证指数更新 |
+| 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` | 含上证指数更新 |
+| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` | |
+| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` | |
+| 账户3-尾盘信号 | 14:45 工作日 | `--strategy v20c tail_signal` | |
+| 账户3-尾盘执行 | 14:55 工作日 | `--strategy v20c tail_execute` | |
+| 收盘报告 | 15:30 工作日 | `--strategy all report_only` | 三账户统一 |
+| Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` | 漏执行/失败/超时检测 |
+| Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` | 每日汇总 |
+
+**Cron Prompt 设计原则：**
+- 脚本做所有工作，agent 只负责格式化输出
+- 固定结构：任务说明 → 运行命令 → 整理为报告（含代码+名称）→ CRON_STATUS 标记
+- 极简 prompt 避免多轮 API 调用触发 429 限流
+
+### 8.3 系统 crontab 方案（备选）
 
 ```bash
 crontab -e
 ```
 
-添加以下内容（根据你的交易时间调整）：
-
 ```cron
-# 工作日 11:35 — 数据更新
-35 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
+# 数据更新（上午+下午）
+31 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
+40 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
 
-# 工作日 11:45 — 上午信号（账户1 + 账户2）
-45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/sim_account1.py intraday_signal >> /root/data/portfolio/sim_account1.log 2>&1
-45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 intraday_signal >> /root/data/portfolio/account_runner.log 2>&1
+# 账户2 信号+执行
+45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> /root/data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> /root/data/portfolio/account_runner.log 2>&1
 
-# 工作日 13:00 — 下午执行（账户1 + 账户2）
-0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/sim_account1.py intraday_execute >> /root/data/portfolio/sim_account1.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 intraday_execute >> /root/data/portfolio/account_runner.log 2>&1
+# 账户3 信号+执行
+45 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> /root/data/portfolio/account_runner.log 2>&1
+55 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> /root/data/portfolio/account_runner.log 2>&1
 
-# 工作日 14:45 — 尾盘信号（账户3）
-45 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v20c tail_signal >> /root/data/portfolio/account_runner.log 2>&1
-
-# 工作日 14:55 — 尾盘执行（账户3）
-55 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v20c tail_execute >> /root/data/portfolio/account_runner.log 2>&1
-
-# 工作日 15:30 — 收盘报告
-30 15 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 report_only >> /root/data/portfolio/account_runner.log 2>&1
+# 收盘报告（三账户）
+30 15 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy all report_only >> /root/data/portfolio/account_runner.log 2>&1
 ```
 
-### 8.2 验证 crontab
+### 8.4 验证
 
 ```bash
-crontab -l          # 查看当前 crontab
-grep CRON /etc/log/syslog  # 查看 cron 日志（Ubuntu）
+# crontab 方案
+crontab -l
+grep CRON /var/log/syslog  # Ubuntu/Debian
+grep CRON /var/log/cron    # CentOS
+
+# Hermes cron 方案
+hermes cron list
 ```
 
 ---

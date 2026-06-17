@@ -1,6 +1,6 @@
 # 部署指南
 
-> 最后更新：2026-07-17（上证指数市场状态 + 数据更新同步）
+> 最后更新：2026-06-17（cron 极简 prompt + 监控增强 + Hermes cron 方案）
 
 零基础部署，5 分钟跑通。
 
@@ -106,42 +106,54 @@ python scripts/sim/account_runner.py --strategy v20c report_only
 
 ## 6. 定时调度
 
-### 使用系统 crontab（推荐）
+### 方案一：Hermes cron（推荐）
+
+所有任务通过 `hermes cron` 管理，自动重试、失败告警、QQ 推送。
+
+**当前任务清单：**
+
+| 任务 | 时间 | 命令 |
+|------|------|------|
+| 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` |
+| 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` |
+| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` |
+| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` |
+| 账户3-尾盘信号 | 14:45 工作日 | `--strategy v20c tail_signal` |
+| 账户3-尾盘执行 | 14:55 工作日 | `--strategy v20c tail_execute` |
+| 收盘报告 | 15:30 工作日 | `--strategy all report_only` |
+| Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` |
+| Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` |
+
+```bash
+hermes cron list          # 查看所有任务
+hermes cron run <job_id>  # 手动触发
+hermes cron pause <job_id> # 暂停
+```
+
+### 方案二：系统 crontab（备选）
 
 ```bash
 crontab -e
 ```
 
-添加以下内容（根据你的交易时间调整）：
-
 ```cron
-# 工作日 11:45 — 上午信号（账户1 + 账户2）
-45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/sim_account1.py intraday_signal >> /root/data/portfolio/sim_account1.log 2>&1
-45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 intraday_signal >> /root/data/portfolio/account_runner.log 2>&1
+# 数据更新
+31 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
+40 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
 
-# 工作日 13:00 — 下午执行（账户1 + 账户2）
-0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/sim_account1.py intraday_execute >> /root/data/portfolio/sim_account1.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 intraday_execute >> /root/data/portfolio/account_runner.log 2>&1
+# 账户2
+45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> /root/data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> /root/data/portfolio/account_runner.log 2>&1
 
-# 工作日 14:45 — 尾盘信号（账户3）
-45 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v20c tail_signal >> /root/data/portfolio/account_runner.log 2>&1
+# 账户3
+45 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> /root/data/portfolio/account_runner.log 2>&1
+55 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> /root/data/portfolio/account_runner.log 2>&1
 
-# 工作日 14:55 — 尾盘执行（账户3）
-55 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v20c tail_execute >> /root/data/portfolio/account_runner.log 2>&1
-
-# 工作日 15:30 — 收盘报告
-30 15 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data python scripts/sim/account_runner.py --strategy v27 report_only >> /root/data/portfolio/account_runner.log 2>&1
-```
-
-### 使用 Hermes cron（如果你用 Hermes）
-
-```bash
-hermes cron list    # 查看状态
+# 收盘报告（三账户）
+30 15 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy all report_only >> /root/data/portfolio/account_runner.log 2>&1
 ```
 
 ---
-
-## 7. 数据目录结构
 
 ```
 /root/data/

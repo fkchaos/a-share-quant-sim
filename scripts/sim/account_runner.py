@@ -620,14 +620,16 @@ def run_report(strategy_name, date):
 # ── 入口 ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="统一模拟盘入口")
-    parser.add_argument("--strategy", required=True, choices=["v11b", "v27", "v20c"], help="策略名称")
+    parser.add_argument("--strategy", required=True, choices=["v11b", "v27", "v20c", "all"], help="策略名称（all=全部）")
     parser.add_argument("mode", choices=["intraday_signal", "intraday_execute", "tail_signal", "tail_execute", "report_only"], help="运行模式")
     parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="交易日期")
     args = parser.parse_args()
 
-    if args.mode in ("intraday_signal", "tail_signal"):
-        run_signal(args.strategy, args.date)
-    elif args.mode in ("intraday_execute", "tail_execute"):
-        run_execute(args.strategy, args.date)
-    elif args.mode == "report_only":
-        run_report(args.strategy, args.date)
+    strategies = ["v11b", "v27", "v20c"] if args.strategy == "all" else [args.strategy]
+    for s in strategies:
+        if args.mode in ("intraday_signal", "tail_signal"):
+            run_signal(s, args.date)
+        elif args.mode in ("intraday_execute", "tail_execute"):
+            run_execute(s, args.date)
+        elif args.mode == "report_only":
+            run_report(s, args.date)

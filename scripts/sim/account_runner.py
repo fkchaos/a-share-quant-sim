@@ -414,6 +414,26 @@ def run_signal(strategy_name, date):
             'target_amount': round(per_stock, 2),
             'position_ratio': round(1.0 / n, 4) if n > 0 else 0,
         })
+
+    # 生成持有计划：当前持仓中不在 sell_codes 且不在 buy_list 的
+    buy_codes_set = {c for c, _ in buy_list}
+    hold_plan = []
+    for code, h in state.holdings.items():
+        if code not in sell_codes_set and code not in buy_codes_set:
+            price = 0
+            if date in cp.index and code in cp.columns:
+                price = cp.loc[date, code]
+                if pd.isna(price) or price <= 0:
+                    price = h.get('cost_price', 0)
+            hold_plan.append({
+                'code': code,
+                'name': name_map.get(code, code),
+                'current_shares': h.get('shares', h.get('qty', 0)),
+                'price': round(price, 2),
+                'cost_price': round(h.get('cost_price', 0), 2),
+                'action': 'hold',
+            })
+
     plan = {
         'date': str(date),
         'strategy': strategy_name,
@@ -430,6 +450,7 @@ def run_signal(strategy_name, date):
             for c, reason, pnl in to_sell if c in state.holdings
         ],
         'buy_plan': buy_plan,
+        'hold_plan': hold_plan,
         'timestamp': datetime.now().isoformat(),
     }
     plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{strategy_name}.json")
@@ -464,7 +485,14 @@ def run_signal(strategy_name, date):
         if hold_items:
             print(f"➡️ 持有 {len(hold_items)} 只:")
             for item in hold_items:
-                print(f"  {item['code']} {item.get('name', '')} — {item.get('current_shares', item.get('qty', '?'))}股 @ {item.get('price', 0):.2f}")
+                shares = item.get('current_shares', item.get('qty', '?'))
+                price = item.get('price', 0)
+                cost = item.get('cost_price', 0)
+                if cost > 0 and price > 0:
+                    pnl_pct = (price - cost) / cost * 100
+                    print(f"  {item['code']} {item.get('name', '')} — {shares}股 @ {price:.2f} (成本{cost:.2f}, {pnl_pct:+.1f}%)")
+                else:
+                    print(f"  {item['code']} {item.get('name', '')} — {shares}股 @ {price:.2f}")
     if not plan.get('sell_plan') and not plan.get('buy_plan') and not plan.get('hold_plan'):
         print("⚪ 无操作")
     print("=" * 60)

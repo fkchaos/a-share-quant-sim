@@ -194,13 +194,13 @@ def execute_sells(state, to_sell, date, spot):
 def calc_regime_multiplier(close_panel, date, params):
     """市场状态识别 → 仓位乘数
 
-    用 MA20 斜率 + 价格相对 MA60 位置判断市场状态：
-    - 牛市：MA20 斜率 > 0 且价格 > MA60 → bull_mult
-    - 熊市：MA20 斜率 < 0 且价格 < MA60 → bear_mult
-    - 震荡：其他 → sideways_mult
+    用上证指数（sh000001）的 MA20 斜率 + 价格相对 MA60 位置判断市场状态：
+    - 牛市：MA20 斜率 > 0 且价格 > MA60 → bull_alloc
+    - 熊市：MA20 斜率 < 0 且价格 < MA60 → bear_alloc
+    - 震荡：其他 → sideways_alloc
 
     参数:
-        close_panel: DataFrame — 全市场收盘价面板
+        close_panel: DataFrame — 全市场收盘价面板（保留接口兼容，内部改用上证指数）
         date: Timestamp — 当前日期
         params: dict — 含 REGIME_* 参数
 
@@ -210,29 +210,44 @@ def calc_regime_multiplier(close_panel, date, params):
     if not params.get("REGIME_ENABLED", False):
         return ("未启用", 1.0)
 
+    from core.db import get_kline
+
+    # 用上证指数判断市场状态
+    INDEX_CODE = "sh000001"
+    kl = get_kline(INDEX_CODE)
+    if not kl:
+        return ("指数数据缺失", 1.0)
+
+    import pandas as pd
+    idx_df = pd.DataFrame(kl)
+    idx_df["date"] = pd.to_datetime(idx_df["date"])
+    idx_df = idx_df.set_index("date").sort_index()
+    idx_df = idx_df[idx_df["volume"] > 0]
+
+    if date not in idx_df.index:
+        return ("指数日期缺失", 1.0)
+
     ma_period = params.get("REGIME_MA_PERIOD", 20)
     slope_days = params.get("REGIME_SLOPE_DAYS", 5)
 
-    # 用市场均值代理（全市场收盘价的中位数序列）
-    market_avg = close_panel.median(axis=1)
-
-    # 需要足够的历史数据计算 MA60
-    idx = market_avg.index.get_loc(date) if date in market_avg.index else None
-    if idx is None or idx < ma_period + slope_days:
+    pos = idx_df.index.get_loc(date)
+    if pos < ma_period + slope_days:
         return ("数据不足", 1.0)
 
+    close_series = idx_df["close"]
+
     # MA20 斜率
-    ma20_now = market_avg.iloc[idx - ma_period + 1:idx + 1].mean()
-    ma20_prev = market_avg.iloc[idx - ma_period - slope_days + 1:idx - slope_days + 1].mean()
+    ma20_now = close_series.iloc[pos - ma_period + 1:pos + 1].mean()
+    ma20_prev = close_series.iloc[pos - ma_period - slope_days + 1:pos - slope_days + 1].mean()
     slope = (ma20_now - ma20_prev) / ma20_prev if ma20_prev > 0 else 0
 
     # MA60
-    if idx >= 59:
-        ma60 = market_avg.iloc[idx - 59:idx + 1].mean()
+    if pos >= 59:
+        ma60 = close_series.iloc[pos - 59:pos + 1].mean()
     else:
-        ma60 = market_avg.iloc[:idx + 1].mean()
+        ma60 = close_series.iloc[:pos + 1].mean()
 
-    price_now = market_avg.iloc[idx]
+    price_now = close_series.iloc[pos]
 
     # 判断
     bull_alloc = params.get("REGIME_BULL_ALLOC", 1.0)

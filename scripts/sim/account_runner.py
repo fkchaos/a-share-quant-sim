@@ -235,16 +235,16 @@ def calc_regime_multiplier(close_panel, date, params):
     price_now = market_avg.iloc[idx]
 
     # 判断
-    bull_mult = params.get("REGIME_BULL_MULT", 1.0)
-    bear_mult = params.get("REGIME_BEAR_MULT", 0.3)
-    sideways_mult = params.get("REGIME_SIDEWAYS_MULT", 0.8)
+    bull_alloc = params.get("REGIME_BULL_ALLOC", 1.0)
+    bear_alloc = params.get("REGIME_BEAR_ALLOC", 0.3)
+    sideways_alloc = params.get("REGIME_SIDEWAYS_ALLOC", 0.7)
 
     if slope > 0 and price_now > ma60:
-        return ("牛市", bull_mult)
+        return ("牛市", bull_alloc)
     elif slope < 0 and price_now < ma60:
-        return ("熊市", bear_mult)
+        return ("熊市", bear_alloc)
     else:
-        return ("震荡", sideways_mult)
+        return ("震荡", sideways_alloc)
 
 
 def execute_buys(state, cands, date, spot, params):
@@ -337,6 +337,7 @@ def run_signal(strategy_name, date):
             for c in sell_codes if c in state.holdings and c in price_data.index
         )
     available = state.cash + sell_cash
+    available = available * regime_mult  # 市场状态：熊市多留现金
     per_stock_filter = available / max_buy if max_buy > 0 else available  # 资金容量过滤用
 
     # 资金容量过滤：买不起（1手都买不起）的票排除
@@ -517,13 +518,13 @@ def run_execute(strategy_name, date):
             max_hold = params.get("MAX_HOLDINGS", 12)
             max_buy = params.get("MAX_DAILY_BUY", 5)
             available = state.cash - state.initial_capital * 0.03
+            available = available * regime_mult  # 市场状态：熊市多留现金
             if available <= 0:
                 break
             nb = min(max_buy, max_hold - len(state.holdings))
             if nb <= 0:
                 break
             per_stock = min(available / nb, state.initial_capital * max_pos)
-            per_stock = per_stock * regime_mult  # 市场状态仓位乘数
             shares = int(per_stock / adj / 100) * 100
             if shares <= 0 or shares * adj > state.cash:
                 continue

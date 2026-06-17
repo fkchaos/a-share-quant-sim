@@ -140,6 +140,24 @@ class StrategyConfig:
     ensemble_group_top_n: int = 4             # 每组选股数
 ```
 
+### 市场状态控制（2026-07-17 新增）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `REGIME_ENABLED` | True | 是否启用市场状态识别 |
+| `REGIME_MA_PERIOD` | 20 | MA 周期（用于计算斜率） |
+| `REGIME_SLOPE_DAYS` | 5 | 斜率计算回看天数 |
+| `REGIME_BULL_ALLOC` | 1.0 | 牛市可用资金比例（1.0=全部可用） |
+| `REGIME_SIDEWAYS_ALLOC` | 0.7 | 震荡市可用资金比例（0.7=留30%现金） |
+| `REGIME_BEAR_ALLOC` | 0.3 | 熊市可用资金比例（0.3=留70%现金） |
+
+**逻辑**：用全市场收盘价中位数序列的 MA20 斜率 + 价格相对 MA60 位置判断市场状态：
+- 牛市：MA20 斜率 > 0 且价格 > MA60 → 全部资金可用
+- 熊市：MA20 斜率 < 0 且价格 < MA60 → 仅 30% 资金可用
+- 震荡：其他 → 70% 资金可用
+
+**作用点**：`available = (cash + sell_cash) * regime_alloc`，在 `run_signal` 和 `run_execute` 中统一应用。
+
 ---
 
 ## 三、因子列表

@@ -1,6 +1,6 @@
 # 系统架构文档
 
-> 最后更新：2026-07-16（三账户统一走 account_runner）
+> 最后更新：2026-07-17（市场状态识别 + 动态仓位）
 
 ## 一、整体架构
 
@@ -136,7 +136,9 @@ cron → account_runner.py --strategy v27 intraday_signal
   → strategy_map 查找 v27 的 select_fn
   → 动态加载 v27_select.select_stocks_v27()
   → 从 DB 加载面板数据（load_panel_from_db）
-  → 计算因子 → 选股 → 生成 trade_plan_v27.json
+  → 计算因子 → 选股
+  → calc_regime_multiplier() 判断市场状态（MA20斜率+价格vsMA60）
+  → 仓位乘数写入 trade_plan（regime + regime_multiplier）
   → 从 DB 加载账户状态（get_account + get_holdings）
   → 风控检查 → 输出信号报告
 ```

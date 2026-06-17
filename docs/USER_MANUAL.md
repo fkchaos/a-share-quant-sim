@@ -414,6 +414,10 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py \
 | `min_liquidity` | 最小日均成交额（万） | 100 ~ 1000 | 各策略 Config |
 | `max_liquidity` | 最大日均成交额（万） | 5000 ~ 50000 | 各策略 Config |
 | `initial_capital` | 初始资金（元） | 100000 ~ 1000000 | DB account 表 |
+| `regime_enabled` | 市场状态识别开关 | True / False | strategy_map params |
+| `regime_bull_alloc` | 牛市可用资金比例 | 0.8 ~ 1.0 | strategy_map params |
+| `regime_sideways_alloc` | 震荡市可用资金比例 | 0.5 ~ 0.8 | strategy_map params |
+| `regime_bear_alloc` | 熊市可用资金比例 | 0.1 ~ 0.5 | strategy_map params |
 
 ### 7.3 v20c 完整参数参考（strategy_map.py）
 
@@ -426,6 +430,12 @@ MAX_DAILY_BUY  = 4        # 每日最多买 4 只
 MAX_POSITION   = 0.20     # 单只最大仓位 20%
 HOLD_DAYS_MAX  = 5        # 最大持仓天数 5
 HOLD_DAYS_MIN  = 1        # 最小持仓天数 1
+REGIME_ENABLED   = True     # 市场状态识别开关
+REGIME_MA_PERIOD = 20       # MA 周期
+REGIME_SLOPE_DAYS = 5      # 斜率回看天数
+REGIME_BULL_ALLOC = 1.0     # 牛市可用资金比例
+REGIME_SIDEWAYS_ALLOC = 0.7 # 震荡市可用资金比例
+REGIME_BEAR_ALLOC = 0.3     # 熊市可用资金比例
 ```
 
 ### 7.4 v27 完整参数参考（strategy_map.py）
@@ -442,6 +452,12 @@ HOLD_DAYS_MIN    = 1        # 最小持仓天数 1
 HOLD_DAYS_EXTEND = 7        # 浮盈延长最大天数
 HOLD_DAYS_EXTEND_PNL = 0.03 # 浮盈延长触发阈值 3%
 MOM_THRESHOLD    = 0.02     # 动量阈值 2%
+REGIME_ENABLED   = True     # 市场状态识别开关
+REGIME_MA_PERIOD = 20       # MA 周期
+REGIME_SLOPE_DAYS = 5      # 斜率回看天数
+REGIME_BULL_ALLOC = 1.0     # 牛市可用资金比例
+REGIME_SIDEWAYS_ALLOC = 0.7 # 震荡市可用资金比例
+REGIME_BEAR_ALLOC = 0.3     # 熊市可用资金比例
 ```
 
 ---

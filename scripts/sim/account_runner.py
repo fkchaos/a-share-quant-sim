@@ -191,6 +191,62 @@ def execute_sells(state, to_sell, date, spot):
     return state
 
 
+def calc_regime_multiplier(close_panel, date, params):
+    """市场状态识别 → 仓位乘数
+
+    用 MA20 斜率 + 价格相对 MA60 位置判断市场状态：
+    - 牛市：MA20 斜率 > 0 且价格 > MA60 → bull_mult
+    - 熊市：MA20 斜率 < 0 且价格 < MA60 → bear_mult
+    - 震荡：其他 → sideways_mult
+
+    参数:
+        close_panel: DataFrame — 全市场收盘价面板
+        date: Timestamp — 当前日期
+        params: dict — 含 REGIME_* 参数
+
+    返回:
+        (regime_label, multiplier) — 如 ("牛市", 1.0)
+    """
+    if not params.get("REGIME_ENABLED", False):
+        return ("未启用", 1.0)
+
+    ma_period = params.get("REGIME_MA_PERIOD", 20)
+    slope_days = params.get("REGIME_SLOPE_DAYS", 5)
+
+    # 用市场均值代理（全市场收盘价的中位数序列）
+    market_avg = close_panel.median(axis=1)
+
+    # 需要足够的历史数据计算 MA60
+    idx = market_avg.index.get_loc(date) if date in market_avg.index else None
+    if idx is None or idx < ma_period + slope_days:
+        return ("数据不足", 1.0)
+
+    # MA20 斜率
+    ma20_now = market_avg.iloc[idx - ma_period + 1:idx + 1].mean()
+    ma20_prev = market_avg.iloc[idx - ma_period - slope_days + 1:idx - slope_days + 1].mean()
+    slope = (ma20_now - ma20_prev) / ma20_prev if ma20_prev > 0 else 0
+
+    # MA60
+    if idx >= 59:
+        ma60 = market_avg.iloc[idx - 59:idx + 1].mean()
+    else:
+        ma60 = market_avg.iloc[:idx + 1].mean()
+
+    price_now = market_avg.iloc[idx]
+
+    # 判断
+    bull_mult = params.get("REGIME_BULL_MULT", 1.0)
+    bear_mult = params.get("REGIME_BEAR_MULT", 0.3)
+    sideways_mult = params.get("REGIME_SIDEWAYS_MULT", 0.8)
+
+    if slope > 0 and price_now > ma60:
+        return ("牛市", bull_mult)
+    elif slope < 0 and price_now < ma60:
+        return ("熊市", bear_mult)
+    else:
+        return ("震荡", sideways_mult)
+
+
 def execute_buys(state, cands, date, spot, params):
     """执行买入，返回新 state"""
     max_buy = params["MAX_DAILY_BUY"]
@@ -259,6 +315,10 @@ def run_signal(strategy_name, date):
         _params = dict(params)
         _params.setdefault("initial_capital", state.initial_capital)
         cands = strategy["select_stocks"](factors, date, state.holdings, _params)
+
+    # 市场状态识别 → 仓位乘数
+    regime_label, regime_mult = calc_regime_multiplier(cp, date, params)
+    logger.info(f"市场状态: {regime_label}, 仓位乘数: {regime_mult}")
 
     sell_codes = [c for c, _, _ in to_sell]
 
@@ -341,6 +401,8 @@ def run_signal(strategy_name, date):
     plan = {
         'date': str(date),
         'strategy': strategy_name,
+        'regime': regime_label,
+        'regime_multiplier': regime_mult,
         'sell_plan': [
             {
                 'code': c,
@@ -363,6 +425,7 @@ def run_signal(strategy_name, date):
     # ── 输出信号摘要（print 到 stdout，cron 捕获）──
     print("=" * 60)
     print(f"{strategy_name} 信号 — {date}")
+    print(f"市场状态: {regime_label} (仓位乘数 {regime_mult})")
     print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
     print("-" * 60)
     if plan.get('sell_plan'):
@@ -429,6 +492,10 @@ def run_execute(strategy_name, date):
                     except: pass
         except: pass
 
+    # 从 plan 读取仓位乘数
+    regime_mult = plan.get('regime_multiplier', 1.0)
+    regime_label = plan.get('regime', '未知')
+
     # 先卖
     sold = []
     for item in plan.get('sell_plan', []):
@@ -456,6 +523,7 @@ def run_execute(strategy_name, date):
             if nb <= 0:
                 break
             per_stock = min(available / nb, state.initial_capital * max_pos)
+            per_stock = per_stock * regime_mult  # 市场状态仓位乘数
             shares = int(per_stock / adj / 100) * 100
             if shares <= 0 or shares * adj > state.cash:
                 continue
@@ -468,6 +536,7 @@ def run_execute(strategy_name, date):
     # ── 输出摘要（print 到 stdout，cron 捕获）──
     print("=" * 60)
     print(f"{strategy_name} 执行 — {date}")
+    print(f"市场状态: {regime_label} (仓位乘数 {regime_mult})")
     print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
     print("-" * 60)
     if sold:

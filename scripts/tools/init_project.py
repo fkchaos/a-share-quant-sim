@@ -69,13 +69,14 @@ def step_init_pool():
     return True
 
 
-def step_init_kline():
-    """下载日K线数据（并发，腾讯接口单次最多641天）"""
+def step_init_kline(start_year=2020):
+    """下载日K线数据（并发，腾讯接口单次最多2000天，分段下载确保从start_year开始）"""
     from core.db import get_all_codes, upsert_kline_batch, get_stock_name_map
     from scripts.tools.update_daily_data import fetch_tencent_kline
     import asyncio
+    from datetime import date, timedelta
 
-    # 优先从 stock_pool 获取代码（初始化时 daily_kline 可能为空）
+    # 优先从 stock_pool 获取代码
     from core.db import get_stock_pool
     pool = get_stock_pool()
     codes = [s["code"] for s in pool]
@@ -85,25 +86,44 @@ def step_init_kline():
         print("  ❌ stock_pool 无股票，请先运行 --pool-only")
         return False
 
-    # 腾讯接口单次最多641天，直接拉最大范围
-    MAX_DAYS = 641
-    print(f"🔄 下载 {len(codes)} 只股票近 {MAX_DAYS} 日K线（并发=30）...")
+    # 腾讯接口单次最多2000天，分段下载覆盖从start_year至今
+    MAX_CHUNK = 2000  # 单次请求上限
+    today = date.today()
+    start_date = date(start_year, 1, 1)
+
+    # 计算分段：从后往前每MAX_CHUNK天一段，确保每段days_param不超过MAX_CHUNK
+    # fetch_tencent_kline(code, days) 中 days = 从今天往前推的天数
+    chunks = []
+    remaining_end = today  # 当前段终点（今天开始）
+    while remaining_end > start_date:
+        # 当前段最多往回走MAX_CHUNK-1天
+        chunk_start = max(start_date, remaining_end - timedelta(days=MAX_CHUNK - 1))
+        days_param = (today - chunk_start).days
+        if days_param <= 0:
+            break
+        days_param = min(days_param, MAX_CHUNK)  # 不超过上限
+        if not chunks or chunks[-1][0] != days_param:
+            chunks.append((days_param, chunk_start))
+        remaining_end = chunk_start - timedelta(days=1)
+
+    chunks.reverse()  # 从早到晚（days从小到大）
+    print(f"🔄 下载 {len(codes)} 只股票 {start_year}年1月1日至今的K线")
+    print(f"   分段: {len(chunks)} 段 (腾讯接口单次最多{MAX_CHUNK}天, 并发=30)")
 
     t0 = time.time()
     all_records = []
     ok_count = 0
     fail_count = 0
     name_map = get_stock_name_map()
-
     CONCURRENCY = 30
     semaphore = asyncio.Semaphore(CONCURRENCY)
 
-    async def fetch_one(code):
+    async def fetch_one(code, days_param):
         nonlocal ok_count, fail_count
         async with semaphore:
             loop = asyncio.get_event_loop()
             try:
-                df = await loop.run_in_executor(None, fetch_tencent_kline, code, MAX_DAYS)
+                df = await loop.run_in_executor(None, fetch_tencent_kline, code, days_param)
                 if df is not None and len(df) > 0:
                     records = []
                     for date_idx, row in df.iterrows():
@@ -117,28 +137,47 @@ def step_init_kline():
                             float(row.get("volume", 0) or 0),
                             float(row.get("amount", 0) or 0),
                         ))
-                    ok_count += 1
                     return records
                 else:
-                    fail_count += 1
                     return []
             except Exception:
-                fail_count += 1
                 return []
 
     async def run_all():
-        tasks = [fetch_one(code) for code in codes]
-        results = await asyncio.gather(*tasks)
+        tasks = []
+        # 每段分别请求，最后去重
+        for days_param, chunk_start in chunks:
+            for code in codes:
+                tasks.append((code, fetch_one(code, days_param)))
+
+        results = await asyncio.gather(*[t[1] for t in tasks])
+
+        # 按(code, date)去重合并
+        seen = set()
         for records in results:
-            all_records.extend(records)
+            for rec in records:
+                key = (rec[0], rec[1])  # (code, date)
+                if key not in seen:
+                    seen.add(key)
+                    all_records.append(rec)
 
     asyncio.run(run_all())
+
+    # 统计成功股票数
+    ok_codes = set(r[0] for r in all_records)
+    ok_count = len(ok_codes)
+    fail_count = len(codes) - ok_count
 
     if all_records:
         upsert_kline_batch(all_records)
 
     t_total = time.time() - t0
-    print(f"  ✅ K线数据: {ok_count} 只股票, {len(all_records)} 条记录, {t_total:.1f}s (失败{fail_count})")
+    dates = sorted(set(r[1] for r in all_records))
+    earliest = dates[0] if dates else "无"
+    latest = dates[-1] if dates else "无"
+    print(f"  ✅ K线数据: {ok_count} 只股票, {len(all_records)} 条记录")
+    print(f"     日期范围: {earliest} ~ {latest}")
+    print(f"     耗时: {t_total:.1f}s (失败{fail_count})")
     return True
 
 
@@ -164,6 +203,7 @@ def main():
     parser.add_argument("--pool-only", action="store_true", help="只更新股票池")
     parser.add_argument("--kline-only", action="store_true", help="只下载K线")
     parser.add_argument("--accounts", action="store_true", help="只初始化账户")
+    parser.add_argument("--start-year", type=int, default=2020, help="K线数据起始年份 (默认: 2020)")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -188,8 +228,8 @@ def main():
         step_init_pool()
 
     if full_init or args.kline_only:
-        print(f"📦 Step 3: 下载日K线...")
-        step_init_kline()
+        print(f"📦 Step 3: 下载日K线 (起始年份: {args.start_year})...")
+        step_init_kline(start_year=args.start_year)
 
     if full_init or args.accounts:
         print("📦 Step 4: 初始化账户...")

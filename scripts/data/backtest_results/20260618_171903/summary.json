@@ -1,0 +1,25 @@
+{
+  "v4_baseline": {
+    "label": "v4_baseline",
+    "total_return": 0.672909,
+    "annual_return": 0.101526,
+    "annual_volatility": 0.201829,
+    "sharpe_ratio": 0.503,
+    "max_drawdown": 0.234544,
+    "calmar_ratio": 0.4329,
+    "sortino_ratio": 0.5888,
+    "win_rate": 0.477612,
+    "total_trades": 679,
+    "stop_loss_trades": 10,
+    "total_cost": 7659394.29,
+    "rebalance_count": 68,
+    "final_value": 334538.49,
+    "params": {
+      "top_n": 12,
+      "rebalance_freq": 20,
+      "stop_loss": 0.2,
+      "max_position": 0.1,
+      "use_vol_scaling": true
+    }
+  }
+}

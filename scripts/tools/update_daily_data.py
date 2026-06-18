@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 import os
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 
 HEADERS = {

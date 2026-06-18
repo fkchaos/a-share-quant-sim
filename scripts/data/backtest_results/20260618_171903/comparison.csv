@@ -1,0 +1,2 @@
+strategy,annual_return,sharpe,max_dd,calmar,sortino,win_rate,trades,stop_loss,cost,final_value
+v4_baseline,10.15%,0.503,23.45%,0.4329,0.5888,47.76%,679,10,7659394.29,334538.49

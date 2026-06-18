@@ -4,13 +4,13 @@ v27 止损止盈参数扫描
 基于 opt_fast 框架，每天调用 select_stocks_v27 选股
 """
 import sys, os, numpy as np, pandas as pd, datetime
-sys.path.insert(0, '/root/a-share-quant-sim')
-sys.path.insert(0, '/root/a-share-quant-sim/scripts/strategies')
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scripts', 'strategies'))
 
 from core.db import load_panel_from_db
 from scripts.strategies.v27_select import calc_factors, select_stocks_v27
 
-REPORT_DIR = "/root/data/backtest_results"
+REPORT_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/backtest_results"
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 # ── 加载数据 ──

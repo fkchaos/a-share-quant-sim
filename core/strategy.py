@@ -79,7 +79,7 @@ class StrategyEngine:
         profile: str = "v6b_8f_pos_ic",
         mode: str = "factor",
         hybrid_alpha: float = 0.8,
-        model_dir: str = "/root/data/ml_models",
+        model_dir: str = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models"),
         dynamic_weights: dict = None,
     ):
         self.profile_name = profile

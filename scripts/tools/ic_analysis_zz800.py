@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', '/root/data'))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
 DAILY_DIR = DATA_DIR / 'daily'
-CONSTITUENTS_CSV = Path('/root/data/zz800_constituents.csv')
+CONSTITUENTS_CSV = Path(os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'zz800_constituents.csv'))
 
 # ── 加载选股池 ─────────────────────────────────────────────────
 def load_zz800_codes():

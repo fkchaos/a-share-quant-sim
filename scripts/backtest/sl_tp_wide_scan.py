@@ -6,10 +6,10 @@ SL: 2%~10% (步长2%), TP: 5%~25% (步长5%)
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, '/root/a-share-quant-sim')
-sys.path.insert(0, '/root/a-share-quant-sim/scripts')
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 
-DATA_DIR = "/root/data"
+DATA_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 os.makedirs(REPORT_DIR, exist_ok=True)
 

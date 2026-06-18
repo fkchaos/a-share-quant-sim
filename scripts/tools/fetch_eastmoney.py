@@ -10,12 +10,12 @@ import sys, time, os, shutil, sqlite3, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-sys.path.insert(0, '/root/a-share-quant-sim')
-sys.path.insert(0, '/root/a-share-quant-sim/scripts')
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 from scripts.update_daily_data import get_stock_list
 from core.db import get_conn
 
-DB_PATH = '/root/data/quant.db'
+DB_PATH = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant.db')
 START_DATE = '2021-01-01'
 END_DATE = '2026-06-10'
 HEADERS = {
@@ -115,7 +115,7 @@ with get_conn() as conn:
 
 # 备份
 print(f"\n备份 2025 及之前...")
-backup_sql = '/root/data/daily_kline_backup_2025.sql'
+backup_sql = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'daily_kline_backup_2025.sql')
 with get_conn() as conn:
     rows = conn.execute("SELECT * FROM daily_kline WHERE date <= '2025-12-31' ORDER BY code, date").fetchall()
 with open(backup_sql, 'w') as f:
@@ -126,6 +126,6 @@ with open(backup_sql, 'w') as f:
 sz = os.path.getsize(backup_sql)
 print(f"SQL: {backup_sql} ({sz/1024/1024:.1f}MB)")
 
-shutil.copy2(DB_PATH, '/root/data/quant_pre_backup.db')
+shutil.copy2(DB_PATH, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant_pre_backup.db'))
 print("整库备份完成")
 print("\n✅ 完成")

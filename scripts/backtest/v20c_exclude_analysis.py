@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from core.db import load_panel_from_db
 from scripts.strategies.v20_tail_pick import V20Config, calc_tail_pick_factors
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 
 # 加载最近 60 天数据（足够计算所有因子）
 panels, codes = load_panel_from_db(need_hl=True)

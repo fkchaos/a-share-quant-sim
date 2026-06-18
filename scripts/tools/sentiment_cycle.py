@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.dirname(__file__))
 
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', '/root/data'))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
 DB_PATH = DATA_DIR / 'quant.db'
 REPORT_DIR = DATA_DIR / 'backtest_results'
 REPORT_DIR.mkdir(exist_ok=True)

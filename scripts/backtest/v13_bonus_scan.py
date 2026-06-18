@@ -20,7 +20,7 @@ from scripts.v13_small_mid_short import (
     select_stocks,
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 
 # 默认 bonus 因子定义
 DEFAULT_BONUS = [

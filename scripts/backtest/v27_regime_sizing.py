@@ -460,7 +460,7 @@ def main():
         print(f"{name:25s} | {m['ann_return']:8.1%} | {m['sharpe']:6.2f} | {m['max_dd']:8.1%} | {m['total_trades']:6d} | {m['win_rate']:6.1%}")
     
     # 保存结果
-    DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+    DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
     REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
     os.makedirs(REPORT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

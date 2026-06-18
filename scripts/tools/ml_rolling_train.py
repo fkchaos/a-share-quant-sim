@@ -34,7 +34,7 @@ REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
 def _load_stock_names():
     p = os.path.join(_BASE_DIR, "hs300_constituents.csv")
-    if not os.path.exists(p): p = "/root/hs300_constituents.csv"
+    if not os.path.exists(p): p = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/hs300_constituents.csv"
     try:
         df = pd.read_csv(p)
         return dict(zip(df['品种代码'].astype(str).str.zfill(6), df['品种名称']))

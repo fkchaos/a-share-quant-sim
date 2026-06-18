@@ -12,8 +12,9 @@ import pandas as pd
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, SCRIPT_DIR)
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 
 from update_daily_data import (

@@ -19,9 +19,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 sys.path.insert(0, PROJECT_ROOT)
 
-os.environ.setdefault("BACKTEST_DATA_DIR", "/root/data")
+os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 
 

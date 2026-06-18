@@ -5,12 +5,12 @@ v20c + v27 止损止盈参数扫描（预计算选股结果版）
 import sys, os, numpy as np, pandas as pd, warnings, datetime
 warnings.filterwarnings('ignore')
 
-sys.path.insert(0, '/root/a-share-quant-sim')
-sys.path.insert(0, '/root/a-share-quant-sim/scripts/strategies')
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scripts', 'strategies'))
 
 from core.db import load_panel_from_db
 
-REPORT_DIR = "/root/data/backtest_results"
+REPORT_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/backtest_results"
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 # ── 加载数据 ──

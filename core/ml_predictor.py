@@ -14,11 +14,11 @@ ML Predictor — 模拟盘在线推理引擎
 使用流程：
   1. 训练并保存模型：
      from core.ml_predictor import train_and_save
-     train_and_save(factors, close_panel, model_dir="/root/data/ml_models",
+     train_and_save(factors, close_panel, model_dir=os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models",
                     profile="v6b_8f_pos_ic", hybrid_alpha=0.8)
   2. 模拟盘推理：
      from core.ml_predictor import MLPredictor
-     predictor = MLPredictor(model_dir="/root/data/ml_models")
+     predictor = MLPredictor(model_dir=os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models")
      scores = predictor.predict(all_factors_single_stock)  # {code: score}
 """
 
@@ -44,7 +44,7 @@ from core.ml import (
 def train_and_save(
     factors: dict,
     close_panel: pd.DataFrame,
-    model_dir: str = "/root/data/ml_models",
+    model_dir: str = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models"),
     profile: str = "v6b_8f_pos_ic",
     hybrid_alpha: float = 0.8,
     forward_periods: list = None,
@@ -287,11 +287,11 @@ class MLPredictor:
     输入格式兼容 score_all_stocks() 的输出（逐股因子 dict）。
 
     Usage:
-        predictor = MLPredictor(model_dir="/root/data/ml_models")
+        predictor = MLPredictor(model_dir=os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models")
         scores = predictor.predict(all_factors)  # {code: score}
     """
 
-    def __init__(self, model_dir: str = "/root/data/ml_models"):
+    def __init__(self, model_dir: str = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models")):
         self.model_dir = model_dir
         self.models = {}
         self.scaler = None

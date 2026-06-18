@@ -32,7 +32,7 @@ from core.config import TradingCosts
 from core.db import get_kline, get_all_codes
 from core.strategy_map import load_strategy
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 

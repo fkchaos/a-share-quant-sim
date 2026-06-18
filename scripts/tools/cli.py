@@ -28,7 +28,7 @@ import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("BACKTEST_DATA_DIR", "/root/data")
+os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 
 from core.db import (
     init_db, db_stats, get_account, upsert_account, update_cash,
@@ -122,7 +122,7 @@ def cmd_del_account(args):
         print(f"⚠️ 账户 {p.id} 还有 {len(holdings)} 只持仓，先执行 clear-holdings --account {p.id}")
         return
     import sqlite3
-    db_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", "/root/data"), "quant.db")
+    db_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")), "quant.db")
     conn = sqlite3.connect(db_path)
     conn.execute("DELETE FROM account WHERE id=?", (p.id,))
     conn.commit()
@@ -370,7 +370,7 @@ def cmd_stats(args):
 def cmd_migrate(args):
     """CSV → 数据库迁移"""
     import glob
-    daily_dir = os.environ.get("BACKTEST_DATA_DIR", "/root/data") + "/daily"
+    daily_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")) + "/daily"
     csv_files = glob.glob(os.path.join(daily_dir, "*.csv"))
     print(f"找到 {len(csv_files)} 只股票 CSV 文件")
     init_db()
@@ -407,7 +407,7 @@ def cmd_migrate(args):
     from core.db import upsert_stock
     for code, name in name_map.items():
         upsert_stock(code, name=name)
-    zz800_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", "/root/data"), "zz800_constituents.csv")
+    zz800_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")), "zz800_constituents.csv")
     if os.path.exists(zz800_path):
         import pandas as pd
         zz = pd.read_csv(zz800_path)

@@ -5,11 +5,11 @@ import_csv_to_db.py — 将 CSV 数据导入 DB，替换东方财富数据
 import sys, os, time
 import pandas as pd
 
-sys.path.insert(0, '/root/a-share-quant-sim')
-sys.path.insert(0, '/root/a-share-quant-sim/scripts')
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 from core.db import get_conn, init_db
 
-DATA_DIR = "/root/data"
+DATA_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 
 def main():

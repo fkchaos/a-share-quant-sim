@@ -15,7 +15,7 @@ import sys, os, json, logging
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, "/root/a-share-quant-sim")
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from core.config import STRATEGY_PROFILES, TradingCosts
 from core.factors import calc_factors_panel_v11b
@@ -47,7 +47,7 @@ _strategy_engine = StrategyEngine(
     profile=_PROFILE,
     mode=_engine_mode,
     hybrid_alpha=0.8,
-    model_dir="/root/data/ml_models",
+    model_dir=os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models",
 )
 
 
@@ -146,7 +146,7 @@ def generate_plan(state, date, price_data, code_dataframes, names, risk_sell=Non
         names = get_stock_name_map()
 
     trade_count_file = os.path.join(
-        os.environ.get("PORTFOLIO_DIR", "/root/data/portfolio"), "trade_count.txt"
+        os.environ.get("PORTFOLIO_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/portfolio"), "trade_count.txt"
     )
     trade_count = 0
     if os.path.exists(trade_count_file):

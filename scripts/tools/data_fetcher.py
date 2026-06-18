@@ -33,7 +33,7 @@ HEADERS = {
 }
 
 # 缓存目录
-CACHE_DIR = os.path.join(os.environ.get("BACKTEST_DATA_DIR", "/root/data"), "cache")
+CACHE_DIR = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")), "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 

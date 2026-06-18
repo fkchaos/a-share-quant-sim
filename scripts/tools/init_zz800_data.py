@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(DAILY_DIR, exist_ok=True)
 
@@ -127,7 +127,7 @@ def main():
     args = parser.parse_args()
     
     # 读取中证800成分股列表
-    csv_path = '/root/data/zz800_constituents.csv'
+    csv_path = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'zz800_constituents.csv')
     if not os.path.exists(csv_path):
         print(f"❌ 成分股列表不存在: {csv_path}")
         print("   请先运行生成脚本")

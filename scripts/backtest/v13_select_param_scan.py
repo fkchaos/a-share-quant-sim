@@ -25,7 +25,7 @@ from scripts.v13_small_mid_short import (
     calc_v13_metrics,
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
 

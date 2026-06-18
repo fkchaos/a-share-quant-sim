@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """ML Ensemble 全量训练脚本 — 一次性训练并保存模型"""
 import os, sys, time, json
-sys.path.insert(0, '/root/a-share-quant-sim')
-os.environ['BACKTEST_DATA_DIR'] = '/root/data'
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ['BACKTEST_DATA_DIR'] = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')
 
 from core.ml_predictor import train_and_save
 from core.data import load_and_build_panel
@@ -13,7 +13,7 @@ PROFILE = "v6b_8f_pos_ic"
 HYBRID_ALPHA = 0.8
 FORWARD_PERIODS = [5, 20]
 TRAIN_DAYS = 252
-MODEL_DIR = "/root/data/ml_models"
+MODEL_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models"
 DATA_START = "2021-01-01"
 DATA_END = None  # None = 最新日期
 
@@ -81,7 +81,7 @@ import pandas as pd
 import numpy as np
 from core.factors import calc_factors_single
 
-DAILY_DIR = '/root/data/daily'
+DAILY_DIR = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'daily')
 all_factors = {}
 t1 = time.time()
 for i, f in enumerate(os.listdir(DAILY_DIR)):

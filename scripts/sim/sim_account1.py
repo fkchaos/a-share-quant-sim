@@ -20,7 +20,7 @@ import pandas as pd
 import numpy as np
 import requests
 
-sys.path.insert(0, "/root/a-share-quant-sim")
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Core engine (shared with run_backtest.py) ─────────────────────
@@ -41,7 +41,7 @@ from scripts.tools.indices import get_index_trends, IndexBenchmarkService
 from scripts.tools.sim_logging import get_logger
 
 # ── Config ─────────────────────────────────────────────────────────
-_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 DATA_DIR = _sim_data_dir
 PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
@@ -80,11 +80,11 @@ if os.path.exists(_strategy_config_path):
         _sc = json.load(_f)
     _engine_mode = _sc.get("mode", "factor")  # factor / ml / hybrid
     _engine_hybrid_alpha = _sc.get("hybrid_alpha", 0.8)
-    _engine_model_dir = _sc.get("model_dir", "/root/data/ml_models")
+    _engine_model_dir = _sc.get("model_dir", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models")
 else:
     _engine_mode = "ensemble"
     _engine_hybrid_alpha = 0.8
-    _engine_model_dir = "/root/data/ml_models"
+    _engine_model_dir = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models"
 
 _strategy_engine = StrategyEngine(
     profile=_PROFILE,
@@ -946,7 +946,7 @@ def run_intraday_signal():
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
+        zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
@@ -1043,7 +1043,7 @@ def run_intraday_execute():
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
+        zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
@@ -1155,7 +1155,7 @@ def run_day_end(report_only=False):
         # 股票名称
         names = {}
         try:
-            zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
+            zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
             names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
         except Exception:
             pass
@@ -1179,7 +1179,7 @@ def run_day_end(report_only=False):
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv("/root/data/zz800_constituents.csv")
+        zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass

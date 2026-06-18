@@ -55,8 +55,8 @@ def _load_kronos_model(params):
     try:
         from model import Kronos, KronosTokenizer, KronosPredictor
     except ImportError:
-        sys.path.insert(0, '/root/Kronos')
-        sys.path.insert(0, '/root/Kronos/model')
+        sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Kronos'))
+        sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Kronos', 'model'))
         from model import Kronos, KronosTokenizer, KronosPredictor
 
     model_name = params.get("KRONOS_MODEL", "small")

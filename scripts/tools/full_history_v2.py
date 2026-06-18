@@ -3,13 +3,13 @@
 import sys, time, os, shutil, sqlite3
 from datetime import datetime
 
-sys.path.insert(0, '/root/a-share-quant-sim')
-sys.path.insert(0, '/root/a-share-quant-sim/scripts')
+sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 from scripts.update_daily_data import HEADERS, get_stock_list
 from core.db import get_conn
 import requests, json
 
-DB_PATH = '/root/data/quant.db'
+DB_PATH = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant.db')
 
 def fetch_full(code):
     """直接用 requests 拉取全量历史（最大天数），绕过 fetch_tencent_kline 的解析问题"""
@@ -163,12 +163,12 @@ print(f"\n{'='*60}")
 print("备份 2025 及之前的数据...")
 
 # 1. 整库备份
-backup_db = '/root/data/quant_backup_2025.db'
+backup_db = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant_backup_2025.db')
 shutil.copy2(DB_PATH, backup_db)
 print(f"  整库备份: {backup_db}")
 
 # 2. 导出 2025 及之前为 SQL
-backup_sql = '/root/data/daily_kline_backup_2025.sql'
+backup_sql = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'daily_kline_backup_2025.sql')
 pre2026_count = 0
 with sqlite3.connect(DB_PATH) as conn:
     rows = conn.execute("SELECT * FROM daily_kline WHERE date <= '2025-12-31' ORDER BY code, date").fetchall()

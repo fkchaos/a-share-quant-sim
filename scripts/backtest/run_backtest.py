@@ -823,7 +823,7 @@ def _load_stock_names() -> dict:
         "zz800_constituents.csv"
     )
     if not os.path.exists(hs300_path):
-        hs300_path = "/root/data/zz800_constituents.csv"
+        hs300_path = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv"
     try:
         hs300 = pd.read_csv(hs300_path)
         return dict(zip(

@@ -11,7 +11,7 @@ from scripts.v13_small_mid_short import (
     V13Config, load_small_cap_panel, calc_small_cap_factors, select_stocks
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 
 
 def run_v13_with_params(stop_loss, stop_profit, hold_days_max, start_date, end_date):

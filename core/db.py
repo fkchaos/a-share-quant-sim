@@ -14,7 +14,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = os.environ.get("QUANT_DB", "/root/data/quant.db")
+def _default_db_path():
+    """默认DB路径：项目根目录下的 data/quant.db"""
+    project_root = os.environ.get(
+        "PROJECT_ROOT",
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    return os.path.join(project_root, "data", "quant.db")
+
+DB_PATH = os.environ.get("QUANT_DB", "") or _default_db_path()
 
 
 @contextmanager

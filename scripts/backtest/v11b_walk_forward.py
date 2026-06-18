@@ -27,7 +27,7 @@ from core.scoring import ensemble_union_score
 from core.config import STRATEGY_PROFILES
 from scripts.backtest.run_backtest import run_backtest
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", "/root/data")
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
 # ── v11b 配置 ──────────────────────────────────────────────────────

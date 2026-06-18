@@ -38,7 +38,7 @@ async def async_update_all(write_csv=False):
         async with semaphore:
             loop = asyncio.get_event_loop()
             try:
-                df = await loop.run_in_executor(None, fetch_tencent_kline, code, 10)
+                df = await loop.run_in_executor(None, fetch_tencent_kline, code, 30)
                 return code, df, None
             except Exception as e:
                 return code, None, str(e)

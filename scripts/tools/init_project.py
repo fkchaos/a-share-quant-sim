@@ -33,93 +33,59 @@ def step_init_db():
 
 
 def step_init_pool():
-    """获取中证800成分股并写入 stock_pool"""
-    import requests, pandas as pd
+    """从内置 CSV 获取中证800成分股并写入 stock_pool"""
+    import pandas as pd
     from core.db import upsert_stock
 
-    print("📋 获取中证800成分股列表...")
+    csv_path = os.path.join(PROJECT_ROOT, "data", "zz800_constituents.csv")
+    if not os.path.exists(csv_path):
+        print(f"  ❌ 找不到成分股文件: {csv_path}")
+        return False
 
-    # 东方财富中证800成分股接口
-    url = "https://push2.eastmoney.com/api/qt/clist/get"
-    all_stocks = []
-    page = 1
-    while True:
-        params = {
-            "pn": page, "pz": 50, "po": 1, "np": 1, "fltt": 2, "invt": 2,
-            "fid": "f3", "fs": "b:M0080",
-            "fields": "f12,f14,f2,f15,f16,f17,f18"
-        }
-        try:
-            resp = requests.get(url, params=params, timeout=15)
-            data = resp.json()
-            if not data.get("data") or not data["data"].get("diff"):
-                break
-            items = data["data"]["diff"]
-            if not items:
-                break
-            for item in items:
-                code = item.get("f12", "")
-                name = item.get("f14", "")
-                if code and name:
-                    # 判断板块
-                    if code.startswith("688"):
-                        board = "kc"
-                    elif code.startswith("30"):
-                        board = "cy"
-                    elif code.startswith("60") or code.startswith("9"):
-                        board = "sh"
-                    else:
-                        board = "sz"
-                    all_stocks.append({"code": code, "name": name, "board": board})
-            if len(items) < 50:
-                break
-            page += 1
-            time.sleep(0.3)
-        except Exception as e:
-            print(f"  ⚠️ 第{page}页出错: {e}")
-            break
+    df = pd.read_csv(csv_path)
+    print(f"📋 从内置CSV加载中证800成分股: {len(df)} 只")
 
-    if not all_stocks:
-        print("  ❌ 未获取到成分股，使用内置备用列表")
-        # 备用：从本地文件读取
-        pool_file = os.path.join(DATA_DIR, "zz800_constituents.csv")
-        if os.path.exists(pool_file):
-            df = pd.read_csv(pool_file)
-            all_stocks = df.to_dict("records")
+    # 统一code格式为6位数字字符串
+    df['code'] = df['code'].astype(str).str.zfill(6)
+
+    # 判断板块
+    def _board(code):
+        if code.startswith("688"):
+            return "kc"
+        elif code.startswith("30"):
+            return "cy"
+        elif code.startswith("60") or code.startswith("9"):
+            return "sh"
         else:
-            print("  ❌ 无可用股票列表，请检查网络后重试")
-            return False
+            return "sz"
 
-    # 去重
-    seen = set()
-    unique = []
-    for s in all_stocks:
-        if s["code"] not in seen:
-            seen.add(s["code"])
-            unique.append(s)
-    all_stocks = unique
-
-    print(f"  共 {len(all_stocks)} 只成分股，写入 stock_pool...")
+    df['board'] = df['code'].apply(_board)
 
     # 写入 DB
-    for s in all_stocks:
-        upsert_stock(s["code"], name=s["name"], board=s["board"], pool="zz800")
+    for _, row in df.iterrows():
+        upsert_stock(str(row['code']), name=str(row['name']), board=str(row['board']), pool="zz800")
 
-    print(f"  ✅ stock_pool 已写入 {len(all_stocks)} 只股票")
+    print(f"  ✅ stock_pool 已写入 {len(df)} 只股票")
     return True
 
 
 def step_init_kline(days=30):
-    """下载日K线数据"""
+    """下载日K线数据（并发）"""
     from core.db import get_all_codes, upsert_kline_batch, get_stock_name_map
     from scripts.tools.update_daily_data import fetch_tencent_kline
+    import asyncio
 
-    codes = get_all_codes()
+    # 优先从 stock_pool 获取代码（初始化时 daily_kline 可能为空）
+    from core.db import get_stock_pool
+    pool = get_stock_pool()
+    codes = [s["code"] for s in pool]
+    if not codes:
+        codes = get_all_codes()
     if not codes:
         print("  ❌ stock_pool 无股票，请先运行 --pool-only")
         return False
 
-    print(f"🔄 下载 {len(codes)} 只股票的近 {days} 日K线...")
+    print(f"🔄 下载 {len(codes)} 只股票的近 {days} 日K线（并发=30）...")
 
     t0 = time.time()
     all_records = []
@@ -127,31 +93,44 @@ def step_init_kline(days=30):
     fail_count = 0
     name_map = get_stock_name_map()
 
-    for i, code in enumerate(codes):
-        try:
-            df = fetch_tencent_kline(code, days=days)
-            if df is not None and len(df) > 0:
-                for date_idx, row in df.iterrows():
-                    date_str = str(date_idx)[:10]
-                    all_records.append((
-                        code, date_str,
-                        float(row.get("open", 0) or 0),
-                        float(row.get("high", 0) or 0),
-                        float(row.get("low", 0) or 0),
-                        float(row.get("close", 0) or 0),
-                        float(row.get("volume", 0) or 0),
-                        float(row.get("amount", 0) or 0),
-                    ))
-                ok_count += 1
-            else:
+    CONCURRENCY = 30
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+
+    async def fetch_one(code):
+        nonlocal ok_count, fail_count
+        async with semaphore:
+            loop = asyncio.get_event_loop()
+            try:
+                df = await loop.run_in_executor(None, fetch_tencent_kline, code, days)
+                if df is not None and len(df) > 0:
+                    records = []
+                    for date_idx, row in df.iterrows():
+                        date_str = str(date_idx)[:10]
+                        records.append((
+                            code, date_str,
+                            float(row.get("open", 0) or 0),
+                            float(row.get("high", 0) or 0),
+                            float(row.get("low", 0) or 0),
+                            float(row.get("close", 0) or 0),
+                            float(row.get("volume", 0) or 0),
+                            float(row.get("amount", 0) or 0),
+                        ))
+                    ok_count += 1
+                    return records
+                else:
+                    fail_count += 1
+                    return []
+            except Exception:
                 fail_count += 1
-        except Exception:
-            fail_count += 1
+                return []
 
-        if (i + 1) % 50 == 0:
-            print(f"  进度: {i+1}/{len(codes)} (成功{ok_count} 失败{fail_count})")
+    async def run_all():
+        tasks = [fetch_one(code) for code in codes]
+        results = await asyncio.gather(*tasks)
+        for records in results:
+            all_records.extend(records)
 
-        time.sleep(0.1)  # 避免请求过快
+    asyncio.run(run_all())
 
     if all_records:
         upsert_kline_batch(all_records)
@@ -199,11 +178,13 @@ def main():
         step_init_db()
 
     if full_init or args.pool_only:
-        print("📦 Step 2: 获取中证800成分股...")
-        if not step_init_pool():
-            print("  ⚠️ 股票池初始化失败，跳过K线下载")
-            if args.pool_only:
-                return
+        print("📦 Step 2: 更新股票池...")
+        # 先清空旧数据，避免重复
+        from core.db import get_conn
+        with get_conn() as conn:
+            conn.execute("DELETE FROM stock_pool WHERE pool='zz800'")
+            print(f"  已清空旧股票池")
+        step_init_pool()
 
     if full_init or args.kline_only:
         print(f"📦 Step 3: 下载日K线 ({args.days}天)...")

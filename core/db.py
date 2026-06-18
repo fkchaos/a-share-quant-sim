@@ -114,7 +114,7 @@ def init_db():
                 updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
             ) WITHOUT ROWID;
 
-            CREATE INDEX IF NOT EXISTS idx_ind_name ON indicators(name, date);
+            CREATE INDEX IF NOT EXISTS idx_ind_name ON indicators(ind_name, date);
         """)
     print(f"✅ 数据库初始化完成: {DB_PATH}")
 

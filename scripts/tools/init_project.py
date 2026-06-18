@@ -69,8 +69,8 @@ def step_init_pool():
     return True
 
 
-def step_init_kline(days=30):
-    """下载日K线数据（并发）"""
+def step_init_kline():
+    """下载日K线数据（并发，腾讯接口单次最多641天）"""
     from core.db import get_all_codes, upsert_kline_batch, get_stock_name_map
     from scripts.tools.update_daily_data import fetch_tencent_kline
     import asyncio
@@ -85,7 +85,9 @@ def step_init_kline(days=30):
         print("  ❌ stock_pool 无股票，请先运行 --pool-only")
         return False
 
-    print(f"🔄 下载 {len(codes)} 只股票的近 {days} 日K线（并发=30）...")
+    # 腾讯接口单次最多641天，直接拉最大范围
+    MAX_DAYS = 641
+    print(f"🔄 下载 {len(codes)} 只股票近 {MAX_DAYS} 日K线（并发=30）...")
 
     t0 = time.time()
     all_records = []
@@ -101,7 +103,7 @@ def step_init_kline(days=30):
         async with semaphore:
             loop = asyncio.get_event_loop()
             try:
-                df = await loop.run_in_executor(None, fetch_tencent_kline, code, days)
+                df = await loop.run_in_executor(None, fetch_tencent_kline, code, MAX_DAYS)
                 if df is not None and len(df) > 0:
                     records = []
                     for date_idx, row in df.iterrows():
@@ -162,7 +164,6 @@ def main():
     parser.add_argument("--pool-only", action="store_true", help="只更新股票池")
     parser.add_argument("--kline-only", action="store_true", help="只下载K线")
     parser.add_argument("--accounts", action="store_true", help="只初始化账户")
-    parser.add_argument("--days", type=int, default=30, help="K线下载天数(默认30)")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -187,8 +188,8 @@ def main():
         step_init_pool()
 
     if full_init or args.kline_only:
-        print(f"📦 Step 3: 下载日K线 ({args.days}天)...")
-        step_init_kline(days=args.days)
+        print(f"📦 Step 3: 下载日K线...")
+        step_init_kline()
 
     if full_init or args.accounts:
         print("📦 Step 4: 初始化账户...")

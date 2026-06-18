@@ -6,6 +6,9 @@ data/signals/*.json
 !data/daily/.gitkeep
 !data/signals/.gitkeep
 
+# Keep stock pool CSV for initialization
+!data/zz800_constituents.csv
+
 # Output files
 data/portfolio/*.json
 data/portfolio/*.txt

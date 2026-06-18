@@ -1,6 +1,6 @@
 # 部署指南
 
-> 最后更新：2026-06-17（cron 极简 prompt + 监控增强 + Hermes cron 方案）
+> 最后更新：2026-06-18（pip install -e . 统一路径管理，告别 sys.path 和 PYTHONPATH）
 
 零基础部署，5 分钟跑通。
 
@@ -21,18 +21,20 @@
 ## 2. 安装
 
 ```bash
-# 克隆仓库（替换为你的路径）
+# 克隆仓库
 git clone git@github.com:fkchaos/a-share-quant-sim.git
 cd a-share-quant-sim
 
-# 安装依赖（仅 3 个包）
-pip install pandas numpy requests
+# 安装（自动安装 pandas/numpy/requests 依赖）
+pip install -e .
 ```
 
 验证：
 ```bash
-python -c "import pandas, numpy, requests; print('OK')"
+python -c "import core; import scripts.tools.constraints; print('OK')"
 ```
+
+> `pip install -e .` 会把 `core/` 和 `scripts/` 安装为可编辑包，之后所有脚本直接 `import core` 或 `from scripts.xxx import ...` 即可，**不需要设置 `PYTHONPATH`**。数据目录默认在项目内的 `data/`，**不需要设置 `BACKTEST_DATA_DIR`**。
 
 ---
 
@@ -41,10 +43,6 @@ python -c "import pandas, numpy, requests; print('OK')"
 首次运行需要一键初始化（建表 + 股票池 + K线数据 + 账户）：
 
 ```bash
-export PYTHONPATH=$(pwd)
-export BACKTEST_DATA_DIR=/root/data
-mkdir -p $BACKTEST_DATA_DIR
-
 # 完整初始化（约 2-3 分钟）
 python scripts/tools/init_project.py
 ```
@@ -57,7 +55,7 @@ python scripts/tools/init_project.py --kline-only  # 只下载K线
 python scripts/tools/init_project.py --accounts    # 只初始化账户
 ```
 
-数据存入 `/root/data/quant.db`（SQLite），包含：
+数据存入 `data/quant.db`（SQLite），包含：
 - 中证 800 成分股（约 800 只）
 - 近 30 日日 K 线
 - 3 个模拟账户（v11b/v27/v20c）
@@ -69,25 +67,22 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 ## 4. 跑回测
 
 ```bash
-export PYTHONPATH=$(pwd)
-export BACKTEST_DATA_DIR=/root/data
-
 # ⚠️ run_backtest.py 不支持 v27/v20c/v11b，需要用独立脚本
 
 # 跑内置策略（v4_baseline、ic_ir_weighted、markowitz 等）
 python scripts/backtest/run_backtest.py --strategy v4_baseline
 
 # 跑 v27 价量共振 — WF 回测
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v27_walk_forward.py
+python scripts/backtest/v27_walk_forward.py
 
 # 跑 v20c 尾盘缩量 — WF 参数扫描
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20c_wf_sl_tp_scan.py
+python scripts/backtest/v20c_wf_sl_tp_scan.py
 
 # 跑 v11b 多因子 Ensemble — WF 回测
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v11b_walk_forward.py
+python scripts/backtest/v11b_walk_forward.py
 
 # 跑模拟盘回测
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy all report_only
+python scripts/sim/account_runner.py --strategy all report_only
 ```
 
 输出在 `data/backtest_results/` 目录下，包含 summary.json、NAV 曲线、交易记录。
@@ -99,9 +94,6 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strate
 模拟盘 = 信号生成 + 执行 + 报告，三步。
 
 ```bash
-export PYTHONPATH=$(pwd)
-export BACKTEST_DATA_DIR=/root/data
-
 # 账户1（v11b legacy）
 python scripts/sim/sim_account1.py intraday_signal   # 上午出信号
 python scripts/sim/sim_account1.py intraday_execute  # 下午开盘执行
@@ -153,29 +145,30 @@ crontab -e
 ```
 
 ```cron
+# ⚠️ 请将 /root/a-share-quant-sim 替换为你的实际项目路径
 # 数据更新
-31 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
-40 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
+31 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
+40 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
 
 # 账户2
-45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> /root/data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> /root/data/portfolio/account_runner.log 2>&1
+45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> data/portfolio/account_runner.log 2>&1
 
 # 账户3
-45 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> /root/data/portfolio/account_runner.log 2>&1
-55 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> /root/data/portfolio/account_runner.log 2>&1
+45 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> data/portfolio/account_runner.log 2>&1
+55 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> data/portfolio/account_runner.log 2>&1
 
 # 收盘报告（三账户）
-30 15 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy all report_only >> /root/data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy all report_only >> data/portfolio/account_runner.log 2>&1
 ```
 
 ---
 
 ```
-/root/data/
+data/
 ├── quant.db              # SQLite 数据库（主数据源）
 │   ├── stock_pool        # 股票池（800只中证800）
-│   ├── daily_kline       # 日K线（112万条，2020-01~2026-06）
+│   ├── daily_kline       # 日K线
 │   ├── account           # 账户（3个）
 │   │   ├── id=1: v11b, 20万
 │   │   ├── id=2: v27, 10万
@@ -223,8 +216,7 @@ crontab -e
 日 K 线数据每个交易日更新。手动更新：
 
 ```bash
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
-  python scripts/tools/update_daily_data_async.py
+python scripts/tools/update_daily_data_async.py
 ```
 
 建议加到 crontab 每天 11:35 自动更新。
@@ -235,8 +227,10 @@ PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
 
 **Q: ModuleNotFoundError？**
 ```bash
-# 确认 PYTHONPATH 设置正确
-export PYTHONPATH=/root/a-share-quant-sim
+# 确认已执行 pip install -e .
+pip install -e .
+# 验证
+python -c "import core; print('OK')"
 ```
 
 **Q: 数据更新失败？**
@@ -251,8 +245,8 @@ curl -s "http://qt.gtimg.cn/q=sh600000" | iconv -f GBK -t UTF-8 | head -1
 **Q: 模拟盘初始资金对不上？**
 初始资金在 DB `account` 表中：
 ```bash
-sqlite3 /root/data/quant.db "SELECT * FROM account;"
-sqlite3 /root/data/quant.db "UPDATE account SET initial_capital=200000 WHERE id=1;"
+sqlite3 data/quant.db "SELECT * FROM account;"
+sqlite3 data/quant.db "UPDATE account SET initial_capital=200000 WHERE id=1;"
 ```
 
 **Q: 如何只跑单个账户？**
@@ -274,10 +268,10 @@ python scripts/sim/account_runner.py --strategy v27 intraday_execute
 
 ```bash
 # 数据库备份
-cp /root/data/quant.db /root/data/quant.db.bak.$(date +%Y%m%d)
+cp data/quant.db data/quant.db.bak.$(date +%Y%m%d)
 
 # 导出 SQL
-sqlite3 /root/data/quant.db .dump > /root/data/quant_backup_$(date +%Y%m%d).sql
+sqlite3 data/quant.db .dump > data/quant_backup_$(date +%Y%m%d).sql
 ```
 
 ---

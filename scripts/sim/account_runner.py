@@ -29,6 +29,7 @@ from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
 from core.db import get_kline, get_all_codes
 from core.strategy_map import load_strategy
+from scripts.backtest.strategy_adapter import get_adapter
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
@@ -151,73 +152,10 @@ def save_account(state, account_id):
                 )
     logger.info(f"账户{account_id}已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
 
-# ── 风控 ──────────────────────────────────────────────────────────
-def check_risk(state, date, price_data, params, prev_close=None, sell1_vol=None):
-    """风控检查：止损/止盈/超时（浮盈延长 + 封板延长）
-
-    封板判断逻辑（比涨幅阈值更准确）：
-      - 卖一量 == 0：封板，无人卖出 → 延长止盈
-      - 卖一量 > 0 但涨幅 >= 阈值：视为封板（兼容创业板20%）
-      - 其他：正常止盈
-
-    Args:
-        state: PortfolioState
-        date: 当前日期
-        price_data: 当期收盘价 Series
-        params: 策略参数
-        prev_close: 前一交易日收盘价 Series（用于涨幅阈值兜底）
-        sell1_vol: 卖一量 Series（手），为 None 时退化为涨幅阈值判断
-    """
-    to_sell = []
-    hold_max = params["HOLD_DAYS_MAX"]
-    hold_ext = params.get("HOLD_DAYS_EXTEND", hold_max)
-    hold_ext_pnl = params.get("HOLD_DAYS_EXTEND_PNL", 0.03)
-
-    # 按代码前缀确定涨停阈值
-    def _limit_threshold(code):
-        if code.startswith('300') or code.startswith('688'):
-            return 0.199  # 创业板/科创板 20%
-        # ST股判断需要名称，这里用保守阈值
-        return 0.099  # 主板 10%
-
-    for code, h in list(state.holdings.items()):
-        if code not in price_data.index:
-            continue
-        cp = price_data[code]
-        if pd.isna(cp) or cp <= 0:
-            continue
-        pnl = (cp - h['cost_price']) / h['cost_price']
-
-        # ── 封板判断 ──
-        is_limit_up = False
-
-        # 方法1：卖一量 == 0（最准确，实时数据）
-        if sell1_vol is not None and code in sell1_vol.index:
-            sv = sell1_vol[code]
-            if not pd.isna(sv) and sv == 0:
-                is_limit_up = True
-
-        # 方法2：涨幅 >= 涨停阈值（兜底，用于信号生成时只有日K线数据）
-        if not is_limit_up and prev_close is not None and code in prev_close.index:
-            prev = prev_close[code]
-            if not pd.isna(prev) and prev > 0:
-                chg = (cp - prev) / prev
-                if chg >= _limit_threshold(code):
-                    is_limit_up = True
-
-        if pnl <= params["STOP_LOSS"]:
-            to_sell.append((code, 'stop_loss', pnl))
-        elif pnl >= params["TAKE_PROFIT"]:
-            # 封板当天跳过止盈，强制持有（吃次日溢价）
-            if is_limit_up:
-                continue
-            to_sell.append((code, 'take_profit', pnl))
-        else:
-            hd = h.get('hold_days', 0)
-            limit = hold_ext if pnl >= hold_ext_pnl else hold_max
-            if hd >= limit:
-                to_sell.append((code, 'timeout', pnl))
-    return to_sell
+# ── 风控/市场状态已迁移到 strategy_adapter ──
+# check_risk → adapter.risk_check()
+# calc_regime_multiplier → adapter.calc_regime()
+# 保留 execute_sells 供 run_execute 使用
 
 def execute_sells(state, to_sell, date, spot):
     """执行卖出，返回新 state"""
@@ -225,76 +163,6 @@ def execute_sells(state, to_sell, date, spot):
         if code in spot and spot[code] > 0:
             state = sell(state, code, spot[code], date, reason)
     return state
-
-def calc_regime_multiplier(close_panel, date, params):
-    """市场状态识别 → 仓位乘数
-
-    用上证指数（sh000001）的 MA20 斜率 + 价格相对 MA60 位置判断市场状态：
-    - 牛市：MA20 斜率 > 0 且价格 > MA60 → bull_alloc
-    - 熊市：MA20 斜率 < 0 且价格 < MA60 → bear_alloc
-    - 震荡：其他 → sideways_alloc
-
-    参数:
-        close_panel: DataFrame — 全市场收盘价面板（保留接口兼容，内部改用上证指数）
-        date: Timestamp — 当前日期
-        params: dict — 含 REGIME_* 参数
-
-    返回:
-        (regime_label, multiplier) — 如 ("牛市", 1.0)
-    """
-    if not params.get("REGIME_ENABLED", False):
-        return ("未启用", 1.0)
-
-    from core.db import get_kline
-
-    # 用上证指数判断市场状态
-    INDEX_CODE = "sh000001"
-    kl = get_kline(INDEX_CODE)
-    if not kl:
-        return ("指数数据缺失", 1.0)
-
-    import pandas as pd
-    idx_df = pd.DataFrame(kl)
-    idx_df["date"] = pd.to_datetime(idx_df["date"])
-    idx_df = idx_df.set_index("date").sort_index()
-    idx_df = idx_df[idx_df["volume"] > 0]
-
-    if date not in idx_df.index:
-        return ("指数日期缺失", 1.0)
-
-    ma_period = params.get("REGIME_MA_PERIOD", 20)
-    slope_days = params.get("REGIME_SLOPE_DAYS", 5)
-
-    pos = idx_df.index.get_loc(date)
-    if pos < ma_period + slope_days:
-        return ("数据不足", 1.0)
-
-    close_series = idx_df["close"]
-
-    # MA20 斜率
-    ma20_now = close_series.iloc[pos - ma_period + 1:pos + 1].mean()
-    ma20_prev = close_series.iloc[pos - ma_period - slope_days + 1:pos - slope_days + 1].mean()
-    slope = (ma20_now - ma20_prev) / ma20_prev if ma20_prev > 0 else 0
-
-    # MA60
-    if pos >= 59:
-        ma60 = close_series.iloc[pos - 59:pos + 1].mean()
-    else:
-        ma60 = close_series.iloc[:pos + 1].mean()
-
-    price_now = close_series.iloc[pos]
-
-    # 判断
-    bull_alloc = params.get("REGIME_BULL_ALLOC", 1.0)
-    bear_alloc = params.get("REGIME_BEAR_ALLOC", 0.3)
-    sideways_alloc = params.get("REGIME_SIDEWAYS_ALLOC", 0.7)
-
-    if slope > 0 and price_now > ma60:
-        return ("牛市", bull_alloc)
-    elif slope < 0 and price_now < ma60:
-        return ("熊市", bear_alloc)
-    else:
-        return ("震荡", sideways_alloc)
 
 def execute_buys(state, cands, date, spot, params):
     """执行买入，返回新 state"""
@@ -352,26 +220,20 @@ def run_signal(strategy_name, date):
         idx_pos = cp.index.get_loc(date)
         if isinstance(idx_pos, (int, np.integer)) and idx_pos > 0:
             prev_close = cp.iloc[idx_pos - 1]
-    to_sell = check_risk(state, date, price_data, params, prev_close=prev_close)
 
-    # 选股（不同策略函数签名不同，分别适配）
-    if strategy_name == "v20c":
-        # v20c: calc_tail_pick_factors(cp, vp, ap, hp, lp) 无 params
-        #        select_stocks_tail_pick(factors, date, cp, vp, ap, hp, lp, holdings)
-        factors = strategy["calc_factors"](cp, vp, ap, hp, lp)
-        raw_cands = strategy["select_stocks"](factors, date, cp, vp, ap, hp, lp, state.holdings)
-        cands = [(c, 0.0) for c in raw_cands]  # v20c 返回 code list，补 score=0
-    else:
-        # v27/v11b: calc_factors(cp, vp, ap, hp, lp, op, params)
-        #            select_stocks(factors, date, holdings, params) → [(code, score)]
-        factors = strategy["calc_factors"](cp, vp, ap, hp, lp, op, params)
-        # 确保 params 里有 initial_capital（v11b select_stocks 需要）
-        _params = dict(params)
-        _params.setdefault("initial_capital", state.initial_capital)
-        cands = strategy["select_stocks"](factors, date, state.holdings, _params)
+    # 风控（用 strategy_adapter 统一接口）
+    adapter = get_adapter()
+    to_sell = adapter.risk_check(strategy_name, state, date, price_data,
+                                  params, prev_close=prev_close)
 
-    # 市场状态识别 → 仓位乘数
-    regime_label, regime_mult = calc_regime_multiplier(cp, date, params)
+    # 选股（用 strategy_adapter 统一接口）
+    cands = adapter.select(strategy_name, None, date,
+                           cp, vp, ap, hp, lp, op,
+                           current_holdings=state.holdings,
+                           params=params)
+
+    # 市场状态识别 → 仓位乘数（用 strategy_adapter 统一接口）
+    regime_label, regime_mult = adapter.calc_regime(strategy_name, cp, date, params)
     logger.info(f"市场状态: {regime_label}, 仓位乘数: {regime_mult}")
 
     sell_codes = [c for c, _, _ in to_sell]

@@ -34,34 +34,28 @@ data/
 
 ---
 
-## 3. 回测框架重构
+## ~~3. 回测框架重构~~ ✅ 2026-06-18
 
-**现状：**
-- `run_backtest.py` 只支持内置策略（v4_baseline 等因子加权框架）
-- v27/v20c/v11b 各自有独立 WF 脚本，选股逻辑和交易逻辑分散
-- 模拟盘（`account_runner.py`）和回测用的是**不同的代码路径**，结果可能不一致
+**完成内容：**
+- `scripts/backtest/strategy_adapter.py` — 统一策略适配器，注册 v27/v20c，提供 select/risk_check/calc_regime 统一接口
+- `scripts/backtest/wf_runner.py` — 通用 Walk-Forward 运行器，使用 core/account.py 的 buy/sell（与模拟盘一致）
+- `core/db.py` 新增 `load_panel_from_db()` — 从 SQLite 加载面板数据（替代 core/data.py 的 CSV 加载）
+- `scripts/backtest/run_backtest.py` — 新增策略路由：`--strategy v27/v20c` 走 wf_runner
+- `scripts/sim/account_runner.py` — 风控/选股/市场状态迁移到 strategy_adapter，删除内联 check_risk 和 calc_regime_multiplier
+- 验证：v27 WF 4/4 正收益，夏普 4.16，回撤 8.16%（与 v27_walk_forward.py 一致）
+- 验证：account_runner.py 通过 adapter 正常运行 v27 信号
 
-**目标：**
-- 一个通用回测入口（类似 `account_runner.py` 的定位）
-- 每个策略注册：选股函数 + 交易逻辑（TP/SL/持仓天数/动态仓位）
-- 模拟盘和回测调用**同一套代码**，确保表现一致
-- 中间层映射表：策略名 → 实现函数，避免 if-else 满天飞
-
-**参考结构：**
+**架构：**
 ```
-scripts/backtest/
-├── run_backtest.py          # 通用入口（兼容内置策略）
-├── strategy_adapter.py      # 中间层映射表
-├── v27_engine.py            # v27 选股+交易引擎
-├── v20c_engine.py           # v20c 选股+交易引擎
-├── v11b_engine.py           # v11b 选股+交易引擎
-└── wf_runner.py             # Walk-Forward 通用运行器
+run_backtest.py --strategy v27/v20c → wf_runner.py → strategy_adapter.py
+                                                    → core/account.py (buy/sell)
+scripts/sim/account_runner.py → strategy_adapter.py (select/risk_check/calc_regime)
+                               → core/account.py (buy/sell)
 ```
 
-**原则：**
-- 模拟盘用什么选股，回测就用什么选股
-- 模拟盘用什么止盈止损，回测就用什么止盈止损
-- 差异只在：回测用历史数据撮合，模拟盘用实时数据
+**待优化：**
+- v20c 在 2021-2022 年选股几乎全为科创板（策略特性），WF 结果全零
+- run_backtest.py 内置策略的 load_industry_map import 路径有已有 bug
 
 ---
 

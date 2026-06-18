@@ -1,0 +1,55 @@
+{
+  "date": "2026-06-18",
+  "strategy": "v27",
+  "regime": "指数数据缺失",
+  "regime_multiplier": 1.0,
+  "sell_plan": [
+    {
+      "code": "600000",
+      "name": "浦发银行",
+      "qty": 500,
+      "reason": "stop_loss",
+      "pnl": -0.1343
+    }
+  ],
+  "buy_plan": [
+    {
+      "code": "301526",
+      "name": "国际复材",
+      "score": 55.89,
+      "price": 40.89,
+      "qty": 600,
+      "target_amount": 24886.25,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "300285",
+      "name": "国瓷材料",
+      "score": 44.78,
+      "price": 89.53,
+      "qty": 200,
+      "target_amount": 24886.25,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "000032",
+      "name": "深桑达A",
+      "score": 44.32,
+      "price": 24.6,
+      "qty": 1000,
+      "target_amount": 24886.25,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "002436",
+      "name": "兴森科技",
+      "score": 42.46,
+      "price": 52.06,
+      "qty": 400,
+      "target_amount": 24886.25,
+      "position_ratio": 0.25
+    }
+  ],
+  "hold_plan": [],
+  "timestamp": "2026-06-18T21:04:59.408462"
+}

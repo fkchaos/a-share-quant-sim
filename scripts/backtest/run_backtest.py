@@ -853,6 +853,21 @@ def main():
     parser.add_argument("--log", action="store_true", help="自动追加结果到 docs/RESULTS_LOG.md")
     args = parser.parse_args()
 
+    # ── 策略路由：v27/v20c 走 wf_runner ──
+    _custom_strategies = {"v27", "v20c"}
+    _requested = set(args.strategy) - {"all"}
+    if _requested & _custom_strategies:
+        # 有自定义策略请求，走 wf_runner
+        from scripts.backtest.wf_runner import run_wf
+        for s in args.strategy:
+            if s in _custom_strategies:
+                print(f"\n{'='*60}")
+                print(f"策略 {s} 通过 wf_runner 运行")
+                print(f"{'='*60}")
+                run_wf(s, start_date=args.start or "2021-01-01",
+                       end_date=args.end or "2026-05-31")
+        return
+
     # Load stock names for industry classification
     stock_names = _load_stock_names()
 

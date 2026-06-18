@@ -601,3 +601,76 @@ def load_kline_for_sim(codes=None, lookback=250):
         result[code] = grp
 
     return result
+
+
+def load_panel_from_db(start_date=None, end_date=None, need_open=False, need_hl=False, pool="zz800"):
+    """
+    从 SQLite 数据库加载日K线面板数据。
+
+    参数:
+        start_date: str — 起始日期 (默认: 数据库最早日期)
+        end_date: str — 结束日期 (默认: 数据库最晚日期)
+        need_open: bool — 是否包含 open_panel
+        need_hl: bool — 是否包含 high_panel + low_panel
+        pool: str — 股票池 (默认: "zz800")
+
+    返回:
+        tuple — (close_panel, volume_panel, amount_panel, [open_panel], [high_panel], [low_panel])
+        list — 股票代码列表
+    """
+    import pandas as pd
+
+    with get_conn("daily_kline") as conn:
+        # 获取股票池
+        if pool:
+            pool_rows = conn.execute(
+                "SELECT code FROM stock_pool WHERE pool=? AND is_active=1", (pool,)
+            ).fetchall()
+            pool_codes = [r["code"] for r in pool_rows]
+        else:
+            pool_codes = None
+
+        # 查询日K线
+        if pool_codes:
+            placeholders = ",".join("?" * len(pool_codes))
+            sql = f"SELECT code, date, open, high, low, close, volume, amount FROM daily_kline WHERE code IN ({placeholders})"
+            params = list(pool_codes)
+        else:
+            sql = "SELECT code, date, open, high, low, close, volume, amount FROM daily_kline"
+            params = []
+
+        if start_date:
+            sql += " AND date>=?"
+            params.append(start_date)
+        if end_date:
+            sql += " AND date<=?"
+            params.append(end_date)
+
+        sql += " ORDER BY code, date"
+        rows = conn.execute(sql, params).fetchall()
+
+    if not rows:
+        empty = pd.DataFrame()
+        return (empty, empty, empty), []
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["date"] = pd.to_datetime(df["date"])
+
+    # 构建面板
+    close_panel = df.pivot(index="date", columns="code", values="close").sort_index()
+    volume_panel = df.pivot(index="date", columns="code", values="volume").sort_index()
+    amount_panel = df.pivot(index="date", columns="code", values="amount").sort_index()
+
+    result = (close_panel, volume_panel, amount_panel)
+
+    if need_open:
+        open_panel = df.pivot(index="date", columns="code", values="open").sort_index()
+        result += (open_panel,)
+
+    if need_hl:
+        high_panel = df.pivot(index="date", columns="code", values="high").sort_index()
+        low_panel = df.pivot(index="date", columns="code", values="low").sort_index()
+        result += (high_panel, low_panel)
+
+    codes = sorted(df["code"].unique().tolist())
+    return result, codes

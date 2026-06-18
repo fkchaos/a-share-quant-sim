@@ -53,18 +53,17 @@ ls $BACKTEST_DATA_DIR/quant.db  # 应能看到 quant.db 文件
 ### 2.1 首次初始化（只需跑一次）
 
 ```bash
+export PYTHONPATH=/root/a-share-quant-sim
+export BACKTEST_DATA_DIR=/root/data
 mkdir -p /root/data
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/update_daily_data_async.py
+
+# 一键初始化（建表 + 股票池 + K线数据 + 账户，约 2-3 分钟）
+python scripts/tools/init_project.py
 ```
 
-运行后输出：
-```
-正在更新日K线数据...
-已更新 800 只股票，1120000 条记录
-数据已写入 /root/data/quant.db
-```
+产物：`/root/data/quant.db`，包含中证 800 成分股 + 近 30 日 K 线 + 3 个模拟账户。
 
-产物：`/root/data/quant.db`（140MB），包含中证 800 成分股 2020-01 至今的日 K 线。
+> ⚠️ 不需要 CSV 文件，所有数据直接写入 SQLite。
 
 ### 2.2 日常更新（每天收盘后）
 

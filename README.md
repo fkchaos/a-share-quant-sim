@@ -62,6 +62,7 @@ a-share-quant-sim/
 │   ├── backtest/            # 回测脚本
 │   ├── tools/               # 工具脚本
 │   │   ├── cli.py                # 数据库 CLI（账户/持仓/买卖）
+│   │   ├── init_project.py       # 一键初始化（建表+股票池+K线+账户）
 │   │   └── update_daily_data_async.py
 │   └── archive/             # 归档旧版本
 │
@@ -75,6 +76,7 @@ a-share-quant-sim/
 ## 特性
 
 - **零配置**：`pip install pandas numpy requests`，3 个依赖，5 分钟跑通
+- **一键初始化**：`init_project.py` 自动完成建表+股票池+K线+账户，告别CSV
 - **账户-策略解耦**：strategy_map 注册表 + account_runner 统一入口
 - **三账户并行**：v11b(Ensemble) + v27(价量共振) + v20c(尾盘缩量)
 - **共享交易逻辑**：模拟盘和回测共用 `core/`，杜绝不一致
@@ -92,11 +94,11 @@ git clone git@github.com:fkchaos/a-share-quant-sim.git
 cd a-share-quant-sim
 pip install pandas numpy requests
 
-# 2. 初始化数据（首次运行，约 1 分钟）
+# 2. 一键初始化（建表 + 股票池 + K线数据 + 账户，约 2-3 分钟）
 export PYTHONPATH=$(pwd)
-export BACKTEST_DATA_DIR=/root/data
+export BACKTEST_DATA_DIR=./data
 mkdir -p $BACKTEST_DATA_DIR
-python scripts/tools/update_daily_data_async.py
+python scripts/tools/init_project.py
 
 # 3. 跑回测
 python scripts/backtest/run_backtest.py --strategy v27
@@ -106,7 +108,10 @@ python scripts/sim/account_runner.py --strategy v27 intraday_signal
 python scripts/sim/account_runner.py --strategy v27 intraday_execute
 python scripts/sim/account_runner.py --strategy v27 report_only
 
-# 5. 测试
+# 5. 查看账户
+python scripts/tools/cli.py account 2
+
+# 6. 测试
 python -m pytest tests/ -v -k "not slow"
 ```
 

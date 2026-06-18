@@ -38,20 +38,31 @@ python -c "import pandas, numpy, requests; print('OK')"
 
 ## 3. 初始化数据
 
-首次运行需要下载中证 800 成分股的日 K 线数据（约 1 分钟）：
+首次运行需要一键初始化（建表 + 股票池 + K线数据 + 账户）：
 
 ```bash
 export PYTHONPATH=$(pwd)
 export BACKTEST_DATA_DIR=/root/data
 mkdir -p $BACKTEST_DATA_DIR
 
-python scripts/tools/update_daily_data_async.py
+# 完整初始化（约 2-3 分钟）
+python scripts/tools/init_project.py
+```
+
+分步执行：
+```bash
+python scripts/tools/init_project.py --db-only      # 只建表
+python scripts/tools/init_project.py --pool-only    # 只获取股票池
+python scripts/tools/init_project.py --kline-only  # 只下载K线
+python scripts/tools/init_project.py --accounts    # 只初始化账户
 ```
 
 数据存入 `/root/data/quant.db`（SQLite），包含：
-- 800 只中证 800 成分股
-- 2020-01 至今的日 K 线（112 万条）
+- 中证 800 成分股（约 800 只）
+- 近 30 日日 K 线
 - 3 个模拟账户（v11b/v27/v20c）
+
+> ⚠️ 不需要 CSV 文件，所有数据直接写入 SQLite。
 
 ---
 

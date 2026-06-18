@@ -49,9 +49,11 @@ def fmt(v, decimals=2):
 # ── 账户管理 ──
 
 def cmd_init(args):
-    """初始化数据库"""
+    """初始化数据库 + 股票池 + 账户（完整初始化）"""
     init_db()
     print("✅ 数据库已初始化")
+    print()
+    print("下一步: 运行 python scripts/tools/init_project.py 完成完整初始化")
 
 
 def cmd_account(args):

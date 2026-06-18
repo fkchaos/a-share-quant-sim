@@ -4,14 +4,11 @@ import sys, os, time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, '.')
-sys.path.insert(0, 'scripts')
-
 from v13_small_mid_short import (
     V13Config, load_small_cap_panel, calc_small_cap_factors, select_stocks
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
 # 覆盖参数
 V13Config.stop_loss = -0.015
@@ -22,7 +19,6 @@ V13Config.hold_days_max = 5
 TRAIN_DAYS = 252
 TEST_DAYS = 63
 STEP_DAYS = 63
-
 
 def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel,
                  factors, train_start, train_end, test_start, test_end):
@@ -183,7 +179,6 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         'sl_pct': n_sl / total_sell * 100, 'tp_pct': n_tp / total_sell * 100,
         'to_pct': n_to / total_sell * 100,
     }
-
 
 if __name__ == '__main__':
     print("=" * 60)

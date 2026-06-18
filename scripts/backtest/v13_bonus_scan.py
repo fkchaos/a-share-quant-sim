@@ -10,9 +10,6 @@ import sys, os, time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from scripts.v13_small_mid_short import (
     V13Config,
     load_small_cap_panel,
@@ -20,7 +17,7 @@ from scripts.v13_small_mid_short import (
     select_stocks,
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
 # 默认 bonus 因子定义
 DEFAULT_BONUS = [
@@ -44,7 +41,6 @@ DEFAULT_BONUS = [
      'condition': lambda v: v >= 2,
      'score': 0.2},
 ]
-
 
 def run_v13_with_bonus(bonus_factors, close_panel, volume_panel, amount_panel,
                        high_panel, low_panel, open_panel):
@@ -167,7 +163,6 @@ def run_v13_with_bonus(bonus_factors, close_panel, volume_panel, amount_panel,
     return {'annual_return': ann_ret, 'sharpe': sharpe, 'max_drawdown': max_dd,
             'win_rate': win_rate, 'total_trades': len(trade_log)}
 
-
 def main():
     print("=" * 70)
     print("v13 Bonus 因子单因子扫描")
@@ -248,7 +243,6 @@ def main():
     out_path = os.path.join(DATA_DIR, 'backtest_results', 'v13_bonus_scan.csv')
     df.to_csv(out_path, index=False)
     print(f"\n结果已保存: {out_path}")
-
 
 if __name__ == '__main__':
     main()

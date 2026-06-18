@@ -20,9 +20,6 @@ import pandas as pd
 import numpy as np
 import requests
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-sys.path.insert(0, os.path.dirname(__file__))
-
 # ── Core engine (shared with run_backtest.py) ─────────────────────
 from core.account import PortfolioState, buy, sell, check_stop_loss, portfolio_value, check_take_profit, apply_holding_decay
 from core.config import STRATEGY_PROFILES, TradingCosts
@@ -41,7 +38,7 @@ from scripts.tools.indices import get_index_trends, IndexBenchmarkService
 from scripts.tools.sim_logging import get_logger
 
 # ── Config ─────────────────────────────────────────────────────────
-_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+_sim_data_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 DATA_DIR = _sim_data_dir
 PORTFOLIO_DIR = os.path.join(DATA_DIR, "portfolio")
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
@@ -59,8 +56,6 @@ TOP_N = _strategy_profile.top_n
 MAX_INDUSTRY_WEIGHT = _strategy_profile.max_industry_weight
 MAX_DAILY_TURNOVER = _strategy_profile.max_daily_turnover
 MAX_SINGLE_WEIGHT = _strategy_profile.max_position
-
-
 
 # Trading costs (defaults from TradingCosts dataclass)
 _costs = TradingCosts()
@@ -80,11 +75,11 @@ if os.path.exists(_strategy_config_path):
         _sc = json.load(_f)
     _engine_mode = _sc.get("mode", "factor")  # factor / ml / hybrid
     _engine_hybrid_alpha = _sc.get("hybrid_alpha", 0.8)
-    _engine_model_dir = _sc.get("model_dir", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models")
+    _engine_model_dir = _sc.get("model_dir", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "ml_models"))
 else:
     _engine_mode = "ensemble"
     _engine_hybrid_alpha = 0.8
-    _engine_model_dir = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models"
+    _engine_model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "ml_models")
 
 _strategy_engine = StrategyEngine(
     profile=_PROFILE,
@@ -98,7 +93,6 @@ logger.info(f"StrategyEngine 初始化: profile={_PROFILE} mode={_engine_mode}")
 logger.debug(f"策略 profile: {_PROFILE}, top_n={TOP_N}, freq={REBAL_FREQ}, sl={STOP_LOSS}, "
              f"ind_cap={MAX_INDUSTRY_WEIGHT}, turnover_cap={MAX_DAILY_TURNOVER}")
 
-
 # ═══════════════════════════════════════════════════════════════════
 # 腾讯实时行情接口 (qt.gtimg.cn)
 # ═══════════════════════════════════════════════════════════════════
@@ -108,13 +102,11 @@ TX_HEADERS = {
     'Referer': 'http://stockapp.finance.qq.com/',
 }
 
-
 def _tx_code(code):
     """转换为腾讯行情代码前缀"""
     if code.startswith('6') or code.startswith('9'):
         return f"sh{code}"
     return f"sz{code}"
-
 
 def fetch_tencent_spot_batch(codes, timeout=15):
     """
@@ -168,7 +160,6 @@ def fetch_tencent_spot_batch(codes, timeout=15):
     logger.info(f"实时行情: 请求 {len(codes)} 只, 返回 {len(results)} 只")
     return results
 
-
 # ═══════════════════════════════════════════════════════════════════
 # Pipeline 步骤函数（复用 v6 + 增强）
 # ═══════════════════════════════════════════════════════════════════
@@ -207,7 +198,6 @@ def step_update_data(quick=False):
         logger.warning(f"数据更新超时 ({timeout}s)，使用本地已有数据")
         return False
 
-
 def step_load_account():
     """Step 1: 加载账户状态（从数据库）"""
     from core.db import load_account_for_sim
@@ -220,7 +210,6 @@ def step_load_account():
         state = PortfolioState(cash=INITIAL_CAPITAL, initial_capital=INITIAL_CAPITAL)
         loaded = False
     return state, loaded
-
 
 def step_load_prices(intdb=False):
     """
@@ -350,7 +339,6 @@ def step_load_prices_pm(trade_plan):
 
     return now, price_data
 
-
 def step_check_stop_loss(state, date, price_data, names):
     """Step 3: 止损检查"""
     prev_holdings = set(state.holdings.keys())
@@ -361,7 +349,6 @@ def step_check_stop_loss(state, date, price_data, names):
         for code in stopped:
             logger.warning(f"  {code} {names.get(code, code)} 已止损卖出")
     return state, stopped
-
 
 def step_check_take_profit(state, date, price_data, names):
     """Step 3b: 分级止盈"""
@@ -377,7 +364,6 @@ def step_check_take_profit(state, date, price_data, names):
             logger.info(f"  🎯 {code} {names.get(code, code)} 分级止盈: 全部清仓")
     return state
 
-
 def step_holding_decay(state, date, price_data, names):
     """Step 3c: 持有期 decay"""
     prev_shares = {code: h['shares'] for code, h in state.holdings.items()}
@@ -387,7 +373,6 @@ def step_holding_decay(state, date, price_data, names):
             reduced = prev_shares[code] - state.holdings[code]['shares']
             logger.info(f"  📉 {code} {names.get(code, code)} 持有期decay: 减持 {reduced} 股")
     return state
-
 
 def step_data_quality(codes, date, source="db"):
     """Step 4: 数据质量门禁
@@ -403,7 +388,6 @@ def step_data_quality(codes, date, source="db"):
     quality_result = auditor.audit()
     print_quality_report(quality_result)
     return not quality_result.approved
-
 
 # ── 上午模式：只生成信号，不执行 ──
 
@@ -677,7 +661,6 @@ def step_generate_signal(state, date, price_data, code_dataframes, files, loaded
 
     return plan
 
-
 # ── 下午模式：加载计划，执行交易 ──
 
 def step_execute_plan(state, date, price_data, names, code_dataframes=None):
@@ -837,7 +820,6 @@ def step_execute_plan(state, date, price_data, names, code_dataframes=None):
 
     return state, plan
 
-
 def step_save_state(state, trade_count):
     """Step 6: 保存账户状态（写数据库 + trade_count.txt）"""
     from core.db import save_account_for_sim
@@ -848,7 +830,6 @@ def step_save_state(state, trade_count):
     with open(trade_count_file, 'w') as f:
         f.write(str(trade_count))
     logger.info(f"trade_count={trade_count}")
-
 
 def step_report(state, date, price_data, names, mode="day_end"):
     """Step 7: 生成报告"""
@@ -918,7 +899,6 @@ def step_report(state, date, price_data, names, mode="day_end"):
         'holdings_count': len(state.holdings),
     }
 
-
 # ═══════════════════════════════════════════════════════════════════
 # 主入口：三种模式
 # ═══════════════════════════════════════════════════════════════════
@@ -946,7 +926,7 @@ def run_intraday_signal():
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
+        zz800 = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/zz800_constituents.csv"))
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
@@ -1027,7 +1007,6 @@ def run_intraday_signal():
 
     return plan
 
-
 def run_intraday_execute():
     """
     下午开盘模式 (13:00)
@@ -1043,7 +1022,7 @@ def run_intraday_execute():
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
+        zz800 = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/zz800_constituents.csv"))
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
@@ -1121,7 +1100,6 @@ def run_intraday_execute():
     logger.info("=" * 70)
     return report
 
-
 def run_day_end(report_only=False):
     """
     日终模式 — 双阶段模式下只做报告，不做任何操作。
@@ -1155,7 +1133,7 @@ def run_day_end(report_only=False):
         # 股票名称
         names = {}
         try:
-            zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
+            zz800 = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/zz800_constituents.csv"))
             names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
         except Exception:
             pass
@@ -1179,7 +1157,7 @@ def run_day_end(report_only=False):
     # 股票名称
     names = {}
     try:
-        zz800 = pd.read_csv(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv")
+        zz800 = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/zz800_constituents.csv"))
         names = dict(zip(zz800['code'].astype(str).str.zfill(6), zz800['name']))
     except Exception:
         pass
@@ -1344,7 +1322,6 @@ def run_day_end(report_only=False):
 
     logger.info("=" * 70)
     return report
-
 
 # ═══════════════════════════════════════════════════════════════════
 # CLI 入口

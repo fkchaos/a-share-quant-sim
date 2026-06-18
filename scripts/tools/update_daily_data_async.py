@@ -11,17 +11,14 @@ import pandas as pd
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-sys.path.insert(0, PROJECT_ROOT)
-sys.path.insert(0, SCRIPT_DIR)
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 
 from update_daily_data import (
     get_stock_list,
     fetch_tencent_kline,
 )
-
 
 async def async_update_all(write_csv=False):
     """并发更新所有股票，直接 upsert DB"""
@@ -124,7 +121,6 @@ async def async_update_all(write_csv=False):
         print(f"  ⚠️ 上证指数更新失败: {e}")
 
     return total
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="A股日频数据更新（并发直写DB）")

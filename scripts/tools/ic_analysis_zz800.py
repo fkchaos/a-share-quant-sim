@@ -6,15 +6,14 @@ IC_IR 分析脚本 — 在715只中证800股票上计算所有因子的截面IC/
 """
 
 import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')))
 DAILY_DIR = DATA_DIR / 'daily'
-CONSTITUENTS_CSV = Path(os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'zz800_constituents.csv'))
+CONSTITUENTS_CSV = Path(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'zz800_constituents.csv')))
 
 # ── 加载选股池 ─────────────────────────────────────────────────
 def load_zz800_codes():

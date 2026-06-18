@@ -28,14 +28,10 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')))
 DB_PATH = DATA_DIR / 'quant.db'
 REPORT_DIR = DATA_DIR / 'backtest_results'
 REPORT_DIR.mkdir(exist_ok=True)
-
 
 # ── 新闻数据获取 ─────────────────────────────────────────────────
 def fetch_stock_news(code, days=30):
@@ -49,7 +45,6 @@ def fetch_stock_news(code, days=30):
     except Exception:
         pass
     return None
-
 
 def fetch_all_news(codes, days=30, max_workers=2):
     """批量获取新闻（限速）"""
@@ -67,7 +62,6 @@ def fetch_all_news(codes, days=30, max_workers=2):
 
     print(f"完成: {len(results)}/{total} 只有新闻")
     return results
-
 
 # ── 情绪分析 ─────────────────────────────────────────────────────
 def analyze_sentiment_batch(news_list, api_key=None):
@@ -131,7 +125,6 @@ def analyze_sentiment_batch(news_list, api_key=None):
         print(f"API 调用失败: {e}")
         return []
 
-
 # ── 因子构建 ─────────────────────────────────────────────────────
 def build_sentiment_factor(sentiment_data, close_panel):
     """
@@ -160,7 +153,6 @@ def build_sentiment_factor(sentiment_data, close_panel):
     momentum_panel = factor_panel.diff()
 
     return factor_panel, momentum_panel
-
 
 # ── 回测验证 ─────────────────────────────────────────────────────
 def backtest_sentiment_factor(factor_panel, close_panel, fwd_period=5):
@@ -194,7 +186,6 @@ def backtest_sentiment_factor(factor_panel, close_panel, fwd_period=5):
         print("\n情绪因子分组回测 (前100天):")
         for group, rets in sorted(results.items()):
             print(f"  {group}: 平均收益={np.mean(rets)*100:.3f}%, 样本={len(rets)}")
-
 
 # ── 主函数 ──────────────────────────────────────────────────────
 def main():
@@ -268,7 +259,6 @@ def main():
 
     if args.backtest:
         print("回测验证...")
-
 
 if __name__ == "__main__":
     main()

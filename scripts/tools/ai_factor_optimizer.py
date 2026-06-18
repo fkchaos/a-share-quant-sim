@@ -22,12 +22,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')))
 REPORT_DIR = DATA_DIR / 'backtest_results'
-
 
 def load_ic_results(ic_path=None):
     """加载 IC 分析结果"""
@@ -38,7 +34,6 @@ def load_ic_results(ic_path=None):
     df = pd.read_csv(path, index_col=0)
     print("加载 IC 结果: %d 个因子" % len(df))
     return df
-
 
 def analyze_factor_redundancy(ic_df, corr_threshold=0.8):
     """分析因子冗余（基于 IC 序列相关性）"""
@@ -69,7 +64,6 @@ def analyze_factor_redundancy(ic_df, corr_threshold=0.8):
             }
 
     return redundant
-
 
 def generate_optimal_weights(ic_df, redundant_info=None):
     """
@@ -106,7 +100,6 @@ def generate_optimal_weights(ic_df, redundant_info=None):
     df['weight'] = df['weight'] * np.sign(df['IR'])
 
     return df.sort_values('weight', key=abs, ascending=False)
-
 
 def compare_with_v13(ic_df):
     """对比 v13 当前因子组合 vs 优化后组合"""
@@ -149,7 +142,6 @@ def compare_with_v13(ic_df):
 
     return v13_factors
 
-
 def generate_v13_improvement_plan(ic_df):
     """生成 v13 改进方案"""
 
@@ -187,7 +179,6 @@ def generate_v13_improvement_plan(ic_df):
         'scheme_C': {'rev_5': -0.3, 'illiquidity': 0.7},
         'scheme_D': {'mom_5': 0.4, 'gap_ratio': 0.3, 'illiquidity': 0.3},
     }
-
 
 def main():
     import argparse
@@ -243,7 +234,6 @@ def main():
     with open(opt_path, 'w') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     print("\n优化结果已保存: %s" % opt_path)
-
 
 if __name__ == "__main__":
     main()

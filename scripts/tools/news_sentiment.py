@@ -23,17 +23,13 @@ import requests
 from datetime import datetime, timedelta
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')))
 REPORT_DIR = DATA_DIR / 'backtest_results'
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 东方财富快讯 API
 EASTMONEY_NEWS_API = "https://np-anotice-stock.eastmoney.com/api/security/ann"
 EASTMONEY_KUAIXUN_API = "https://np-listapi.eastmoney.com/comm/web/getNewsByColumns"
-
 
 def fetch_eastmoney_kuaixun(page=1, pagesize=50):
     """
@@ -69,7 +65,6 @@ def fetch_eastmoney_kuaixun(page=1, pagesize=50):
     except Exception as e:
         print("  东财快讯获取失败: %s" % e)
         return []
-
 
 def fetch_eastmoney_announcements(stock_code=None, page=1, pagesize=50):
     """
@@ -111,7 +106,6 @@ def fetch_eastmoney_announcements(stock_code=None, page=1, pagesize=50):
         print("  公告获取失败: %s" % e)
         return []
 
-
 def simple_sentiment_score(text):
     """
     基于关键词的简单情绪打分（不需要 API key）
@@ -152,7 +146,6 @@ def simple_sentiment_score(text):
     
     return (pos_count - neg_count) / total
 
-
 def build_daily_sentiment(date_str=None):
     """
     构建某日新闻情绪得分
@@ -189,7 +182,6 @@ def build_daily_sentiment(date_str=None):
         'n_news': len(all_news),
         'pos_ratio': float(pos_ratio),
     }
-
 
 def backtest_news_sentiment(start='2022-01-01', end='2026-05-31',
                              lookback=20, capital=100000):
@@ -352,7 +344,6 @@ def backtest_news_sentiment(start='2022-01-01', end='2026-05-31',
     print("  回撤:   %.2f%%" % (max_dd * 100))
     
     return nav_s
-
 
 if __name__ == "__main__":
     import argparse

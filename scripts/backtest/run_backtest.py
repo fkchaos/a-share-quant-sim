@@ -44,12 +44,10 @@ A股量化回测系统 - 统一回测工具
 import argparse
 import json
 import os
-import sys
 import time
 from datetime import datetime
 
 # Ensure repo root is on sys.path so `core` package is importable
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from itertools import product
 
@@ -76,7 +74,6 @@ END_DATE = datetime.now().strftime("%Y-%m-%d")
 
 FACTOR_WEIGHTS = DEFAULT_FACTOR_WEIGHTS  # 权威权重，来自 core/config.py
 
-
 from core.data import load_and_build_panel
 from core.db import load_panel_from_db, init_db
 
@@ -90,7 +87,6 @@ def load_panel(start_date=None, end_date=None, need_open=False, need_hl=False, p
         return load_panel_from_db(start_date, end_date, need_open=need_open, need_hl=need_hl, pool=pool)
     else:
         return load_and_build_panel(start_date, end_date, need_open=need_open, need_hl=need_hl)
-
 
 # ============================================================
 # IC 分析
@@ -124,7 +120,6 @@ def calc_ic_series(factor_df, forward_returns):
 
     return ic_values.dropna()
 
-
 def run_ic_analysis(factors, close_panel, forward_period=5):
     """全面 IC 分析，返回各因子 IC 统计。"""
     forward_returns = close_panel.pct_change(forward_period).shift(-forward_period)
@@ -144,7 +139,6 @@ def run_ic_analysis(factors, close_panel, forward_period=5):
 
     return results
 
-
 def select_factors_ic(ic_results, min_abs_ir=0.03, min_positive_rate=0.50):
     """根据 IC 选择有效因子。"""
     selected = {}
@@ -155,7 +149,6 @@ def select_factors_ic(ic_results, min_abs_ir=0.03, min_positive_rate=0.50):
         else:
             discarded.append(name)
     return selected, discarded
-
 
 # ============================================================
 # Markowitz 组合优化
@@ -188,7 +181,6 @@ def markowitz_optimize(expected_returns, cov_matrix, max_weight=0.15):
         pass
 
     return dict(zip(expected_returns.index, np.ones(n) / n))
-
 
 # ============================================================
 # 回测引擎（使用 core.account 交易逻辑 → 与模拟盘一致）
@@ -510,7 +502,6 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
 
     return metrics, nav, trades_df
 
-
 # ============================================================
 # 参数扫描
 # ============================================================
@@ -544,7 +535,6 @@ def param_scan(close_panel, score, param_grid=None):
     # 按夏普排序
     results.sort(key=lambda x: x['sharpe_ratio'], reverse=True)
     return results
-
 
 # ============================================================
 # Walk-Forward 分析
@@ -667,7 +657,6 @@ def walk_forward(close_panel, train_days=252, test_days=63,
 
     return fold_results, combined_nav
 
-
 # ============================================================
 # 结果保存
 # ============================================================
@@ -761,7 +750,6 @@ def save_results(output_dir, metrics_list, nav_dict, trades_dict,
 
     return output_dir
 
-
 def generate_report(metrics_list, scan_results=None, wf_results=None):
     """生成 Markdown 回测报告。"""
     lines = ["# 回测报告\n"]
@@ -810,7 +798,6 @@ def generate_report(metrics_list, scan_results=None, wf_results=None):
 
     return "\n".join(lines) + "\n"
 
-
 def _load_stock_names() -> dict:
     """Load stock name mapping from HS300 constituents CSV.
 
@@ -823,7 +810,7 @@ def _load_stock_names() -> dict:
         "zz800_constituents.csv"
     )
     if not os.path.exists(hs300_path):
-        hs300_path = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/zz800_constituents.csv"
+        hs300_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/zz800_constituents.csv")
     try:
         hs300 = pd.read_csv(hs300_path)
         return dict(zip(
@@ -833,7 +820,6 @@ def _load_stock_names() -> dict:
     except Exception as e:
         print(f"  ⚠️  Could not load stock names: {e}")
         return {}
-
 
 # ============================================================
 # 主流程
@@ -1157,7 +1143,6 @@ def main():
         print(f"\n\n{report}")
 
     return metrics_list
-
 
 if __name__ == "__main__":
     main()

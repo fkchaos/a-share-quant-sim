@@ -22,7 +22,6 @@ import pandas as pd
 from dataclasses import dataclass, field
 from typing import Optional
 
-
 # ──────────────────────────────────────────────
 # 涨停比例（按股票代码前缀判断）
 # ──────────────────────────────────────────────
@@ -33,7 +32,6 @@ ST_PCT = 0.05                  # ST ±5%
 CHINEXT_PREFIXES = ("300", "301")      # 创业板
 STAR_MARKET_PREFIXES = ("688", "689")  # 科创板
 ST_KEYWORDS = ("ST", "*ST")
-
 
 def _limit_pct_for_symbol(code: str) -> float:
     """根据股票代码前缀判断涨停比例"""
@@ -47,11 +45,9 @@ def _limit_pct_for_symbol(code: str) -> float:
             return CHINEXT_STAR_PCT
     return MAIN_LIMIT_PCT
 
-
 def _round_price(raw: float) -> float:
     """A股价格精度：分（2位小数）"""
     return round(raw, 2)
-
 
 @dataclass
 class TradeContext:
@@ -92,7 +88,6 @@ class TradeContext:
             if self.close <= self.limit_down + 1e-6:
                 return True, f"跌停({self.close:.2f}<=跌停价{self.limit_down:.2f})"
         return False, ""
-
 
 def build_trade_context(
     code: str,
@@ -202,7 +197,6 @@ def build_trade_context(
         is_one_word_up=is_one_word_up,
         is_one_word_down=is_one_word_down,
     )
-
 
 def batch_build_contexts(
     price_data: dict[str, pd.DataFrame],

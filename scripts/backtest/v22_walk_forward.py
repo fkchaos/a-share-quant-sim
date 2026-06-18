@@ -10,11 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 def run_v22_on_window(close_panel, volume_panel, amount_panel,
                        high_panel, low_panel, open_panel, cfg):
@@ -141,7 +137,6 @@ def run_v22_on_window(close_panel, volume_panel, amount_panel,
 
     return train_ret, train_dd, test_ret, test_dd, test_sharpe
 
-
 def walk_forward_v22(train_days=252, test_days=126, step_days=63):
     """Walk-Forward: 训练期因子预热，测试期验证"""
     print("=" * 60)
@@ -215,7 +210,6 @@ def walk_forward_v22(train_days=252, test_days=126, step_days=63):
         ((1 + df['test_ret'].mean()) ** (252.0 / test_days) - 1) * 100))
 
     return df
-
 
 if __name__ == "__main__":
     walk_forward_v22(train_days=252, test_days=126, step_days=63)

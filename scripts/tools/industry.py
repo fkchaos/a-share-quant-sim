@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-
 # ──────────────────────────────────────────────
 # 精确行业映射表（沪深300成分股全覆盖）
 # ──────────────────────────────────────────────
@@ -207,7 +206,6 @@ INDUSTRY_MAP: dict[str, str] = {
     "600050": "通信",    # 中国联通
 }
 
-
 def _infer_industry(code: str, name: str) -> str:
     """根据名称关键词推断行业（精确映射表未覆盖时使用）"""
     name_keywords = {
@@ -246,18 +244,15 @@ def _infer_industry(code: str, name: str) -> str:
                 return industry
     return "其他"
 
-
 def get_industry(code: str, name: str = "") -> str:
     """获取股票行业。优先查映射表，否则推断。"""
     if code in INDUSTRY_MAP:
         return INDUSTRY_MAP[code]
     return _infer_industry(code, name)
 
-
 def annotate_industries(code_name_map: dict[str, str]) -> dict[str, str]:
     """批量标注行业。参数: {代码: 名称}，返回: {代码: 行业}"""
     return {code: get_industry(code, name) for code, name in code_name_map.items()}
-
 
 def portfolio_industry_breakdown(
     holdings: dict,
@@ -279,7 +274,6 @@ def portfolio_industry_breakdown(
             industry = code_industry_map.get(code, "其他")
             industry_weights[industry] = industry_weights.get(industry, 0) + mv / total_mv
     return dict(sorted(industry_weights.items(), key=lambda x: x[1], reverse=True))
-
 
 def cap_industry_weights(
     target_weights: dict[str, float],

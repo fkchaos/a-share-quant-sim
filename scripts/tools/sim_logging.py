@@ -11,7 +11,6 @@ os.makedirs(LOG_DIR, exist_ok=True)
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-
 def get_logger(name="sim_daily"):
     """获取配置好的 logger（控制台 + 文件双输出）"""
     logger = logging.getLogger(name)

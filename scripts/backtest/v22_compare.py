@@ -4,9 +4,7 @@ import sys, os
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, '.')
 from core.db import load_panel_from_db
-
 
 def run_strategy(name, start_date, end_date, select_fn, cfg_dict):
     """通用回测函数"""
@@ -102,19 +100,16 @@ def run_strategy(name, start_date, end_date, select_fn, cfg_dict):
     mdd = ((nav_s.cummax() - nav_s) / nav_s.cummax()).max()
     return ar, sh, mdd, nav_s
 
-
 def v13_select(factors, date, cp, vp, ap, holdings, cfg):
     from scripts.v13_small_mid_short import select_stocks
     rev_threshold = cfg.get('rev_threshold', -0.02)
     max_holdings = cfg.get('max_holdings', 8)
     return select_stocks(factors, date, cp, vp, ap, holdings)[:max_holdings]
 
-
 def v22_select(factors, date, cp, vp, ap, holdings, cfg):
     from scripts.v22_ai_factor import calc_v22_factors, select_stocks_v22
     v22_cfg = cfg.get('v22_cfg', type('C', (), {'mom_threshold': 0.02, 'max_holdings': 8})())
     return select_stocks_v22(factors, date, cp, vp, ap, holdings, v22_cfg)
-
 
 if __name__ == "__main__":
     start, end = '2022-01-01', '2026-05-31'

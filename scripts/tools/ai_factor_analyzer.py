@@ -21,13 +21,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')))
 REPORT_DIR = DATA_DIR / 'backtest_results'
 REPORT_DIR.mkdir(exist_ok=True)
-
 
 # ── 因子面板计算（从 DB）─────────────────────────────────────────
 def calc_factor_panels_from_db(start_date='2022-01-01', end_date='2026-05-31'):
@@ -49,7 +45,6 @@ def calc_factor_panels_from_db(start_date='2022-01-01', end_date='2026-05-31'):
                                   high_panel=high_panel, low_panel=low_panel)
     print("  因子数: %d" % len(factors))
     return factors, close_panel
-
 
 # ── IC 计算 ─────────────────────────────────────────────────────
 def calc_all_ic(factors, close_panel, fwd_period=5):
@@ -93,7 +88,6 @@ def calc_all_ic(factors, close_panel, fwd_period=5):
         df = df.sort_values('IR', ascending=False)
     return df
 
-
 # ── 报告格式化 ──────────────────────────────────────────────────
 def format_ic_report(ic_df, top_n=20):
     NL = "\n"
@@ -125,7 +119,6 @@ def format_ic_report(ic_df, top_n=20):
     lines.append(ic_df.to_string())
 
     return NL.join(lines)
-
 
 # ── DeepSeek AI 分析 ────────────────────────────────────────────
 def get_ai_analysis(ic_report_text, api_key=None):
@@ -174,7 +167,6 @@ def get_ai_analysis(ic_report_text, api_key=None):
     except Exception as e:
         print("API 调用失败: %s" % e)
         return None
-
 
 # ── 主函数 ──────────────────────────────────────────────────────
 def main():
@@ -225,7 +217,6 @@ def main():
             print("\nAI 分析已保存: %s" % ai_path)
 
     print("\n总耗时: %.1fs" % (time.time()-t0))
-
 
 if __name__ == "__main__":
     main()

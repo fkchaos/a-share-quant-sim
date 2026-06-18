@@ -37,11 +37,7 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 class V27Config:
     # 选股参数
@@ -64,7 +60,6 @@ class V27Config:
     pv_corr_percentile = 0.30  # pv_corr_10 前30%加分
     vp_div_threshold = -0.3    # 量价背离度阈值
     pv_corr_20_min = 0         # 中期趋势健康度
-
 
 def calc_v27_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel=None):
     """计算 v27 价量共振因子"""
@@ -163,7 +158,6 @@ def calc_v27_factors(close_panel, volume_panel, amount_panel, high_panel, low_pa
 
     return factors
 
-
 def select_stocks_v27(factors, date, close_panel, volume_panel, amount_panel, current_holdings, cfg):
     """v27 选股：动量 + 价量共振"""
     if date not in factors['mom_5'].index:
@@ -237,7 +231,6 @@ def select_stocks_v27(factors, date, close_panel, volume_panel, amount_panel, cu
 
     candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
     return candidates[:cfg.max_holdings]
-
 
 def run_v27_backtest(start_date='2022-01-01', end_date='2026-05-31'):
     print("=" * 60)
@@ -383,7 +376,6 @@ def run_v27_backtest(start_date='2022-01-01', end_date='2026-05-31'):
         'total_buys': total_buys, 'total_sells': total_sells,
         'nav': nav_df, 'select_days': select_days,
     }
-
 
 if __name__ == "__main__":
     run_v27_backtest()

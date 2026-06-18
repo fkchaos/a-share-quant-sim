@@ -21,14 +21,12 @@ import pandas as pd
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, SCRIPT_DIR)
-sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 
 from core.config import TradingCosts
 from core.strategy_map import load_strategy
 
 # ── Config ─────────────────────────────────────────────────────────
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
@@ -60,7 +58,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("sim_v20")
 
-
 # ── Data Loading ────────────────────────────────────────────────────
 def load_daily_data():
     """从数据库加载最近一年的日K线（对齐 v13 格式）"""
@@ -90,7 +87,6 @@ def load_daily_data():
     log.info(f"数据加载: {len(result)} 只股票, {df.shape[0]} 条记录, 日期范围 {df['date'].min()} ~ {df['date'].max()}")
     return result
 
-
 def _build_panels_from_dfs(code_dfs):
     """从 {code: DataFrame} 构建 panel 字典"""
     all_dates = set()
@@ -108,7 +104,6 @@ def _build_panels_from_dfs(code_dfs):
         panels[field] = panel
 
     return panels
-
 
 # ── Factor Calculation ─────────────────────────────────────────────
 def calc_factors(panels):
@@ -143,7 +138,6 @@ def calc_factors(panels):
         "price_vs_ma5": price_vs_ma5,
         "recent_limit_up": recent_limit_up,
     }
-
 
 # ── Stock Selection ────────────────────────────────────────────────
 def select_stocks(panels, factors, date, current_holdings=None):
@@ -225,7 +219,6 @@ def select_stocks(panels, factors, date, current_holdings=None):
     candidates.sort(key=lambda x: x[1], reverse=True)
     return [c for c, s in candidates[:MAX_HOLDINGS]]
 
-
 # ── Portfolio State ────────────────────────────────────────────────
 def load_portfolio():
     """加载账户状态（从数据库，account_id=3）"""
@@ -262,7 +255,6 @@ def load_portfolio():
         "nav_history": [],
         "trade_log": [],
     }
-
 
 def save_portfolio(state):
     """保存账户状态（写数据库，account_id=3）"""
@@ -310,7 +302,6 @@ def save_portfolio(state):
                 )
     log.info(f"账户已保存: 现金 ¥{state['cash']:,.0f}, 持仓 {len(state.get('holdings', {}))} 只")
 
-
 # ── Trade Plan ─────────────────────────────────────────────────────
 def load_plan():
     if os.path.exists(V20_PLAN_FILE):
@@ -318,11 +309,9 @@ def load_plan():
             return json.load(f)
     return {"pending_buy": [], "pending_sell": [], "date": None}
 
-
 def save_plan(plan):
     with open(V20_PLAN_FILE, "w") as f:
         json.dump(plan, f, indent=2, ensure_ascii=False, default=str)
-
 
 # ── Commands ───────────────────────────────────────────────────────
 def cmd_tail_signal():
@@ -502,7 +491,6 @@ def cmd_tail_signal():
 
     log.info(f"信号完成: 卖 {len(sell_plan)} 只 / 买 {len(buy_plan)} 只 / 持有 {len(hold_plan)} 只")
 
-
 def cmd_tail_execute():
     """14:45 尾盘执行 — 先卖后买"""
     log.info("=" * 50)
@@ -633,7 +621,6 @@ def cmd_tail_execute():
 
     log.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 现金 ¥{cash:,.0f}")
 
-
 def cmd_report():
     """收盘报告"""
     log.info("=" * 50)
@@ -674,7 +661,6 @@ def cmd_report():
 
     log.info(f"收盘报告: 总资产 ¥{portfolio_val:,.0f}  收益率 {total_pnl:+.2%}")
     return portfolio_val
-
 
 # ── Main ───────────────────────────────────────────────────────────
 if __name__ == "__main__":

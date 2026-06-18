@@ -20,9 +20,6 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
 from constraints import build_trade_context
@@ -30,7 +27,7 @@ from indices import get_index_trends
 from core.db import get_kline, get_all_codes
 
 # ── Config ─────────────────────────────────────────────────────────
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
@@ -64,7 +61,6 @@ STAMP_TAX = 0.001  # 印花税千一
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("sim_v13")
 
-
 # ── 账户操作 ──────────────────────────────────────────────────────
 # account.json 标准格式:
 # {
@@ -94,7 +90,6 @@ def load_account():
     capital = acct["initial_capital"] if acct else 100000
     return PortfolioState(cash=capital, initial_capital=capital, holdings={}, trade_log=[])
 
-
 def save_account(state):
     """保存账户状态（写数据库，account_id=2）"""
     from core.db import save_account_for_sim, clear_holdings, get_conn
@@ -113,7 +108,6 @@ def save_account(state):
                     }), code),
                 )
     logger.info(f"账户已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
-
 
 # ── 数据加载 ──────────────────────────────────────────────────────
 def load_daily_data():
@@ -142,7 +136,6 @@ def load_daily_data():
     else:
         logger.warning("📅 DB 数据: 无有效数据")
     return code_dfs
-
 
 def load_realtime_spot(codes):
     """拉取实时行情"""
@@ -174,7 +167,6 @@ def load_realtime_spot(codes):
         logger.warning(f"实时行情拉取失败: {e}")
         return {}
 
-
 def get_price_data(date, code_dfs, intraday=False, codes=None):
     """获取价格数据"""
     price_data = pd.Series(dtype=float)
@@ -197,7 +189,6 @@ def get_price_data(date, code_dfs, intraday=False, codes=None):
                     price_data[code] = df.loc[latest, "close"]
 
     return price_data, spot_data
-
 
 # ── 选股因子 ──────────────────────────────────────────────────────
 def calc_v13_factors(code_dfs, liquid_stocks):
@@ -241,7 +232,6 @@ def calc_v13_factors(code_dfs, liquid_stocks):
 
     return factors
 
-
 def select_stocks_v13(factors, holdings):
     """v13 选股 — 评分排序制"""
     rev_5 = factors["rev_5"]
@@ -270,7 +260,6 @@ def select_stocks_v13(factors, holdings):
     # 按评分降序
     candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
     return candidates[:MAX_DAILY_BUY]
-
 
 # ── 风控检查 ──────────────────────────────────────────────────────
 def check_risk(state, price_data, zz800_names=None):
@@ -347,7 +336,6 @@ def check_risk(state, price_data, zz800_names=None):
 
     return sell_plan, to_remove
 
-
 def check_limit_down(code, code_dfs, date, price_data):
     """检查是否跌停"""
     if code not in code_dfs:
@@ -360,7 +348,6 @@ def check_limit_down(code, code_dfs, date, price_data):
     limit_down = prev_close * 0.90
     current_price = price_data.get(code, 0)
     return current_price <= limit_down * 1.01
-
 
 # ── 上午信号 ──────────────────────────────────────────────────────
 def run_intraday_signal():
@@ -519,7 +506,6 @@ def run_intraday_signal():
     logger.info(f"📊 运行完成, 信号: 卖 {len(sell_plan)} 只 / 买 {len(buy_plan)} 只 / 持 {len(hold_plan)} 只")
 
     return plan
-
 
 # ── 下午执行 ──────────────────────────────────────────────────────
 def run_intraday_execute():
@@ -685,7 +671,6 @@ def run_intraday_execute():
 
     return {"nav": float(nav), "cash": float(state.cash), "holdings": len(state.holdings), "results": exec_results}
 
-
 # ── 收盘报告 ──────────────────────────────────────────────────────
 def run_report_only():
     """收盘报告：只读账户状态，不修改"""
@@ -727,7 +712,6 @@ def run_report_only():
                 logger.info(f"  {code} {name:<8} {h['shares']:>6}股  市值¥{mv:>10,.0f}  权重{w:.1%}  盈亏{pnl:+.1%}")
 
     return {"nav": float(nav), "return": float(total_ret), "holdings": len(state.holdings)}
-
 
 # ── 主入口 ────────────────────────────────────────────────────────
 if __name__ == "__main__":

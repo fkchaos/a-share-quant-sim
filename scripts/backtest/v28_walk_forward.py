@@ -15,10 +15,6 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
 
 # WF 参数（与 v27 一致，用于公平对比）
@@ -135,7 +131,6 @@ def v27_candidates(date, win_data):
     cands = list(zip(codes, scores))
     cands.sort(key=lambda x: x[1], reverse=True)
     return cands
-
 
 def run_window(win_close, win_open, train_days, fold_idx):
     """在单个 window 上跑回测"""
@@ -269,7 +264,6 @@ def run_window(win_close, win_open, train_days, fold_idx):
     test_sharpe = test_daily.mean() / test_daily.std() * np.sqrt(252) if test_daily.std() > 0 else 0
     return test_ret, test_dd, test_sharpe, len(test_nav)
 
-
 def walk_forward(train_days=252, test_days=126, step_days=63):
     """Walk-Forward 验证"""
     total_days = close_panel.shape[0]
@@ -317,7 +311,6 @@ def walk_forward(train_days=252, test_days=126, step_days=63):
         print(f"  ❌ WF 未通过 ({pos_folds:.0f}% 正收益 fold, 夏普 {avg_sharpe:.3f})")
 
     return df
-
 
 if __name__ == "__main__":
     print("=" * 60)

@@ -4,15 +4,11 @@ import sys, os, time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, '.')
-sys.path.insert(0, 'scripts')
-
 from v13_small_mid_short import (
     V13Config, load_small_cap_panel, calc_small_cap_factors, select_stocks
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
-
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
 def run_v13_with_liquidity_cap(max_liquidity, start_date='2022-01-01', end_date='2026-05-31'):
     """用指定的流动性上限跑回测"""
@@ -166,7 +162,6 @@ def run_v13_with_liquidity_cap(max_liquidity, start_date='2022-01-01', end_date=
         'max_dd': max_dd, 'total_trades': len(sells), 'win_rate': wr,
         'pool_rate': pool_rate, 'nav_final': nav.iloc[-1],
     }
-
 
 if __name__ == '__main__':
     cap_list = [8000, 5000, 3000, 2000, 1500]

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """批量补全 stock_pool 中缺失的股票名称"""
 import sys, os
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 
 import urllib.request, time
 from core.db import get_conn

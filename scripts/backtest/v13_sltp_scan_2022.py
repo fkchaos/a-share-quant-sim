@@ -4,15 +4,11 @@ import sys, os, time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from scripts.v13_small_mid_short import (
     V13Config, load_small_cap_panel, calc_small_cap_factors, select_stocks
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
-
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
 def run_v13_with_params(stop_loss, stop_profit, hold_days_max, start_date, end_date):
     """用指定参数跑一次回测，返回绩效指标"""
@@ -147,7 +143,6 @@ def run_v13_with_params(stop_loss, stop_profit, hold_days_max, start_date, end_d
         'tp_pct': n_tp / total_sell * 100,
         'to_pct': n_to / total_sell * 100,
     }
-
 
 if __name__ == '__main__':
     # 扫描范围

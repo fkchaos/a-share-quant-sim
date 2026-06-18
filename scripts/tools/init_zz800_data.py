@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 os.makedirs(DAILY_DIR, exist_ok=True)
 
@@ -29,14 +29,12 @@ HEADERS = {
 # 起始日期
 START_DATE = "2020-01-01"  # 多取一年，确保回测起始日(2021-01-01)前有足够数据
 
-
 def tx_code(code):
     code = str(code).zfill(6)
     if code.startswith('6') or code.startswith('9'):
         return f"sh{code}"
     else:
         return f"sz{code}"
-
 
 def fetch_tencent_kline(code, start_date=START_DATE):
     """从腾讯接口获取日K线数据（分段获取全部）"""
@@ -103,7 +101,6 @@ def fetch_tencent_kline(code, start_date=START_DATE):
     df = df[~df.index.duplicated(keep='last')]
     return df
 
-
 def download_stock(code, force=False):
     """下载单只股票数据"""
     csv_path = os.path.join(DAILY_DIR, f"{code}.csv")
@@ -118,7 +115,6 @@ def download_stock(code, force=False):
     df.to_csv(csv_path)
     return ('ok', code)
 
-
 def main():
     parser = argparse.ArgumentParser(description='中证800成分股日线数据初始化')
     parser.add_argument('--check', action='store_true', help='只检查缺失数量')
@@ -127,7 +123,7 @@ def main():
     args = parser.parse_args()
     
     # 读取中证800成分股列表
-    csv_path = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'zz800_constituents.csv')
+    csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'zz800_constituents.csv'))
     if not os.path.exists(csv_path):
         print(f"❌ 成分股列表不存在: {csv_path}")
         print("   请先运行生成脚本")
@@ -184,7 +180,6 @@ def main():
     # 最终统计
     total = len([f for f in os.listdir(DAILY_DIR) if f.endswith('.csv')])
     print(f"本地数据: {total} 只")
-
 
 if __name__ == "__main__":
     main()

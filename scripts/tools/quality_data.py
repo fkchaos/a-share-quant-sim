@@ -14,13 +14,10 @@
 """
 
 import os
-import sys
 import time
 import concurrent.futures
 import numpy as np
 import pandas as pd
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR",
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
@@ -35,7 +32,6 @@ COL_MAP = {
     "资产负债率": "debt_asset",
 }
 
-
 def _clean_pct(val):
     """清洗百分比字符串，如 '6.89%%' -> 6.89, '-54.55%' -> -54.55"""
     if val is None or (isinstance(val, float) and np.isnan(val)):
@@ -47,7 +43,6 @@ def _clean_pct(val):
         return float(val)
     except (ValueError, TypeError):
         return np.nan
-
 
 def _fetch_one(code):
     """获取单只股票年度财务数据。"""
@@ -67,7 +62,6 @@ def _fetch_one(code):
         return code, df
     except Exception:
         return code, None
-
 
 def fetch_all_financial(stock_list, max_workers=4):
     """并发获取全市场年度财务数据。"""
@@ -95,7 +89,6 @@ def fetch_all_financial(stock_list, max_workers=4):
     result.to_csv(CACHE_FILE, index=False)
     print(f"  ✅ 保存 {len(result)} 条记录到 {CACHE_FILE}（耗时 {time.time()-t0:.0f}s, 成功 {len(all_dfs)}/{len(stock_list)}）")
     return result
-
 
 def build_quality_factors(stock_list, dates):
     """
@@ -145,7 +138,6 @@ def build_quality_factors(stock_list, dates):
         print(f"  📈 {fname}: NaN%={nan_pct:.1%}")
 
     return factors
-
 
 if __name__ == "__main__":
     # 测试

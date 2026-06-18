@@ -21,11 +21,7 @@ v27_regime_position_sizing.py — 基于大盘走势的动态仓位控制回测
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 # ── 市场状态识别 ──────────────────────────────────────────────────
 
@@ -57,13 +53,11 @@ def detect_regime(close_panel, ma_lookback=20, slope_lookback=10):
     
     return regimes, ma20, ma_slope
 
-
 def get_regime_multiplier(regime, multipliers=None):
     """根据市场状态返回仓位乘数"""
     if multipliers is None:
         multipliers = {'bull': 1.0, 'range': 0.6, 'bear': 0.3}
     return multipliers.get(regime, 0.6)
-
 
 # ── 回测引擎 ──────────────────────────────────────────────────────
 
@@ -230,7 +224,6 @@ def run_backtest_v27_regime(close_panel, volume_panel, amount_panel,
     
     return nav_series, trade_log, regime_series
 
-
 # ── 指标计算 ──────────────────────────────────────────────────────
 
 def calc_metrics(nav_series, trade_log):
@@ -272,7 +265,6 @@ def calc_metrics(nav_series, trade_log):
         'final_nav': nav_series.iloc[-1],
     }
 
-
 def calc_regime_metrics(nav_series, regime_series):
     """按市场状态分段统计"""
     results = {}
@@ -299,7 +291,6 @@ def calc_regime_metrics(nav_series, regime_series):
             'pct_time': mask.sum() / len(regime_series) * 100,
         }
     return results
-
 
 # ── 主函数 ────────────────────────────────────────────────────────
 
@@ -460,7 +451,7 @@ def main():
         print(f"{name:25s} | {m['ann_return']:8.1%} | {m['sharpe']:6.2f} | {m['max_dd']:8.1%} | {m['total_trades']:6d} | {m['win_rate']:6.1%}")
     
     # 保存结果
-    DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+    DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
     REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
     os.makedirs(REPORT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -491,7 +482,6 @@ def main():
     with open(out_file, "w") as f:
         json.dump(results, f, indent=2, ensure_ascii=False, default=str)
     print(f"\n✅ 结果已保存 → {out_file}")
-
 
 if __name__ == "__main__":
     main()

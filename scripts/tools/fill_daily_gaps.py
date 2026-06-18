@@ -24,14 +24,12 @@ HEADERS = {
 
 START_DATE = "2021-01-01"
 
-
 def _tx_code(code):
     code = str(code).zfill(6)
     if code.startswith('6') or code.startswith('9'):
         return f"sh{code}"
     else:
         return f"s{code}"
-
 
 def fetch_tencent_kline_full(code, start=START_DATE):
     """获取完整日 K 线（2021年至今）"""
@@ -103,7 +101,6 @@ def fetch_tencent_kline_full(code, start=START_DATE):
     df = df[df.index >= pd.Timestamp(start)]
     return df
 
-
 def get_missing_codes(target_codes=None):
     """获取 data/daily/ 中缺失的股票代码"""
     existing = set(f.replace('.csv', '') for f in os.listdir(DAILY_DIR) if f.endswith('.csv'))
@@ -119,7 +116,6 @@ def get_missing_codes(target_codes=None):
     
     missing = target_codes - existing
     return sorted(missing)
-
 
 def batch_download(missing_codes, start_from=None):
     """批量下载日 K 线"""
@@ -165,7 +161,6 @@ def batch_download(missing_codes, start_from=None):
     print(f"\n完成: 成功 {success}, 失败 {fail}, 跳过 {skip}")
     print(f"耗时: {elapsed:.1f}s")
     return success, fail
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="补全日 K 线数据缺口")

@@ -22,14 +22,10 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')))
+DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')))
 DB_PATH = DATA_DIR / 'quant.db'
 REPORT_DIR = DATA_DIR / 'backtest_results'
 REPORT_DIR.mkdir(exist_ok=True)
-
 
 # ── 情绪指标构建 ────────────────────────────────────────────────
 def build_sentiment_indicators(close_panel, volume_panel, high_panel, low_panel,
@@ -92,7 +88,6 @@ def build_sentiment_indicators(close_panel, volume_panel, high_panel, low_panel,
 
     return sentiment, limit_up, streak
 
-
 # ── 信号生成 ──────────────────────────────────────────────────────
 def generate_sentiment_signals(sentiment_df, lookback=20):
     """
@@ -129,7 +124,6 @@ def generate_sentiment_signals(sentiment_df, lookback=20):
     df.loc[(df['heat_pct'] < 0.7) & (df['heat_ma5'] < df['heat_ma20']), 'signal'] = -0.5
 
     return df
-
 
 # ── 主函数 ──────────────────────────────────────────────────────
 def main():
@@ -192,7 +186,6 @@ def main():
         if 'level_1' in sentiment.columns:
             cols.extend(['level_1', 'level_2', 'level_3'])
         print(sentiment[cols].tail(30).to_string())
-
 
 if __name__ == "__main__":
     main()

@@ -18,10 +18,7 @@ v13_small_mid_short — 小资金中短线策略
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
@@ -67,7 +64,6 @@ class V13Config:
     stamp_tax = 0.001             # 印花税千一（卖出）
     slippage_rate = 0.002         # 滑点 0.2%（小市值流动性差）
 
-
 # ============================================================
 # 数据加载
 # ============================================================
@@ -100,7 +96,6 @@ def load_small_cap_panel(start_date='2021-01-01', end_date='2026-05-31'):
         print(f"筛选条件：日均成交额 {min_liquidity}万-{max_liquidity}万")
 
     return close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel
-
 
 # ============================================================
 # 因子计算
@@ -150,7 +145,6 @@ def calc_small_cap_factors(close_panel, volume_panel, amount_panel, high_panel, 
             print(f"  ⚠️ Bonus factor '{bname}' calc failed: {e}")
 
     return factors
-
 
 # ============================================================
 # 选股逻辑
@@ -226,7 +220,6 @@ def select_stocks(factors, date, close_panel, volume_panel, amount_panel, curren
     candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
 
     return candidates[:V13Config.max_holdings]
-
 
 # ============================================================
 # 回测引擎
@@ -427,7 +420,6 @@ def run_v13_backtest():
 
     return nav, trade_log, metrics
 
-
 def calc_v13_metrics(nav, trade_log, initial_capital):
     """计算绩效指标"""
     rets = nav.pct_change().dropna()
@@ -454,7 +446,6 @@ def calc_v13_metrics(nav, trade_log, initial_capital):
         'total_trades': len(trade_log),
         'win_rate': round(win_rate, 1),
     }
-
 
 if __name__ == '__main__':
     nav, trades, metrics = run_v13_backtest()

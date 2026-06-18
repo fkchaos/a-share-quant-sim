@@ -9,11 +9,7 @@ import sys, os
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 def run_all_strategies(close_panel, volume_panel, amount_panel, open_panel,
                        high_panel, low_panel, cfg):
@@ -135,7 +131,6 @@ def run_all_strategies(close_panel, volume_panel, amount_panel, open_panel,
     
     return results
 
-
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -174,7 +169,6 @@ def main():
             name, r['annual']*100, r['sharpe'], r['max_dd']*100,
             r['win_rate']*100, r['TP']))
     print("=" * 70)
-
 
 if __name__ == "__main__":
     main()

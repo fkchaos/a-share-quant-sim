@@ -6,10 +6,7 @@ v12_multi 权重扫描 — 直接调用 walk_forward，一次加载数据
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
 from core.config import STRATEGY_PROFILES, StrategyConfig, MarketFilter

@@ -27,24 +27,20 @@
 
 ## 一、环境准备
 
-### 1.1 一次性设置（每次新开终端都要执行）
+### 1.1 安装
 
 ```bash
-export PYTHONPATH=/root/a-share-quant-sim
-export BACKTEST_DATA_DIR=/root/data
+cd a-share-quant-sim
+pip install -e .
 ```
 
-验证：
-```bash
-echo $PYTHONPATH          # 应输出 /root/a-share-quant-sim
-ls $BACKTEST_DATA_DIR/quant.db  # 应能看到 quant.db 文件
-```
+这一步会把 `core` 和 `scripts` 安装为可编辑包，之后所有脚本直接 `import core` 或 `from scripts.tools.xxx import ...` 即可，**不需要设置 `PYTHONPATH`**。
 
-如果 `quant.db` 不存在，先初始化数据（见下一节）。
+数据目录默认在项目内的 `data/`，**不需要设置 `BACKTEST_DATA_DIR`**（除非你想把数据放在别处）。
 
 ### 1.2 命令格式约定
 
-本手册所有命令都假设上面两个环境变量已设置。如果报错 `ModuleNotFoundError` 或 `找不到数据`，先检查这两个变量。
+本手册所有命令都假设你已经在项目根目录下。如果报错 `ModuleNotFoundError`，先确认是否执行了 `pip install -e .`。
 
 ---
 
@@ -53,23 +49,20 @@ ls $BACKTEST_DATA_DIR/quant.db  # 应能看到 quant.db 文件
 ### 2.1 首次初始化（只需跑一次）
 
 ```bash
-export PYTHONPATH=/root/a-share-quant-sim
-export BACKTEST_DATA_DIR=/root/data
-mkdir -p /root/data
+mkdir -p data
 
 # 一键初始化（建表 + 股票池 + K线数据 + 账户，约 2-3 分钟）
 python scripts/tools/init_project.py
 ```
 
-产物：`/root/data/quant.db`，包含中证 800 成分股 + 近 30 日 K 线 + 3 个模拟账户。
+产物：`data/quant.db`，包含中证 800 成分股 + 近 30 日 K 线 + 3 个模拟账户。
 
 > ⚠️ 不需要 CSV 文件，所有数据直接写入 SQLite。
 
 ### 2.2 日常更新（每天收盘后）
 
 ```bash
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
-  python scripts/tools/update_daily_data_async.py
+python scripts/tools/update_daily_data_async.py
 ```
 
 数据直接 upsert 到数据库，不会重复。
@@ -78,24 +71,24 @@ PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
 
 ```bash
 # 查看账户
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
+python scripts/tools/cli.py account
 
 # 查看持仓
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py holdings
+python scripts/tools/cli.py holdings
 
 # 查看交易记录（最近 10 条）
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py trades --limit 10
+python scripts/tools/cli.py trades --limit 10
 
 # SQL 直连（高级用户）
-sqlite3 /root/data/quant.db "SELECT * FROM account;"
-sqlite3 /root/data/quant.db "SELECT COUNT(*) FROM daily_kline;"
-sqlite3 /root/data/quant.db "SELECT * FROM holdings WHERE account_id=1;"
+sqlite3 data/quant.db "SELECT * FROM account;"
+sqlite3 data/quant.db "SELECT COUNT(*) FROM daily_kline;"
+sqlite3 data/quant.db "SELECT * FROM holdings WHERE account_id=1;"
 ```
 
 ### 2.4 修改账户资金
 
 ```bash
-sqlite3 /root/data/quant.db "UPDATE account SET initial_capital=500000 WHERE id=1;"
+sqlite3 data/quant.db "UPDATE account SET initial_capital=500000 WHERE id=1;"
 ```
 
 ---
@@ -143,16 +136,16 @@ python scripts/backtest/run_backtest.py --strategy v4_baseline --exec-timing ope
 
 ```bash
 # v27 价量共振 — WF 回测
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v27_walk_forward.py
+python scripts/backtest/v27_walk_forward.py
 
 # v20c 尾盘缩量 — WF 过拟合检测
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20_walk_forward.py
+python scripts/backtest/v20_walk_forward.py
 
 # v20c 尾盘缩量 — TP/SL 参数扫描（可选，较慢）
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20c_wf_sl_tp_scan.py
+python scripts/backtest/v20c_wf_sl_tp_scan.py
 
 # v11b 多因子 Ensemble — WF 回测
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v11b_walk_forward.py
+python scripts/backtest/v11b_walk_forward.py
 ```
 
 **各策略 WF 结果参考（2026-06 数据）：**
@@ -169,12 +162,12 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v11b_walk_forward.py
 
 ```bash
 # 三账户统一回测
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy all report_only
+python scripts/sim/account_runner.py --strategy all report_only
 
 # 单账户回测
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v27 report_only
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v20c report_only
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v11b report_only
+python scripts/sim/account_runner.py --strategy v27 report_only
+python scripts/sim/account_runner.py --strategy v20c report_only
+python scripts/sim/account_runner.py --strategy v11b report_only
 ```
 
 ### 3.4 输出在哪？
@@ -183,10 +176,10 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strate
 
 ```bash
 # 查看最新的回测结果目录
-ls -lt /root/data/backtest_results/ | head -5
+ls -lt data/backtest_results/ | head -5
 
 # 查看某个回测的绩效摘要
-cat /root/data/backtest_results/20260715_120000/summary.json
+cat data/backtest_results/20260715_120000/summary.json
 ```
 
 ### 3.5 单次回测需要多久？
@@ -209,19 +202,19 @@ Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段
 
 ```bash
 # v27 价量共振
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v27_walk_forward.py
+python scripts/backtest/v27_walk_forward.py
 
 # v20c 尾盘缩量（参数扫描，较慢）
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20c_wf_sl_tp_scan.py
+python scripts/backtest/v20c_wf_sl_tp_scan.py
 
 # v11b 多因子 Ensemble
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v11b_walk_forward.py
+python scripts/backtest/v11b_walk_forward.py
 ```
 
 ### 4.3 怎么看结果
 
 ```bash
-cat /root/data/backtest_results/wf_v27_latest.json
+cat data/backtest_results/wf_v27_latest.json
 ```
 
 结果示例：
@@ -258,15 +251,15 @@ cat /root/data/backtest_results/wf_v27_latest.json
 
 ```bash
 # 上午出信号（11:45 执行）
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/sim_account1.py intraday_signal
 
 # 下午开盘执行（13:00 执行）
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/sim_account1.py intraday_execute
 
 # 收盘报告（15:30 执行）
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/sim_account1.py report_only
 ```
 
@@ -274,15 +267,15 @@ PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
 
 ```bash
 # 上午出信号
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/account_runner.py --strategy v27 intraday_signal
 
 # 下午开盘执行
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/account_runner.py --strategy v27 intraday_execute
 
 # 收盘报告
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/account_runner.py --strategy v27 report_only
 ```
 
@@ -290,15 +283,15 @@ PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
 
 ```bash
 # 尾盘出信号（14:45 执行）
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/account_runner.py --strategy v20c tail_signal
 
 # 尾盘执行（14:55 执行）
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/account_runner.py --strategy v20c tail_execute
 
 # 收盘报告（15:30 执行）
-PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
+
   python scripts/sim/account_runner.py --strategy v20c report_only
 ```
 
@@ -306,15 +299,15 @@ PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data \
 
 ```bash
 # 查看交易计划（执行后生成）
-cat /root/data/portfolio/trade_plan_v27.json
-cat /root/data/portfolio/trade_plan_v20c.json
+cat data/portfolio/trade_plan_v27.json
+cat data/portfolio/trade_plan_v20c.json
 
 # 查看运行日志
-tail -50 /root/data/portfolio/sim_account1.log
-tail -50 /root/data/portfolio/account_runner.log
+tail -50 data/portfolio/sim_account1.log
+tail -50 data/portfolio/account_runner.log
 
 # 查看账户状态
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
+python scripts/tools/cli.py account
 ```
 
 ### 5.6 一个账户只用跑一次怎么办？
@@ -322,8 +315,8 @@ PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
 如果只想快速测试，不需要完整的三步流程，可以直接：
 ```bash
 # 信号 + 执行一步完成
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v27 intraday_signal
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v27 intraday_execute
+python scripts/sim/account_runner.py --strategy v27 intraday_signal
+python scripts/sim/account_runner.py --strategy v27 intraday_execute
 ```
 
 ---
@@ -389,7 +382,7 @@ STRATEGY_MAP = {
 
 ```bash
 # 先模拟盘试试能不能跑通
-PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py \
+python scripts/sim/account_runner.py \
   --strategy my_strategy intraday_signal
 
 # 没问题再跑回测（需要在 run_backtest.py 或相关脚本中注册全量回测入口）
@@ -530,20 +523,21 @@ crontab -e
 ```
 
 ```cron
+# ⚠️ 请将 /root/a-share-quant-sim 替换为你的实际项目路径
 # 数据更新（上午+下午）
-31 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
-40 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py >> /root/data/portfolio/update.log 2>&1
+31 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
+40 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
 
 # 账户2 信号+执行
-45 11 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> /root/data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> /root/data/portfolio/account_runner.log 2>&1
+45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> data/portfolio/account_runner.log 2>&1
 
 # 账户3 信号+执行
-45 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> /root/data/portfolio/account_runner.log 2>&1
-55 14 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> /root/data/portfolio/account_runner.log 2>&1
+45 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> data/portfolio/account_runner.log 2>&1
+55 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> data/portfolio/account_runner.log 2>&1
 
 # 收盘报告（三账户）
-30 15 * * 1-5 cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy all report_only >> /root/data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy all report_only >> data/portfolio/account_runner.log 2>&1
 ```
 
 ### 8.4 验证
@@ -566,7 +560,7 @@ hermes cron list
 
 先设置环境变量（只需一次）：
 ```bash
-export PYTHONPATH=/root/a-share-quant-sim
+
 ```
 
 然后所有命令都是 `python scripts/tools/cli.py <命令> [参数]` 的格式。
@@ -720,36 +714,36 @@ python -m pytest tests/test_ensemble.py -v     # 19 个 Ensemble 测试
 ### Q: ModuleNotFoundError: No module named 'scripts' 或 'core'
 
 ```bash
-export PYTHONPATH=/root/a-share-quant-sim
+
 ```
 
 ### Q: 找不到 quant.db
 
 ```bash
 # 初始化数据
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/update_daily_data_async.py
+python scripts/tools/update_daily_data_async.py
 # 确认文件存在
-ls -la /root/data/quant.db
+ls -la data/quant.db
 ```
 
 ### Q: 回测结果全是负数 / 和之前记录不一致
 
 1. 检查选股池是否正确排除了科创板（688/689 前缀）：
 ```bash
-sqlite3 /root/data/quant.db "SELECT COUNT(*) FROM stock_pool WHERE code LIKE '688%';"
+sqlite3 data/quant.db "SELECT COUNT(*) FROM stock_pool WHERE code LIKE '688%';"
 # 应该返回 0
 ```
 
 2. 检查数据是否最新：
 ```bash
-sqlite3 /root/data/quant.db "SELECT MAX(trade_date) FROM daily_kline;"
+sqlite3 data/quant.db "SELECT MAX(trade_date) FROM daily_kline;"
 ```
 
 3. 检查数据源差异：不同数据源的"前复权"算法不同，可能导致结果差异
 
 ### Q: 模拟盘没有交易（plan 为空）
 
-1. 看日志：`tail -100 /root/data/portfolio/account_runner.log`
+1. 看日志：`tail -100 data/portfolio/account_runner.log`
 2. 确认上午信号先跑了：`account_runner.py intraday_signal`
 3. 确认市场是交易日（非节假日）
 
@@ -800,7 +794,7 @@ EOF
 # 2. 注册到 strategy_map.py（编辑 core/strategy_map.py）
 
 # 3. 模拟盘试试
-export PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data
+ BACKTEST_DATA_DIR=data
 python scripts/sim/account_runner.py --strategy my_strategy intraday_signal
 
 # 4. 跑回测验证（需要写独立回测脚本或接入回测引擎）
@@ -816,28 +810,28 @@ python scripts/sim/account_runner.py --strategy my_strategy intraday_signal
 #   stop_profit = 0.15 → stop_profit = 0.10
 
 # 跑回测
-export PYTHONPATH=/root/a-share-quant-sim BACKTEST_DATA_DIR=/root/data
+ BACKTEST_DATA_DIR=data
 python scripts/backtest/run_backtest.py --strategy v20c
 
 # 对比结果
-cat /root/data/backtest_results/$(ls -t /root/data/backtest_results/ | head -1)/summary.json
+cat data/backtest_results/$(ls -t data/backtest_results/ | head -1)/summary.json
 ```
 
 ### 场景 3：日常运维
 
 ```bash
 # 早上：更新数据
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/update_daily_data_async.py
+python scripts/tools/update_daily_data_async.py
 
 # 查看账户状态
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py account
+python scripts/tools/cli.py account
 
 # 查看持仓
-PYTHONPATH=/root/a-share-quant-sim python scripts/tools/cli.py holdings
+python scripts/tools/cli.py holdings
 
 # 查看最近的回测记录
-ls -lt /root/data/backtest_results/ | head -10
+ls -lt data/backtest_results/ | head -10
 
 # 查看模拟盘日志
-tail -20 /root/data/portfolio/account_runner.log
+tail -20 data/portfolio/account_runner.log
 ```

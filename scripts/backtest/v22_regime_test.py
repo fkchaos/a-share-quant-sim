@@ -17,11 +17,7 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 def detect_regimes(close_panel, adr_lookback=20, ma_lookback=60):
     """
@@ -65,7 +61,6 @@ def detect_regimes(close_panel, adr_lookback=20, ma_lookback=60):
     regimes[range_mask] = 'range'
     
     return regimes, adr_norm, ma_slope
-
 
 def run_v22_on_dates(close_panel, volume_panel, amount_panel,
                       high_panel, low_panel, open_panel, dates, cfg):
@@ -171,7 +166,6 @@ def run_v22_on_dates(close_panel, volume_panel, amount_panel,
 
     nav_s = pd.Series(nav_list, index=close_panel.index)
     return nav_s
-
 
 def main():
     import argparse
@@ -293,7 +287,6 @@ def main():
         print("  %d: %.2f%%" % (year.year, ret * 100))
 
     return results
-
 
 if __name__ == "__main__":
     main()

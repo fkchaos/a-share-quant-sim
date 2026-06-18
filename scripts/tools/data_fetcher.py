@@ -33,9 +33,8 @@ HEADERS = {
 }
 
 # 缓存目录
-CACHE_DIR = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")), "cache")
+CACHE_DIR = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")), "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
-
 
 # ============================================================
 # 数据源 1: 腾讯 API (主)
@@ -46,7 +45,6 @@ def _tx_code(code):
     if code.startswith('6') or code.startswith('9'):
         return f"sh{code}"
     return f"sz{code}"
-
 
 def fetch_tencent_spot(code):
     """腾讯实时行情"""
@@ -73,7 +71,6 @@ def fetch_tencent_spot(code):
         }
     except:
         return None
-
 
 def fetch_tencent_kline(code, days=30):
     """腾讯历史 K 线"""
@@ -128,7 +125,6 @@ def fetch_tencent_kline(code, days=30):
     except:
         return None
 
-
 def fetch_tencent_stock_list(prefixes=None):
     """
     腾讯批量获取股票列表（按前缀遍历）
@@ -173,7 +169,6 @@ def fetch_tencent_stock_list(prefixes=None):
     df['source'] = 'tencent'
     return df
 
-
 # ============================================================
 # 数据源 2: AKShare (备)
 # ============================================================
@@ -210,7 +205,6 @@ def fetch_akshare_kline(code, days=30):
     except:
         return None
 
-
 def fetch_akshare_stock_list():
     """AKShare 全 A 股列表"""
     try:
@@ -233,7 +227,6 @@ def fetch_akshare_stock_list():
     
     except ImportError:
         return None
-
 
 # ============================================================
 # 数据源 3: 东方财富 (备)
@@ -290,7 +283,6 @@ def fetch_eastmoney_kline(code, days=30):
     
     return None
 
-
 # ============================================================
 # 数据源 4: Tushare (备，需要 token)
 # ============================================================
@@ -315,7 +307,6 @@ def _get_tushare_pro():
         return None
     except ImportError:
         return None
-
 
 def fetch_tushare_kline(code, days=30):
     """Tushare 历史 K 线"""
@@ -349,7 +340,6 @@ def fetch_tushare_kline(code, days=30):
     
     except:
         return None
-
 
 # ============================================================
 # 统一接口（多源 fallback）
@@ -406,7 +396,6 @@ def fetch_kline(code, days=30, source='auto'):
             return func(code, days=days)
         return None
 
-
 def fetch_spot(code, source='auto'):
     """
     获取单只股票实时行情
@@ -423,7 +412,6 @@ def fetch_spot(code, source='auto'):
     if source in ('auto', 'tencent'):
         return fetch_tencent_spot(code)
     return None
-
 
 def fetch_stock_list(source='auto', prefixes=None, use_cache=True):
     """
@@ -474,7 +462,6 @@ def fetch_stock_list(source='auto', prefixes=None, use_cache=True):
     
     return None
 
-
 # ============================================================
 # 便捷函数
 # ============================================================
@@ -513,7 +500,6 @@ def get_data_source_status():
         status['tushare'] = '❌ 未安装'
     
     return status
-
 
 if __name__ == "__main__":
     print("=" * 50)

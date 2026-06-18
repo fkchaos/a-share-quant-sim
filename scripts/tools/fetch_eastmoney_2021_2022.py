@@ -6,8 +6,6 @@ import sys, time, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 from scripts.update_daily_data import get_stock_list
 from core.db import get_conn
 

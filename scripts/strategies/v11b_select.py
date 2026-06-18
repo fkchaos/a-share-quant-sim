@@ -15,8 +15,6 @@ import sys, os, json, logging
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from core.config import STRATEGY_PROFILES, TradingCosts
 from core.factors import calc_factors_panel_v11b
 from core.strategy import StrategyEngine
@@ -47,9 +45,8 @@ _strategy_engine = StrategyEngine(
     profile=_PROFILE,
     mode=_engine_mode,
     hybrid_alpha=0.8,
-    model_dir=os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "ml_models",
+    model_dir=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "ml_models"),
 )
-
 
 def calc_factors(cp, vp, ap, hp, lp, op=None, params=None):
     """
@@ -60,7 +57,6 @@ def calc_factors(cp, vp, ap, hp, lp, op=None, params=None):
     factors = calc_factors_panel_v11b(cp, vp, hp, lp)
     factors["close"] = cp  # 价格数据，select_stocks 需要
     return factors
-
 
 def select_stocks(factors, date, holdings, params=None, cp=None):
     """
@@ -135,7 +131,6 @@ def select_stocks(factors, date, holdings, params=None, cp=None):
     logger.info(f"v11b 选股: {len(scores)} → {len(result)} 只")
     return result
 
-
 def generate_plan(state, date, price_data, code_dataframes, names, risk_sell=None):
     """
     生成操作计划（从 step_generate_signal 抽离）
@@ -146,7 +141,8 @@ def generate_plan(state, date, price_data, code_dataframes, names, risk_sell=Non
         names = get_stock_name_map()
 
     trade_count_file = os.path.join(
-        os.environ.get("PORTFOLIO_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/portfolio"), "trade_count.txt"
+        os.environ.get("PORTFOLIO_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "portfolio")),
+        "trade_count.txt"
     )
     trade_count = 0
     if os.path.exists(trade_count_file):

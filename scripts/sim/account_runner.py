@@ -24,15 +24,13 @@ import numpy as np
 
 # 确保项目根目录在 path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, PROJECT_ROOT)
-sys.path.insert(0, os.path.join(PROJECT_ROOT, "scripts"))
 
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
 from core.db import get_kline, get_all_codes
 from core.strategy_map import load_strategy
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
@@ -43,7 +41,6 @@ STAMP_TAX = 0.001
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("account_runner")
-
 
 # ── 数据加载 ──────────────────────────────────────────────────────
 def load_panel(codes, min_days=60):
@@ -68,7 +65,6 @@ def load_panel(codes, min_days=60):
         pd.DataFrame({c: code_dfs[c].get('low', code_dfs[c]['close']) for c in code_dfs}),
         pd.DataFrame({c: code_dfs[c].get('open', code_dfs[c]['close']) for c in code_dfs}),
     )
-
 
 # ── 账户操作 ──────────────────────────────────────────────────────
 def load_account(account_id):
@@ -115,7 +111,6 @@ def load_account(account_id):
     logger.info(f"加载账户{account_id}: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
     return state
 
-
 def save_account(state, account_id):
     """保存账户状态到 DB"""
     from core.db import upsert_account, upsert_holding, delete_holding, get_holdings, get_conn, get_stock_name_map
@@ -155,7 +150,6 @@ def save_account(state, account_id):
                     (account_id, code, name, action, shares, price, amount, reason, trade_date),
                 )
     logger.info(f"账户{account_id}已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
-
 
 # ── 风控 ──────────────────────────────────────────────────────────
 def check_risk(state, date, price_data, params, prev_close=None, sell1_vol=None):
@@ -225,14 +219,12 @@ def check_risk(state, date, price_data, params, prev_close=None, sell1_vol=None)
                 to_sell.append((code, 'timeout', pnl))
     return to_sell
 
-
 def execute_sells(state, to_sell, date, spot):
     """执行卖出，返回新 state"""
     for code, reason, pnl in to_sell:
         if code in spot and spot[code] > 0:
             state = sell(state, code, spot[code], date, reason)
     return state
-
 
 def calc_regime_multiplier(close_panel, date, params):
     """市场状态识别 → 仓位乘数
@@ -304,7 +296,6 @@ def calc_regime_multiplier(close_panel, date, params):
     else:
         return ("震荡", sideways_alloc)
 
-
 def execute_buys(state, cands, date, spot, params):
     """执行买入，返回新 state"""
     max_buy = params["MAX_DAILY_BUY"]
@@ -332,7 +323,6 @@ def execute_buys(state, cands, date, spot, params):
         state = buy(state, code, price, date, shares)
         bought += 1
     return state
-
 
 # ── 主流程 ──────────────────────────────────────────────────────
 def run_signal(strategy_name, date):
@@ -546,7 +536,6 @@ def run_signal(strategy_name, date):
         print("⚪ 无操作")
     print("=" * 60)
 
-
 def run_execute(strategy_name, date):
     """执行交易：先卖后买"""
     import requests
@@ -646,7 +635,6 @@ def run_execute(strategy_name, date):
 
     logger.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
 
-
 def run_report(strategy_name, date):
     """收盘报告"""
     strategy = load_strategy(strategy_name)
@@ -692,7 +680,6 @@ def run_report(strategy_name, date):
     print("=" * 60)
 
     logger.info(f"=== {strategy_name} 收盘报告 {date} === 持仓 {len(state.holdings)} 只 现金 ¥{state.cash:,.0f} 净值 ¥{nav:,.0f} 收益 {pnl_pct:+.2f}%")
-
 
 # ── 入口 ─────────────────────────────────────────────────────────
 if __name__ == "__main__":

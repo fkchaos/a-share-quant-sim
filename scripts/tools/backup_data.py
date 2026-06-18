@@ -3,11 +3,10 @@
 import sys, os, shutil
 from datetime import datetime
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.db import get_conn
 
-DB_PATH = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant.db')
-BACKUP_DIR = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'backups')
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'quant.db'))
+BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'backups'))
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')

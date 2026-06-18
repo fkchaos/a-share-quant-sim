@@ -14,13 +14,10 @@ import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 from itertools import product
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scripts', 'strategies'))
-
 from core.db import load_panel_from_db
 from scripts.strategies.v20_tail_pick import V20Config, calc_tail_pick_factors, select_stocks_tail_pick
 
-REPORT_DIR = os.path.join(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "backtest_results")
+REPORT_DIR = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "backtest_results"))
 
 # ── 加载数据 ──
 print("📥 加载数据...")
@@ -207,7 +204,6 @@ def run_backtest(hold_days_max, stop_profit, factor_mode='full'):
         'sl_rate': sl / max(len(sells), 1),
         'to_rate': to / max(len(sells), 1),
     }
-
 
 # ── 实验 A：hold_days_max ──
 print("\n" + "="*80)

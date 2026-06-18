@@ -9,13 +9,10 @@ from datetime import datetime
 # unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scripts', 'strategies'))
-
 from core.db import load_panel_from_db
 from scripts.strategies.v20_tail_pick import V20Config, calc_tail_pick_factors, select_stocks_tail_pick
 
-REPORT_DIR = os.path.join(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "backtest_results")
+REPORT_DIR = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "backtest_results"))
 os.makedirs(REPORT_DIR, exist_ok=True)
 OUT_FILE = os.path.join(REPORT_DIR, "v20c_opt_results.jsonl")
 
@@ -33,7 +30,6 @@ ORIG_VM = V20Config.vol_vs_avg_max
 ORIG_RM = V20Config.range_vs_avg
 ORIG_AMIN = V20Config.amount_vs_avg_min
 ORIG_AMAX = V20Config.amount_vs_avg_max
-
 
 def run_bt(hdm, tp, mode='full'):
     V20Config.hold_days_max = hdm
@@ -150,7 +146,6 @@ def run_bt(hdm, tp, mode='full'):
         'sl_rate': round(sells['SL'] / max(ts_, 1) * 100, 2),
         'to_rate': round(sells['TO'] / max(ts_, 1) * 100, 2),
     }
-
 
 experiments = [
     ('A1_hold2',          2, 0.25, 'full'),

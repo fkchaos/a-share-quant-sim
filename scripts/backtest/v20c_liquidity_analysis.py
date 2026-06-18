@@ -6,9 +6,6 @@ v20c 流动性筛选专项分析
 """
 import sys, os, numpy as np, pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 from core.db import load_panel_from_db
 
 panels, codes = load_panel_from_db(need_hl=True)

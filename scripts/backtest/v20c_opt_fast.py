@@ -6,13 +6,10 @@ v20c 精简参数扫描
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scripts', 'strategies'))
-
 from core.db import load_panel_from_db
 from scripts.strategies.v20_tail_pick import V20Config, calc_tail_pick_factors, select_stocks_tail_pick
 
-REPORT_DIR = os.path.join(os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "backtest_results")
+REPORT_DIR = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "backtest_results"))
 
 # ── 加载数据 ──
 print("📥 加载数据...")
@@ -25,7 +22,6 @@ print(f"  {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只, {len(factors
 
 ORIG_HDM = V20Config.hold_days_max
 ORIG_TP = V20Config.stop_profit
-
 
 def run_bt(hdm, tp, mode='full'):
     V20Config.hold_days_max = hdm
@@ -142,7 +138,6 @@ def run_bt(hdm, tp, mode='full'):
         'sl_rate': sells['SL'] / max(ts_, 1),
         'to_rate': sells['TO'] / max(ts_, 1),
     }
-
 
 # 实验矩阵（精简版）
 experiments = [

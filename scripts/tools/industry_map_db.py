@@ -17,15 +17,12 @@ industry_map_db — 行业分类数据 DB 导入/查询工具
 
 import argparse
 import os
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.db import get_conn, DB_PATH
-
 
 def init_industry_table():
     """建表（幂等，core/db.py init_db 已包含）"""
@@ -39,7 +36,6 @@ def init_industry_table():
                 updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
             ) WITHOUT ROWID
         """)
-
 
 def import_from_csv(csv_path):
     """从 CSV 文件导入到 DB"""
@@ -62,7 +58,6 @@ def import_from_csv(csv_path):
     print(f"✅ 从 CSV 导入 {count} 条行业分类")
     return count
 
-
 def fetch_one(code):
     """获取单只股票的行业分类（取最新一条）"""
     import akshare as ak
@@ -80,7 +75,6 @@ def fetch_one(code):
     except Exception:
         pass
     return None
-
 
 def fetch_all(codes, max_workers=4, skip_existing=True):
     """多线程获取所有股票的行业分类"""
@@ -130,7 +124,6 @@ def fetch_all(codes, max_workers=4, skip_existing=True):
 
     return len(results)
 
-
 def get_stats():
     """查看统计"""
     with get_conn() as conn:
@@ -153,7 +146,6 @@ def get_stats():
         for r in rows:
             print(f"  {r[0]}: {r[1]} 只")
 
-
 def export_csv(csv_path):
     """导出 CSV（兼容旧代码）"""
     with get_conn() as conn:
@@ -161,7 +153,6 @@ def export_csv(csv_path):
     df = pd.DataFrame(rows, columns=["code", "industry"])
     df.to_csv(csv_path, index=False)
     print(f"✅ 导出 {len(df)} 条到 {csv_path}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="行业分类 DB 工具")
@@ -195,7 +186,6 @@ def main():
 
     if not any([args.import_csv, args.fetch, args.stats, args.export_csv]):
         parser.print_help()
-
 
 if __name__ == "__main__":
     main()

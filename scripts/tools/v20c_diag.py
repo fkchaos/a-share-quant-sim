@@ -1,4 +1,3 @@
-import sys; sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 from scripts.strategies.v20_tail_pick import calc_tail_pick_factors, V20Config
 from core.db import load_panel_from_db

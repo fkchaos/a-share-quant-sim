@@ -6,10 +6,7 @@ SL: 2%~10% (步长2%), TP: 5%~25% (步长5%)
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
-
-DATA_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 os.makedirs(REPORT_DIR, exist_ok=True)
 
@@ -61,7 +58,6 @@ def _calc_metrics(nav_list, trade_log, initial_capital, dates, sl, tp, elapsed, 
         'sl_count': sl_count, 'tp_count': tp_count, 'to_count': to_count,
         'elapsed_sec': round(elapsed, 1),
     }
-
 
 def scan_v13():
     from scripts.v13_small_mid_short import (
@@ -177,7 +173,6 @@ def scan_v13():
     print(f"   胜率={best['win_rate']:.1f}% 盈亏比={best['profit_loss_ratio']:.2f}")
     print(f"   SL触发={best['sl_count']} TP触发={best['tp_count']} 超时={best['to_count']}")
     return df
-
 
 def scan_v20():
     from scripts.v20_tail_pick import (
@@ -303,7 +298,6 @@ def scan_v20():
     print(f"   胜率={best['win_rate']:.1f}% 盈亏比={best['profit_loss_ratio']:.2f}")
     print(f"   SL触发={best['sl_count']} TP触发={best['tp_count']} 超时={best['to_count']}")
     return df
-
 
 if __name__ == '__main__':
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

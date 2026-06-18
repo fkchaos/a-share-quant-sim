@@ -21,14 +21,11 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
 from core.db import get_kline, get_all_codes
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
@@ -52,7 +49,6 @@ COMMISSION_RATE = _costs.commission_rate; STAMP_TAX = 0.001
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("sim_v27")
 
-
 def load_account():
     from core.db import load_account_for_sim, get_account, get_stock_name_map
     state, loaded = load_account_for_sim(account_id=2)
@@ -67,12 +63,10 @@ def load_account():
     capital = acct["initial_capital"] if acct else 100000
     return PortfolioState(cash=capital, initial_capital=capital, holdings={}, trade_log=[])
 
-
 def save_account(state):
     from core.db import save_account_for_sim
     save_account_for_sim(state, account_id=2)
     logger.info(f"账户已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
-
 
 def load_panel(codes, min_days=60):
     code_dfs = {}
@@ -94,7 +88,6 @@ def load_panel(codes, min_days=60):
         pd.DataFrame({c: code_dfs[c].get('open', code_dfs[c]['close']) for c in code_dfs}),
     )
 
-
 def calc_factors(cp, vp, ap, hp, lp, op=None):
     eps = 1e-10; ret = cp.pct_change(); m5 = cp.pct_change(5)
     prev = cp.shift(1); gap = (op - prev) / (prev + eps) if op is not None else ret * 0
@@ -110,7 +103,6 @@ def calc_factors(cp, vp, ap, hp, lp, op=None):
     def _zs(df): m = df.mean(axis=1); s = df.std(axis=1); return (df.sub(m, axis=0)).div(s + eps, axis=0)
     dr = (-_zs(pl) + -_zs(pt) + -_zs(vs) + _zs(va)) / 4.0
     return {'mom_5': m5, 'gap': gap, 'illiq': illiq, 'bw': bw, 'pv10': pv10, 'pv20': pv20, 'dr': dr, 'dr_thr': dr.quantile(0.9, axis=1)}
-
 
 def select_stocks(factors, date):
     if date not in factors['mom_5'].index: return []
@@ -134,7 +126,6 @@ def select_stocks(factors, date):
         cands.append((code, s))
     cands.sort(key=lambda x: x[1], reverse=True)
     return cands
-
 
 def intraday_signal(date):
     t0 = time.time(); logger.info(f"=== v27 上午信号 {date} ===")
@@ -170,7 +161,6 @@ def intraday_signal(date):
             'timestamp': datetime.now().isoformat()}
     with open(V27_PLAN_FILE, 'w') as f: json.dump(plan, f, ensure_ascii=False, indent=2)
     logger.info(f"计划: 卖 {len(plan['sell_plan'])} 只, 买 {len(plan['buy_plan'])} 只, 耗时 {time.time()-t0:.1f}s")
-
 
 def intraday_execute(date):
     import requests; t0 = time.time(); logger.info(f"=== v27 下午执行 {date} ===")
@@ -233,7 +223,6 @@ def intraday_execute(date):
 
     logger.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
 
-
 def report_only(date):
     state = load_account(); nav = state.cash
     for code, h in state.holdings.items():
@@ -243,7 +232,6 @@ def report_only(date):
             latest = df[df['date'] <= pd.Timestamp(date)].sort_values('date').iloc[-1]
             nav += h.get('shares', 0) * latest['close']
     logger.info(f"=== v27 收盘报告 {date} === 持仓 {len(state.holdings)} 只 现金 ¥{state.cash:,.0f} 净值 ¥{nav:,.0f}")
-
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "report_only"

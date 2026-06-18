@@ -4,7 +4,6 @@ restore_amount_before_may21.py — 恢复 2026-05-20 及之前的 amount 数据
 这些数据的 amount 被误除了 100，需要恢复（乘回 100）
 """
 import sys, time
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.db import get_conn
 
 print("恢复 2026-05-20 及之前的 amount 数据（乘回 100）")

@@ -66,7 +66,7 @@ print(f"深主板(00xxx): {len(df[df['code'].str.startswith('00')])} 只")
 print(f"创业板(30xxx): {len(df[df['code'].str.startswith('30')])} 只")
 
 # 保存
-output_path = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'zz800_constituents.csv')
+output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'zz800_constituents.csv'))
 df.to_csv(output_path, index=False)
 print(f"\n已保存到 {output_path}")
 

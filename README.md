@@ -33,7 +33,7 @@
            ▲
            │ 数据
 ┌──────────┴──────────┐
-│ /root/data/quant.db  │
+│ data/quant.db  │
 │  account/holdings/   │
 │  trade_log/daily_kline│
 └─────────────────────┘
@@ -89,29 +89,28 @@ a-share-quant-sim/
 ## 快速开始
 
 ```bash
-# 1. 克隆 + 安装
+# 1. 克隆
 git clone git@github.com:fkchaos/a-share-quant-sim.git
 cd a-share-quant-sim
-pip install pandas numpy requests
 
-# 2. 一键初始化（建表 + 股票池 + K线数据 + 账户，约 2-3 分钟）
-export PYTHONPATH=$(pwd)
-export BACKTEST_DATA_DIR=./data
-mkdir -p $BACKTEST_DATA_DIR
+# 2. 安装依赖
+pip install -e .
+
+# 3. 一键初始化（建表 + 股票池 + K线数据 + 账户，约 2-3 分钟）
 python scripts/tools/init_project.py
 
-# 3. 跑回测
-python scripts/backtest/run_backtest.py --strategy v27
+# 4. 跑回测
+python scripts/backtest/v27_walk_forward.py
 
-# 4. 跑模拟盘
+# 5. 跑模拟盘
 python scripts/sim/account_runner.py --strategy v27 intraday_signal
 python scripts/sim/account_runner.py --strategy v27 intraday_execute
 python scripts/sim/account_runner.py --strategy v27 report_only
 
-# 5. 查看账户
+# 6. 查看账户
 python scripts/tools/cli.py account 2
 
-# 6. 测试
+# 7. 测试
 python -m pytest tests/ -v -k "not slow"
 ```
 

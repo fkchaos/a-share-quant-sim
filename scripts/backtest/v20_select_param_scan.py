@@ -21,9 +21,6 @@ import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 from itertools import product
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from scripts.v20_tail_pick import (
     V20Config,
     load_panel,
@@ -32,9 +29,8 @@ from scripts.v20_tail_pick import (
     calc_v20_metrics,
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
-
 
 def run_v20_with_params(vol_vs_avg_max, range_vs_avg, amount_vs_avg_min, amount_vs_avg_max,
                          recent_limit_up, price_above_ma5,
@@ -224,7 +220,6 @@ def run_v20_with_params(vol_vs_avg_max, range_vs_avg, amount_vs_avg_min, amount_
 
     return metrics
 
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="v20 选股参数扫描")
@@ -345,7 +340,6 @@ def main():
     print(f"\n结果已保存: {out_dir}/scan_results.json")
 
     return results
-
 
 if __name__ == '__main__':
     main()

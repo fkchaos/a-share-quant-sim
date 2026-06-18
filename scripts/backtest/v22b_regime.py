@@ -20,9 +20,6 @@ import sys, os
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
 
 tpl, _ = load_panel_from_db('2022-01-01', '2026-05-31', need_open=True, need_hl=True)

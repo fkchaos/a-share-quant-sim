@@ -21,14 +21,12 @@
 
 所有命令都可以加 --help 看帮助。
 """
-import sys
 import os
 import json
 import time
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
 from core.db import (
     init_db, db_stats, get_account, upsert_account, update_cash,
@@ -37,14 +35,12 @@ from core.db import (
     get_stock_name_map, upsert_kline_batch, get_all_codes,
 )
 
-
 def fmt(v, decimals=2):
     if v is None:
         return "—"
     if isinstance(v, float):
         return f"{v:,.{decimals}f}"
     return str(v)
-
 
 # ── 账户管理 ──
 
@@ -54,7 +50,6 @@ def cmd_init(args):
     print("✅ 数据库已初始化")
     print()
     print("下一步: 运行 python scripts/tools/init_project.py 完成完整初始化")
-
 
 def cmd_account(args):
     """查看账户概览: cli.py account [account_id]"""
@@ -87,7 +82,6 @@ def cmd_account(args):
     print(f"  持仓数:   {len(holdings)} 只")
     print(f"  策略:     {acct.get('strategy','')}")
 
-
 def cmd_new_account(args):
     """新建账户: cli.py new-account --id 4 --name v28 --cash 100000 --strategy v28"""
     import argparse
@@ -105,7 +99,6 @@ def cmd_new_account(args):
                    strategy=p.strategy)
     print(f"✅ 新账户: id={p.id} name={p.name} cash={fmt(p.cash)} strategy={p.strategy}")
 
-
 def cmd_del_account(args):
     """删除账户: cli.py del-account --id 4"""
     import argparse
@@ -122,13 +115,12 @@ def cmd_del_account(args):
         print(f"⚠️ 账户 {p.id} 还有 {len(holdings)} 只持仓，先执行 clear-holdings --account {p.id}")
         return
     import sqlite3
-    db_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")), "quant.db")
+    db_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")), "quant.db")
     conn = sqlite3.connect(db_path)
     conn.execute("DELETE FROM account WHERE id=?", (p.id,))
     conn.commit()
     conn.close()
     print(f"✅ 已删除账户 {p.id} ({acct['name']})")
-
 
 # ── 持仓管理 ──
 
@@ -158,7 +150,6 @@ def cmd_holdings(args):
     print(f"{'合计':<26} {'':>8} {'':>8} ¥{total_mv:>9,.0f}")
     if acct:
         print(f"现金: ¥{fmt(acct['cash'])}  总资产: ¥{fmt(total)}")
-
 
 def cmd_adjust(args):
     """
@@ -222,7 +213,6 @@ def cmd_adjust(args):
         else:
             print(f"  未持有 {code}")
 
-
 def cmd_clear_holdings(args):
     """全部清仓: cli.py clear-holdings --account 2"""
     import argparse
@@ -237,7 +227,6 @@ def cmd_clear_holdings(args):
         add_trade(p.account, code, h.get("name", code), "SELL", h["shares"], 0, 0, "手动清仓")
     clear_holdings(p.account)
     print(f"✅ 已清仓 {len(holdings)} 只股票（账户 {p.account}）")
-
 
 # ── 买卖 ──
 
@@ -280,7 +269,6 @@ def cmd_buy(args):
     add_trade(aid, code, name_map.get(code, code), "BUY", shares, price, amount, reason)
     print(f"✅ 买入 {code} {shares}股 @ {price:.2f} = ¥{fmt(amount)} (账户{aid})")
 
-
 def cmd_sell(args):
     """
     手动卖出: cli.py sell <code> <shares> <price> [account_id] [reason]
@@ -317,7 +305,6 @@ def cmd_sell(args):
     pnl = (price - h["cost_price"]) / h["cost_price"] * 100
     print(f"✅ 卖出 {code} {shares}股 @ {price:.2f} = ¥{fmt(amount)} (盈亏 {pnl:+.2f}%) (账户{aid})")
 
-
 # ── 交易记录 ──
 
 def cmd_trades(args):
@@ -333,7 +320,6 @@ def cmd_trades(args):
     for t in trades:
         print(f"{t['created_at']:<20} {t['code']:<8} {t['name']:<10} {t['action']:<6} "
               f"{t['shares']:>6} {t['price']:>8.2f} ¥{t['amount']:>9,.0f} {t['reason']}")
-
 
 # ── K线 ──
 
@@ -354,7 +340,6 @@ def cmd_kline(args):
         print(f"{r['date']:<12} {r['open']:>8.2f} {r['high']:>8.2f} {r['low']:>8.2f} "
               f"{r['close']:>8.2f} {r['volume']:>12,.0f} {r['amount']:>12,.0f}")
 
-
 # ── 统计 ──
 
 def cmd_stats(args):
@@ -364,13 +349,12 @@ def cmd_stats(args):
     for k, v in stats.items():
         print(f"  {k}: {v}")
 
-
 # ── 迁移 ──
 
 def cmd_migrate(args):
     """CSV → 数据库迁移"""
     import glob
-    daily_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")) + "/daily"
+    daily_dir = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")) + "/daily"
     csv_files = glob.glob(os.path.join(daily_dir, "*.csv"))
     print(f"找到 {len(csv_files)} 只股票 CSV 文件")
     init_db()
@@ -407,7 +391,7 @@ def cmd_migrate(args):
     from core.db import upsert_stock
     for code, name in name_map.items():
         upsert_stock(code, name=name)
-    zz800_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")), "zz800_constituents.csv")
+    zz800_path = os.path.join(os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")), "zz800_constituents.csv")
     if os.path.exists(zz800_path):
         import pandas as pd
         zz = pd.read_csv(zz800_path)
@@ -422,7 +406,6 @@ def cmd_migrate(args):
     elapsed = time.time() - t0
     print(f"\n✅ 迁移完成: {len(csv_files)} 只股票, {total} 条K线, {elapsed:.1f}s")
     print(f"   数据库: {db_stats()}")
-
 
 COMMANDS = {
     "init": cmd_init,

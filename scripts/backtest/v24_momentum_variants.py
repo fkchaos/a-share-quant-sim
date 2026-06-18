@@ -17,11 +17,7 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 def calc_momentum_variants(close_panel, volume_panel, amount_panel):
     """
@@ -81,7 +77,6 @@ def calc_momentum_variants(close_panel, volume_panel, amount_panel):
         'mom_res': mom_res,
         'mom_combined': mom_combined,
     }
-
 
 def run_backtest(close_panel, volume_panel, amount_panel, open_panel,
                   high_panel, low_panel, factors, cfg, label=""):
@@ -212,7 +207,6 @@ def run_backtest(close_panel, volume_panel, amount_panel, open_panel,
     
     return result, nav_s
 
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="动量因子变体回测")
@@ -296,7 +290,6 @@ def main():
     print("=" * 60)
 
     return results
-
 
 if __name__ == "__main__":
     main()

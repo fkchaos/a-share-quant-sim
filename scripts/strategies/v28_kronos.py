@@ -13,14 +13,11 @@ scripts/v28_kronos.py — v28 Kronos AI 增强选股函数
     calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel) -> dict
     select_stocks(factors, date, current_holdings=None) -> list[(code, score)]
 """
-import sys
 import os
 import numpy as np
 import pandas as pd
 
 # 确保能 import v27 和 core 模块
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from scripts.strategies.v27_select import calc_factors as v27_calc_factors
 from scripts.strategies.v27_select import select_stocks_v27, DEFAULT_PARAMS as V27_DEFAULT_PARAMS
@@ -42,7 +39,6 @@ DEFAULT_PARAMS = {
     "KRONOS_CONF_THRESHOLD": 0.3,     # kronos_conf 低于此值降权
 }
 
-
 def _load_kronos_model(params):
     """
     懒加载 Kronos 模型（全局缓存，避免重复加载）
@@ -55,8 +51,6 @@ def _load_kronos_model(params):
     try:
         from model import Kronos, KronosTokenizer, KronosPredictor
     except ImportError:
-        sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Kronos'))
-        sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Kronos', 'model'))
         from model import Kronos, KronosTokenizer, KronosPredictor
 
     model_name = params.get("KRONOS_MODEL", "small")
@@ -84,7 +78,6 @@ def _load_kronos_model(params):
         cache["predictor"] = None
         return None, False
 
-
 def _get_kline_from_db(code, lookback, date_str):
     """
     从 DB 读取单只股票的日K线数据。
@@ -106,7 +99,6 @@ def _get_kline_from_db(code, lookback, date_str):
         return df
     except Exception:
         return None
-
 
 def _predict_single(predictor, df_hist, pred_len, params):
     """
@@ -179,7 +171,6 @@ def _predict_single(predictor, df_hist, pred_len, params):
     except Exception as e:
         return None
 
-
 def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel=None, params=None):
     """
     v28 因子计算 = v27 因子 + Kronos 预测因子（可选）
@@ -195,7 +186,6 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
     factors['_kronos_params'] = p
 
     return factors
-
 
 def select_stocks_v28(factors, date, current_holdings=None, params=None):
     """
@@ -284,7 +274,6 @@ def select_stocks_v28(factors, date, current_holdings=None, params=None):
         final_cands = [(c, s) for c, s in final_cands if c not in current_holdings]
 
     return final_cands
-
 
 # ── 兼容入口（与 strategy_map 对接）──
 def select_stocks(factors, date, current_holdings=None, params=None):

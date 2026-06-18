@@ -27,7 +27,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
-
 # ──────────────────────────────────────────────
 # 质量阈值
 # ──────────────────────────────────────────────
@@ -35,7 +34,6 @@ MAX_STALE_DAYS = 5          # 超过 N 天未更新视为过期
 RECENT_WINDOW = 20          # 检查最近 N 天
 MAIN_BOARD_LIMIT = 0.10     # 主板单日涨跌超过 10% 视为异常
 JUMP_THRESHOLD = 0.30       # 价格跳变 >30% 视为复权异常
-
 
 @dataclass
 class SymbolQuality:
@@ -49,7 +47,6 @@ class SymbolQuality:
     has_jump: bool = False
     issues: list = field(default_factory=list)
 
-
 @dataclass
 class DataQualityResult:
     """数据质量门禁结果"""
@@ -62,7 +59,6 @@ class DataQualityResult:
     blocking_issues: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
     per_symbol: list = field(default_factory=list)
-
 
 class DataQualityAuditor:
     """数据质量门禁检查器"""
@@ -260,7 +256,6 @@ class DataQualityAuditor:
         with open(path, "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return path
-
 
 def print_quality_report(result: DataQualityResult):
     """打印可读的质量报告"""

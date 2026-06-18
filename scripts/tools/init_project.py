@@ -17,20 +17,17 @@ from datetime import datetime
 # 确保项目根目录在 path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-sys.path.insert(0, PROJECT_ROOT)
 
-os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
-
 
 def step_init_db():
     """建表"""
     from core.db import init_db
     init_db()
     print()
-
 
 def step_init_pool():
     """从内置 CSV 获取中证800成分股并写入 stock_pool"""
@@ -67,7 +64,6 @@ def step_init_pool():
 
     print(f"  ✅ stock_pool 已写入 {len(df)} 只股票")
     return True
-
 
 def step_init_kline(start_year=2020):
     """下载日K线数据（并发，腾讯接口单次最多2000天，分段下载确保从start_year开始）"""
@@ -180,7 +176,6 @@ def step_init_kline(start_year=2020):
     print(f"     耗时: {t_total:.1f}s (失败{fail_count})")
     return True
 
-
 def step_init_accounts():
     """初始化3个模拟账户"""
     from core.db import upsert_account
@@ -195,7 +190,6 @@ def step_init_accounts():
         print(f"  ✅ 账户{aid}: {name} 初始资金 ¥{capital:,}")
 
     print()
-
 
 def main():
     parser = argparse.ArgumentParser(description="项目初始化")
@@ -244,7 +238,6 @@ def main():
         print("  2. 跑模拟盘: python scripts/sim/account_runner.py --strategy v27 intraday_signal")
         print("  3. 查看账户: python scripts/tools/cli.py account 2")
         print("=" * 60)
-
 
 if __name__ == "__main__":
     main()

@@ -11,9 +11,6 @@ v13_small_mid_short — Walk-Forward 过拟合检测
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from scripts.v13_small_mid_short import (
     V13Config,
     load_small_cap_panel,
@@ -21,9 +18,8 @@ from scripts.v13_small_mid_short import (
     select_stocks,
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
-
 
 def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
                  open_panel, warmup_days=20, label="v13_fold", bonus_factors=None):
@@ -165,7 +161,6 @@ def run_v13_fold(close_panel, volume_panel, amount_panel, high_panel, low_panel,
     metrics = _calc_fold_metrics(nav, trade_log, initial_capital)
     return metrics, nav, trade_log
 
-
 def _calc_fold_metrics(nav, trade_log, initial_capital):
     rets = nav.pct_change().dropna()
     total_ret = nav.iloc[-1] / nav.iloc[0] - 1
@@ -193,7 +188,6 @@ def _calc_fold_metrics(nav, trade_log, initial_capital):
         'win_rate': win_rate,
         'total_return': total_ret,
     }
-
 
 def main():
     import argparse
@@ -321,7 +315,6 @@ def main():
     print(f"\n  结果已保存: {out_dir}/")
 
     return fold_results
-
 
 if __name__ == '__main__':
     main()

@@ -17,17 +17,13 @@ WF 参数：train=252, test=126, step=63
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
 from core.factors import calc_factors_panel_v11b
 from core.scoring import ensemble_union_score
 from core.config import STRATEGY_PROFILES
 from scripts.backtest.run_backtest import run_backtest
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
 # ── v11b 配置 ──────────────────────────────────────────────────────
@@ -38,7 +34,6 @@ TOP_N = PROFILE.top_n
 REBAL_FREQ = PROFILE.rebalance_freq
 STOP_LOSS = PROFILE.stop_loss
 INITIAL_CAPITAL = 200_000
-
 
 def main():
     import argparse
@@ -204,7 +199,6 @@ def main():
         print(f"✅ 通过: 正收益fold {pos/len(fold_results):.0%} >= 60%, 夏普 {np.mean(sharpes):.2f} > 0.5")
     else:
         print(f"❌ 未通过: 正收益fold {pos/len(fold_results):.0%}, 夏普 {np.mean(sharpes):.2f}")
-
 
 if __name__ == "__main__":
     main()

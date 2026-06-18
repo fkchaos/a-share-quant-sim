@@ -10,13 +10,10 @@ rebuild_db_from_tencent.py — 用腾讯 qfq 接口全量重建 DB 数据
 import sys, time, os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
-
 from scripts.update_daily_data import fetch_tencent_kline, get_stock_list
 from core.db import get_conn, init_db
 
-DB_PATH = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant.db')
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'quant.db'))
 
 print("=" * 60)
 print("重建 DB 数据 — 腾讯 qfq 接口")

@@ -4,9 +4,6 @@ import sys, os, time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, '.')
-sys.path.insert(0, 'scripts')
-
 from v13_small_mid_short import (
     V13Config, load_small_cap_panel, calc_small_cap_factors, select_stocks
 )

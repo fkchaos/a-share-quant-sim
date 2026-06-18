@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """分析选股池市值分布"""
 import sys, os
-sys.path.insert(0, '.')
-sys.path.insert(0, 'scripts')
 
 from v13_small_mid_short import load_small_cap_panel, V13Config
 from v20_tail_pick import V20Config

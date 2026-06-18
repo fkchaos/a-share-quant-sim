@@ -12,25 +12,19 @@ from datetime import datetime
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'strategies'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 from v20_tail_pick import (
     V20Config, calc_tail_pick_factors, select_stocks_tail_pick,
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 os.makedirs(REPORT_DIR, exist_ok=True)
-
 
 def load_panels_from_db():
     """从 DB 加载 K 线面板"""
     from core.db import load_panel_from_db
     panels, codes = load_panel_from_db(need_hl=True)
     return panels  # (close, volume, amount, high, low, open)
-
 
 def run_v20_fold(sub_close, sub_volume, sub_amount, sub_high, sub_low, sub_open,
                  tp, sl, hold_days_max, warmup_days=20, label="v20_fold"):
@@ -183,7 +177,6 @@ def run_v20_fold(sub_close, sub_volume, sub_amount, sub_high, sub_low, sub_open,
         'win_rate': win_rate, 'total_trades': len(trade_log),
     }
 
-
 def main():
     print("=" * 60)
     print("v20c Walk-Forward 止损止盈参数扫描（DB 数据）")
@@ -304,7 +297,6 @@ def main():
     best = df_sorted.iloc[0]
     print(f"\n🏆 最佳参数: SL={best['SL']} TP={best['TP']} hold={best['hold_max']}天")
     print(f"   年化={best['年化']} 夏普={best['夏普']} 回撤={best['回撤']} 正fold={best['正fold']}")
-
 
 if __name__ == '__main__':
     main()

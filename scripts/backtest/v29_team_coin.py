@@ -44,11 +44,7 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 class V29Config:
     mom_threshold = 0.02
@@ -63,7 +59,6 @@ class V29Config:
     stamp_tax = 0.001
     slippage_rate = 0.002
     initial_capital = 200000
-
 
 def calc_v29_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel=None):
     """计算 v29 球队硬币因子"""
@@ -149,7 +144,6 @@ def calc_v29_factors(close_panel, volume_panel, amount_panel, high_panel, low_pa
 
     return factors
 
-
 def select_stocks_v29(factors, date, close_panel, volume_panel, amount_panel, current_holdings, cfg):
     """v29 选股：市场状态自适应动量"""
     if date not in factors['mom_5'].index:
@@ -230,7 +224,6 @@ def select_stocks_v29(factors, date, close_panel, volume_panel, amount_panel, cu
 
     candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
     return candidates[:cfg.max_holdings]
-
 
 def run_v29_backtest(start_date='2022-01-01', end_date='2026-05-31'):
     print("=" * 60)
@@ -376,7 +369,6 @@ def run_v29_backtest(start_date='2022-01-01', end_date='2026-05-31'):
         'total_buys': total_buys, 'total_sells': total_sells,
         'nav': nav_df, 'select_days': select_days,
     }
-
 
 if __name__ == "__main__":
     run_v29_backtest()

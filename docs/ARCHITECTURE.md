@@ -35,7 +35,7 @@
            │               │  get_holdings/upsert_holding │
            ▼               │  delete_holding              │
 ┌──────────────────────┐   │  get_kline/load_panel        │
-│  SQLite: /root/data/ │   └──────────────────────────────┘
+│  SQLite: data/ │   └──────────────────────────────┘
 │  quant.db            │
 │  account/holdings/   │   ┌──────────────────────────────┐
 │  trade_log/daily_kline│  │  core/config.py              │
@@ -186,7 +186,7 @@ cron → account_runner.py --strategy v27 intraday_signal
 执行<任务名>。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 <脚本> <参数>
+python3 <脚本> <参数>
 
 整理为报告，包含股票代码和名称。
 

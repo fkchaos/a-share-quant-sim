@@ -13,18 +13,15 @@ import json
 import time
 import numpy as np
 import pandas as pd
-import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
 from core.factors import calc_factors_panel
 from core.data import load_and_build_panel
 from core.scoring import ensemble_union_score
 from core.config import STRATEGY_PROFILES, PROFILE_V11B_ZZ800_UNION
 from scripts.run_backtest import run_backtest
-
 
 def sweep(close_panel, factors, base_profile, csv_output=False):
     """扫描 group_top_n 和组权重组合。"""
@@ -116,14 +113,13 @@ def sweep(close_panel, factors, base_profile, csv_output=False):
             print(df_best.head(5).to_string(index=False))
 
         if csv_output:
-            out_path = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/backtest_results/v11b_sweep.csv"
+            out_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/backtest_results/v11b_sweep.csv")
             df_sorted.to_csv(out_path, index=False)
             print(f"\n结果已保存: {out_path}")
 
         return df
 
     return None
-
 
 if __name__ == "__main__":
     import argparse

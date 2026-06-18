@@ -11,20 +11,16 @@
 
 import argparse
 import os
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 CACHE_FILE = os.path.join(DATA_DIR, "industry_map.csv")  # 兼容旧路径，已废弃
 
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
-
 
 def fetch_single_industry(code):
     """获取单只股票的行业分类。"""
@@ -41,7 +37,6 @@ def fetch_single_industry(code):
     except Exception:
         pass
     return code, ""
-
 
 def fetch_all_industries(codes, max_workers=4):
     """多线程获取所有股票的行业分类。"""
@@ -75,7 +70,6 @@ def fetch_all_industries(codes, max_workers=4):
 
     return results
 
-
 def save_cache(stock_industry_map):
     """保存行业映射到缓存文件。"""
     df = pd.DataFrame(
@@ -86,14 +80,12 @@ def save_cache(stock_industry_map):
     print(f"💾 已保存到 {CACHE_FILE}（{len(df)} 条记录）")
     return df
 
-
 def load_cache():
     """从缓存加载行业映射。"""
     if not os.path.exists(CACHE_FILE):
         return None
     df = pd.read_csv(CACHE_FILE, dtype={"code": str})
     return dict(zip(df["code"], df["industry"]))
-
 
 def check_cache():
     """检查缓存状态。"""
@@ -106,7 +98,6 @@ def check_cache():
     print(f"   股票数: {len(df)}")
     print(f"   行业数: {df['industry'].nunique()}")
     print(f"   行业列表: {sorted(df['industry'].unique())}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="行业分类数据获取（国证）")
@@ -135,7 +126,6 @@ def main():
         check_cache()
     else:
         print("❌ 获取失败")
-
 
 if __name__ == "__main__":
     main()

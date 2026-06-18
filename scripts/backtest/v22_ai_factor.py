@@ -25,11 +25,7 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
-
 
 class V22Config:
     # 选股参数
@@ -47,7 +43,6 @@ class V22Config:
     stamp_tax = 0.001
     slippage_rate = 0.002
     initial_capital = 200000
-
 
 def calc_v22_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel=None):
     """计算 v22 因子"""
@@ -80,7 +75,6 @@ def calc_v22_factors(close_panel, volume_panel, amount_panel, high_panel, low_pa
     factors['amplitude'] = (high_panel - low_panel) / (close_panel + eps)
 
     return factors
-
 
 def select_stocks_v22(factors, date, close_panel, volume_panel, amount_panel, current_holdings, cfg):
     """v22 选股：动量+辅助因子"""
@@ -124,7 +118,6 @@ def select_stocks_v22(factors, date, close_panel, volume_panel, amount_panel, cu
 
     candidates = sorted(scores.keys(), key=lambda c: scores[c], reverse=True)
     return candidates[:cfg.max_holdings]
-
 
 def run_v22_backtest(start_date='2022-01-01', end_date='2026-05-31'):
     print("=" * 60)
@@ -262,7 +255,6 @@ def run_v22_backtest(start_date='2022-01-01', end_date='2026-05-31'):
         'total_buys': total_buys, 'total_sells': total_sells,
         'nav': nav_df,
     }
-
 
 if __name__ == "__main__":
     run_v22_backtest()

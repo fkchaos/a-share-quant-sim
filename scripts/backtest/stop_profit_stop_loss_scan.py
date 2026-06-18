@@ -12,17 +12,13 @@ stop_profit_stop_loss_scan.py — 止盈止损参数网格扫描
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 # ── 粗网格参数 ────────────────────────────────────────────────────
 COARSE_SL = [0.02, 0.04, 0.06]
 COARSE_TP = [0.05, 0.10, 0.15]
-
 
 def scan_v13(coarse=True):
     """v13 扫描 — 直接复用 v13_small_mid_short 的回测函数"""
@@ -155,7 +151,6 @@ def scan_v13(coarse=True):
         print(f"夏普={metrics['sharpe']:.3f} 收益={metrics['total_return']:.1f}% 回撤={metrics['max_drawdown']:.1f}% ({elapsed:.0f}s)", flush=True)
 
     return results
-
 
 def scan_v20(coarse=True):
     """v20 扫描 — 直接复用 v20_tail_pick 的回测函数"""
@@ -305,7 +300,6 @@ def scan_v20(coarse=True):
 
     return results
 
-
 def _calc_metrics(nav_list, trade_log, initial_capital, dates, sl, tp, elapsed, strategy_name):
     """计算绩效指标"""
     nav = pd.Series(nav_list, index=dates[:len(nav_list)])
@@ -350,7 +344,6 @@ def _calc_metrics(nav_list, trade_log, initial_capital, dates, sl, tp, elapsed, 
         'elapsed_sec': round(elapsed, 1),
     }
 
-
 def print_results(results, title):
     """打印结果表格"""
     df = pd.DataFrame(results).sort_values('sharpe', ascending=False)
@@ -378,7 +371,6 @@ def print_results(results, title):
     print(f"   SL触发={int(best['stop_loss_trades'])} TP触发={int(best['stop_profit_trades'])} 超时={int(best['timeout_trades'])}")
 
     return df
-
 
 if __name__ == '__main__':
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

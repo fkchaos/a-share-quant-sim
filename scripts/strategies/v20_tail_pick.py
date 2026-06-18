@@ -25,13 +25,9 @@ v20_tail_pick — 尾盘选股策略
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 DAILY_DIR = os.path.join(DATA_DIR, "daily")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
-
 
 # ============================================================
 # 参数配置
@@ -69,7 +65,6 @@ class V20Config:
     commission_rate = 0.0003
     stamp_tax = 0.001
     slippage_rate = 0.002
-
 
 # ============================================================
 # 数据加载（复用 v13 的加载逻辑）
@@ -109,7 +104,6 @@ def load_panel(start_date='2021-01-01', end_date='2026-05-31'):
     print(f"流动性筛选：{valid_count}/{len(close_panel)} 个交易日有足够候选")
     return close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel
 
-
 # ============================================================
 # 因子计算
 # ============================================================
@@ -145,7 +139,6 @@ def calc_tail_pick_factors(close_panel, volume_panel, amount_panel, high_panel, 
     factors['daily_range'] = daily_range
 
     return factors
-
 
 # ============================================================
 # 选股逻辑
@@ -240,7 +233,6 @@ def select_stocks_tail_pick(factors, date, close_panel, volume_panel, amount_pan
     candidates.sort(key=lambda x: x[1], reverse=True)
 
     return [c for c, s in candidates[:V20Config.max_holdings]]
-
 
 # ============================================================
 # 回测引擎
@@ -424,7 +416,6 @@ def run_v20_backtest():
 
     return nav, trade_log, metrics
 
-
 def calc_v20_metrics(nav, trade_log, initial_capital):
     """计算绩效指标"""
     rets = nav.pct_change().dropna()
@@ -450,7 +441,6 @@ def calc_v20_metrics(nav, trade_log, initial_capital):
         'total_trades': len(trade_log),
         'win_rate': round(win_rate, 1),
     }
-
 
 if __name__ == '__main__':
     nav, trades, metrics = run_v20_backtest()

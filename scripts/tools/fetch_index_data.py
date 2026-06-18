@@ -9,15 +9,11 @@
 import sys, os, time, requests, re
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 from core.db import get_conn
 
 INDEX_CODE = "sh000001"
 INDEX_NAME = "上证指数"
 START_DATE = "2020-01-01"
-
 
 def fetch_index_kline():
     """从腾讯接口拉取上证指数日K线"""
@@ -66,7 +62,6 @@ def fetch_index_kline():
 
     return records
 
-
 def save_to_db(records):
     """存入 daily_kline 表"""
     with get_conn() as conn:
@@ -79,7 +74,6 @@ def save_to_db(records):
                 (r["code"], r["date"], r["open"], r["high"], r["low"], r["close"], r["volume"]),
             )
     print(f"存入 {len(records)} 条上证指数数据")
-
 
 def main():
     print(f"拉取上证指数({INDEX_CODE}) 历史数据...")
@@ -99,7 +93,6 @@ def main():
         row = conn.execute("SELECT * FROM daily_kline WHERE code=? ORDER BY date DESC LIMIT 3", (INDEX_CODE,)).fetchall()
         for r in row:
             print(f"  {r['date']}: 开{r['open']:.2f} 收{r['close']:.2f} 高{r['high']:.2f} 低{r['low']:.2f}")
-
 
 if __name__ == "__main__":
     main()

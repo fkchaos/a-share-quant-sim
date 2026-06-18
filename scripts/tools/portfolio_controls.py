@@ -14,7 +14,6 @@
 """
 from __future__ import annotations
 
-
 def cap_daily_turnover(
     account,
     target_weights: dict[str, float],

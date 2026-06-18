@@ -8,9 +8,6 @@ import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 from itertools import product
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from scripts.v20_tail_pick import (
     V20Config,
     calc_tail_pick_factors,
@@ -19,9 +16,8 @@ from scripts.v20_tail_pick import (
 )
 from core.db import load_panel_from_db
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
-
 
 def load_panel_lite(start_date='2023-01-01', end_date='2026-05-31'):
     """加载轻量面板数据"""
@@ -34,7 +30,6 @@ def load_panel_lite(start_date='2023-01-01', end_date='2026-05-31'):
     low_panel    = loaded[5]
     print(f"Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只")
     return close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel
-
 
 def run_v20_with_params(vol_vs_avg_max, range_vs_avg, amount_vs_avg_min, amount_vs_avg_max,
                          recent_limit_up, price_above_ma5,
@@ -224,7 +219,6 @@ def run_v20_with_params(vol_vs_avg_max, range_vs_avg, amount_vs_avg_min, amount_
 
     return metrics
 
-
 def main():
     # 精简网格：3×3×2×2×2×2 = 144组
     vol_list = [0.8, 1.0, 1.2]
@@ -319,7 +313,6 @@ def main():
         json.dump({'results': results}, f, indent=2, ensure_ascii=False)
     print(f"\n结果已保存: {out_dir}/scan_results.json")
     return results
-
 
 if __name__ == '__main__':
     main()

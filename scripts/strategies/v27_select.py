@@ -22,7 +22,6 @@ DEFAULT_PARAMS = {
     "TAKE_PROFIT": 0.03,
 }
 
-
 def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel=None, params=None):
     """
     计算 v27 因子（面板级别，向量化）
@@ -82,7 +81,6 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         'boll_w': boll_w, 'pv_corr_10': pv_corr_10, 'pv_corr_20': pv_corr_20,
         'delist_risk': delist_risk, 'dr_threshold': dr_threshold,
     }
-
 
 def select_stocks_v27(factors, date, current_holdings=None, params=None):
     """

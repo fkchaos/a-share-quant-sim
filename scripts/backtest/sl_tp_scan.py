@@ -5,12 +5,9 @@ v20c + v27 止损止盈参数扫描（预计算选股结果版）
 import sys, os, numpy as np, pandas as pd, warnings, datetime
 warnings.filterwarnings('ignore')
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scripts', 'strategies'))
-
 from core.db import load_panel_from_db
 
-REPORT_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/backtest_results"
+REPORT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/backtest_results")
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 # ── 加载数据 ──
@@ -164,7 +161,6 @@ def run_v20c(sl, tp, pick_dict):
         '买入': nbuy,
     }
 
-
 def run_v27(sl, tp, pick_dict):
     ic = 100000
     cash = ic
@@ -261,7 +257,6 @@ def run_v27(sl, tp, pick_dict):
         '超时率': f"{sells['TO']/max(total,1):.1%}",
         '买入': nbuy,
     }
-
 
 # ══════════════════════════════════════
 # 运行扫描

@@ -17,7 +17,6 @@ cron_monitor.py — Cron 任务执行监控脚本
 import json
 import os
 import re
-import sys
 import glob
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -51,7 +50,6 @@ def load_jobs():
     with open(JOBS_JSON, "r") as f:
         return json.load(f)["jobs"]
 
-
 def parse_cron_status(output_text):
     """
     从输出文本中解析 [CRON_STATUS] 标记
@@ -67,7 +65,6 @@ def parse_cron_status(output_text):
             "ts": match.group(4),
         }
     return None
-
 
 def get_latest_output(job_id):
     """
@@ -85,7 +82,6 @@ def get_latest_output(job_id):
     latest = files[-1]
     with open(latest, "r") as f:
         return latest, f.read()
-
 
 def get_history_durations(job_id, days=5):
     """
@@ -106,7 +102,6 @@ def get_history_durations(job_id, days=5):
 
     return durations
 
-
 def is_suppressed(job_id):
     """检查 job 是否处于告警抑制期"""
     if not os.path.exists(SUPPRESS_FILE):
@@ -123,7 +118,6 @@ def is_suppressed(job_id):
         pass
     return False
 
-
 def set_suppressed(job_id):
     """设置 job 告警抑制"""
     suppress = {}
@@ -137,7 +131,6 @@ def set_suppressed(job_id):
     with open(SUPPRESS_FILE, "w") as f:
         json.dump(suppress, f)
 
-
 def is_heartbeat_sent_today():
     """检查今天是否已发送心跳"""
     if not os.path.exists(HEARTBEAT_FILE):
@@ -149,12 +142,10 @@ def is_heartbeat_sent_today():
     except Exception:
         return False
 
-
 def mark_heartbeat_sent():
     """标记今天已发送心跳"""
     with open(HEARTBEAT_FILE, "w") as f:
         f.write(datetime.now().strftime("%Y-%m-%d"))
-
 
 def send_message(target, message):
     """通过 hermes CLI 发送消息"""
@@ -172,7 +163,6 @@ def send_message(target, message):
     except Exception as e:
         print(f"[ERROR] 发送消息失败: {e}", file=sys.stderr)
         return False
-
 
 # ─── 核心检查逻辑 ───────────────────────────────────────────────────────────
 
@@ -295,7 +285,6 @@ def check_jobs():
 
     return alerts, summary
 
-
 def parse_schedule_time(schedule_expr, now):
     """
     简化的 cron 时间解析，只处理 '分 时 * * 星期' 格式
@@ -311,7 +300,6 @@ def parse_schedule_time(schedule_expr, now):
         return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     except (ValueError, IndexError):
         return None
-
 
 def count_consecutive_errors(job_id):
     """计算最近连续失败次数"""
@@ -330,7 +318,6 @@ def count_consecutive_errors(job_id):
         else:
             break
     return consecutive
-
 
 def format_heartbeat_report(summary):
     """格式化心跳报告"""
@@ -385,7 +372,6 @@ def format_heartbeat_report(summary):
 
     return "\n".join(lines)
 
-
 # ─── 主入口 ─────────────────────────────────────────────────────────────────
 
 def main():
@@ -417,7 +403,6 @@ def main():
             mark_heartbeat_sent()
         else:
             print("[INFO] 今天已发送心跳报告")
-
 
 if __name__ == "__main__":
     main()

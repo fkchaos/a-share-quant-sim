@@ -4,12 +4,10 @@
 import sys, time, os, shutil, sqlite3
 from datetime import datetime
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 from scripts.update_daily_data import fetch_tencent_kline, get_stock_list
 from core.db import get_conn
 
-DB_PATH = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant.db')
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'quant.db'))
 
 print("=" * 60)
 print("全量拉取 zz800 历史 (days=2000)")
@@ -86,7 +84,7 @@ with get_conn() as conn:
 print(f"\n{'='*60}")
 print("备份 2025 及之前的数据...")
 
-backup_sql = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'daily_kline_backup_2025.sql')
+backup_sql = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'daily_kline_backup_2025.sql'))
 with get_conn() as conn:
     rows = conn.execute("SELECT * FROM daily_kline WHERE date <= '2025-12-31' ORDER BY code, date").fetchall()
 
@@ -105,7 +103,7 @@ sz = os.path.getsize(backup_sql)
 print(f"  SQL 备份: {backup_sql} ({sz/1024/1024:.1f} MB, {len(rows)} 条)")
 
 # 整库备份
-backup_db = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant_pre_backup.db')
+backup_db = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'quant_pre_backup.db'))
 shutil.copy2(DB_PATH, backup_db)
 print(f"  整库备份: {backup_db}")
 print(f"\n✅ 全部完成")

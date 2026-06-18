@@ -21,7 +21,6 @@ import pandas as pd
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-
 # ──────────────────────────────────────────────
 # 指数代码映射（腾讯格式）
 # ──────────────────────────────────────────────
@@ -44,7 +43,6 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     'Referer': 'http://stockapp.finance.qq.com/',
 }
-
 
 def fetch_index_kline(tx_code: str, days: int = 250) -> pd.DataFrame | None:
     """从腾讯接口获取指数日K线（前复权）"""
@@ -82,7 +80,6 @@ def fetch_index_kline(tx_code: str, days: int = 250) -> pd.DataFrame | None:
     except Exception:
         return None
 
-
 @dataclass
 class IndexTrend:
     code: str
@@ -98,7 +95,6 @@ class IndexTrend:
     trend_score: int = 0
     last_date: str = ""
 
-
 def _trend_status(close: float, ma: float | None) -> str:
     if ma is None or pd.isna(ma) or ma <= 0:
         return "unknown"
@@ -106,7 +102,6 @@ def _trend_status(close: float, ma: float | None) -> str:
     if abs(pct) < 0.005:
         return "near"
     return "above" if close > ma else "below"
-
 
 class IndexBenchmarkService:
     """指数趋势缓存与计算服务"""
@@ -203,12 +198,10 @@ class IndexBenchmarkService:
             )
         return "\n".join(lines)
 
-
 def get_index_trends(cache_dir: str = "data/cache/indices") -> list[IndexTrend]:
     """获取所有指数趋势（便捷入口）"""
     svc = IndexBenchmarkService(cache_dir)
     return svc.get_all_trends()
-
 
 if __name__ == "__main__":
     trends = get_index_trends()

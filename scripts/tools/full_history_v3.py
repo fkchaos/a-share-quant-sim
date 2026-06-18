@@ -3,12 +3,10 @@
 
 import sys, time, os, shutil, sqlite3
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 from scripts.update_daily_data import fetch_tencent_kline, get_stock_list
 from core.db import get_conn
 
-DB_PATH = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'quant.db')
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'quant.db'))
 
 print("全量拉取 zz800 历史 (days=2000) + 备份")
 stocks = get_stock_list()
@@ -61,7 +59,7 @@ with get_conn() as conn:
 
 # 备份 2025 及之前
 print("\n备份...")
-backup_sql = os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'daily_kline_backup_2025.sql')
+backup_sql = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)), 'data', 'daily_kline_backup_2025.sql'))
 rows = []
 with get_conn() as conn:
     rows = conn.execute("SELECT * FROM daily_kline WHERE date <= '2025-12-31' ORDER BY code, date").fetchall()

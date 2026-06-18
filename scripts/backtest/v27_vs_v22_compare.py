@@ -4,9 +4,6 @@ import sys, os
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from core.db import load_panel_from_db
 
 start, end = '2022-01-01', '2026-05-31'
@@ -196,7 +193,6 @@ def run_strategy(name, select_fn):
     print(f"  卖出原因: TP={tp_pct:.1f}% SL={sl_pct:.1f}% TO={to_pct:.1f}%")
     return ar, sh, mdd, nav_s
 
-
 # v22 选股逻辑
 def v22_select(factors, date, pd_, od, holdings):
     if date not in factors['mom_5'].index:
@@ -225,7 +221,6 @@ def v22_select(factors, date, pd_, od, holdings):
     if holdings:
         result = [c for c in result if c not in holdings]
     return result
-
 
 # v27 选股逻辑
 def v27_select(factors, date, pd_, od, holdings):
@@ -281,7 +276,6 @@ def v27_select(factors, date, pd_, od, holdings):
     if holdings:
         result = [c for c in result if c not in holdings]
     return result
-
 
 if __name__ == "__main__":
     print("=" * 60)

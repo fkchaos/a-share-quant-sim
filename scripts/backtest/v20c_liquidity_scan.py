@@ -7,15 +7,11 @@ v20c 流动性阈值回测对比（v20 专用引擎）
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 from core.db import load_panel_from_db
 from scripts.strategies.v20_tail_pick import V20Config, calc_tail_pick_factors, select_stocks_tail_pick
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
-
 
 def run_v20_backtest_with_liquidity(close_panel, volume_panel, amount_panel,
                                      high_panel, low_panel, factors,
@@ -132,7 +128,6 @@ def run_v20_backtest_with_liquidity(close_panel, volume_panel, amount_panel,
     nav_series = pd.Series(nav_list, index=dates[:len(nav_list)])
     return nav_series, trade_log
 
-
 def calc_metrics(nav_series):
     if nav_series is None or len(nav_series) < 2:
         return {'ann_return': 0, 'sharpe': 0, 'max_dd': 0, 'sortino': 0, 'total_trades': 0}
@@ -149,7 +144,6 @@ def calc_metrics(nav_series):
     neg_returns = daily_returns[daily_returns < 0]
     sortino = daily_returns.mean() / neg_returns.std() * np.sqrt(252) if len(neg_returns) > 0 and neg_returns.std() > 1e-10 else 0
     return {'ann_return': ann_return, 'sharpe': sharpe, 'max_dd': max_dd, 'sortino': sortino, 'total_trades': 0}
-
 
 # 加载数据
 print("📥 加载数据...")

@@ -13,10 +13,7 @@ sl_tp_full_scan.py — 三策略止盈止损全量数据网格扫描
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-DATA_DIR = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 os.makedirs(REPORT_DIR, exist_ok=True)
 
@@ -27,7 +24,6 @@ COARSE_TP = [0.04, 0.05, 0.07]
 # ── 完整回测区间 ──
 FULL_START = "2021-01-01"
 FULL_END = "2026-05-29"
-
 
 def _calc_metrics(nav_list, trade_log, initial_capital, dates, sl, tp, elapsed, strategy_name):
     nav = pd.Series(nav_list, index=dates[:len(nav_list)])
@@ -71,7 +67,6 @@ def _calc_metrics(nav_list, trade_log, initial_capital, dates, sl, tp, elapsed, 
         'timeout_trades': len([t for t in sells if t.get('reason') == 'timeout']),
         'elapsed_sec': round(elapsed, 1),
     }
-
 
 # ═══════════════════════════════════════════════
 # v13 扫描
@@ -189,7 +184,6 @@ def scan_v13(sl_list, tp_list, phase_name):
         print(f"夏普={metrics['sharpe']:.3f} 收益={metrics['total_return']:.1f}% 回撤={metrics['max_drawdown']:.1f}% ({elapsed:.0f}s)", flush=True)
 
     return results
-
 
 # ═══════════════════════════════════════════════
 # v20 扫描
@@ -331,7 +325,6 @@ def scan_v20(sl_list, tp_list, phase_name):
 
     return results
 
-
 # ═══════════════════════════════════════════════
 # v11 扫描
 # ═══════════════════════════════════════════════
@@ -453,7 +446,6 @@ def scan_v11(sl_list, tp_list, phase_name):
 
     return results
 
-
 # ═══════════════════════════════════════════════
 # 打印 & 主流程
 # ═══════════════════════════════════════════════
@@ -478,7 +470,6 @@ def print_results(results, title):
     print(f"   胜率={best['win_rate']:.1f}% 盈亏比={best['profit_loss_ratio']:.2f}")
     print(f"   SL触发={int(best['stop_loss_trades'])} TP触发={int(best['stop_profit_trades'])} 超时={int(best['timeout_trades'])}")
     return df
-
 
 if __name__ == '__main__':
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

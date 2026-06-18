@@ -7,9 +7,6 @@ fix_amount_data.py — 修复 DB 中 amount 数据异常
 import sys, os, time
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.environ.get('PROJECT_ROOT', os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
-
 from core.db import get_conn
 
 print("=" * 60)

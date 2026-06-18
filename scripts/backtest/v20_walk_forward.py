@@ -3,18 +3,12 @@
 import sys, os, time, json, numpy as np, pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'strategies'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.dirname(__file__))
-
 from v20_tail_pick import (
     V20Config, load_panel, calc_tail_pick_factors, select_stocks_tail_pick,
 )
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
-
 
 def run_v20_fold(sub_close, sub_volume, sub_amount, sub_high, sub_low, sub_open,
                  warmup_days=20, label="v20_fold"):
@@ -164,7 +158,6 @@ def run_v20_fold(sub_close, sub_volume, sub_amount, sub_high, sub_low, sub_open,
         'win_rate': win_rate, 'total_trades': len(trade_log),
     }
 
-
 def main():
     print("=" * 60)
     print("v20_tail_pick — Walk-Forward 过拟合检测")
@@ -239,7 +232,6 @@ def main():
     print(f"  正收益fold: {positive_folds}/{len(fold_results)} ({positive_folds/len(fold_results):.0%})")
 
     return fold_results
-
 
 if __name__ == '__main__':
     main()

@@ -20,7 +20,6 @@ import argparse, json, os, sys, time
 from datetime import datetime
 import numpy as np, pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.config import STRATEGY_PROFILES, MarketFilter
 from core.factors import calc_factors_panel
 from core.scoring import composite_score
@@ -31,15 +30,13 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(_BASE_DIR, "data"))
 REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 
-
 def _load_stock_names():
     p = os.path.join(_BASE_DIR, "hs300_constituents.csv")
-    if not os.path.exists(p): p = os.path.join(os.environ.get("PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data" + "/hs300_constituents.csv"
+    if not os.path.exists(p): p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data" + "/hs300_constituents.csv")
     try:
         df = pd.read_csv(p)
         return dict(zip(df['品种代码'].astype(str).str.zfill(6), df['品种名称']))
     except Exception: return {}
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -210,7 +207,6 @@ def main():
     for l, nav in nav_dict.items(): nav.to_csv(os.path.join(out_dir, f"nav_{l}.csv"))
     if fold_info: pd.DataFrame(fold_info).to_csv(os.path.join(out_dir, "ml_folds.csv"), index=False)
     print(f"\n结果已保存: {out_dir}/")
-
 
 if __name__ == "__main__":
     main()

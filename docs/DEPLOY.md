@@ -55,7 +55,9 @@ python scripts/tools/init_project.py --kline-only  # 只下载K线
 python scripts/tools/init_project.py --accounts    # 只初始化账户
 ```
 
-数据存入 `data/quant.db`（SQLite），包含：
+数据存入两个 SQLite 数据库：
+- `data/quant_stocks.db` — 股票池 + K线 + 技术指标
+- `data/quant_accounts.db` — 账户 + 持仓 + 交易记录
 - 中证 800 成分股（约 800 只）
 - 近 30 日日 K 线
 - 3 个模拟账户（v11b/v27/v20c）
@@ -166,16 +168,8 @@ crontab -e
 
 ```
 data/
-├── quant.db              # SQLite 数据库（主数据源）
-│   ├── stock_pool        # 股票池（800只中证800）
-│   ├── daily_kline       # 日K线
-│   ├── account           # 账户（3个）
-│   │   ├── id=1: v11b, 20万
-│   │   ├── id=2: v27, 10万
-│   │   └── id=3: v20c, 10万
-│   ├── holdings          # 持仓（按 account_id 区分）
-│   ├── trade_log         # 交易记录
-│   └── indicators        # 技术指标
+├── quant_stocks.db       # 股票数据（K线、股票池、技术指标）
+├── quant_accounts.db     # 账户数据（持仓、交易记录）
 └── portfolio/            # 交易计划 + 日志
     ├── trade_plan_v27.json
     ├── trade_plan_v20c.json
@@ -245,8 +239,9 @@ curl -s "http://qt.gtimg.cn/q=sh600000" | iconv -f GBK -t UTF-8 | head -1
 **Q: 模拟盘初始资金对不上？**
 初始资金在 DB `account` 表中：
 ```bash
-sqlite3 data/quant.db "SELECT * FROM account;"
-sqlite3 data/quant.db "UPDATE account SET initial_capital=200000 WHERE id=1;"
+sqlite3 data/quant_accounts.db "SELECT * FROM account;"
+sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=200000 WHERE id=1;"
+sqlite3 data/quant_stocks.db "SELECT COUNT(*) FROM daily_kline;"
 ```
 
 **Q: 如何只跑单个账户？**
@@ -268,10 +263,12 @@ python scripts/sim/account_runner.py --strategy v27 intraday_execute
 
 ```bash
 # 数据库备份
-cp data/quant.db data/quant.db.bak.$(date +%Y%m%d)
+cp data/quant_stocks.db data/quant_stocks.db.bak.$(date +%Y%m%d)
+cp data/quant_accounts.db data/quant_accounts.db.bak.$(date +%Y%m%d)
 
 # 导出 SQL
-sqlite3 data/quant.db .dump > data/quant_backup_$(date +%Y%m%d).sql
+sqlite3 data/quant_stocks.db .dump > data/quant_stocks_backup_$(date +%Y%m%d).sql
+sqlite3 data/quant_accounts.db .dump > data/quant_accounts_backup_$(date +%Y%m%d).sql
 ```
 
 ---

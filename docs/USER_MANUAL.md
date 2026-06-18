@@ -55,7 +55,9 @@ mkdir -p data
 python scripts/tools/init_project.py
 ```
 
-产物：`data/quant.db`，包含中证 800 成分股 + 近 30 日 K 线 + 3 个模拟账户。
+产物：两个 SQLite 数据库：
+- `data/quant_stocks.db` — 中证 800 成分股 + K线数据
+- `data/quant_accounts.db` — 3 个模拟账户 + 持仓 + 交易记录
 
 > ⚠️ 不需要 CSV 文件，所有数据直接写入 SQLite。
 
@@ -79,16 +81,18 @@ python scripts/tools/cli.py holdings
 # 查看交易记录（最近 10 条）
 python scripts/tools/cli.py trades --limit 10
 
-# SQL 直连（高级用户）
-sqlite3 data/quant.db "SELECT * FROM account;"
-sqlite3 data/quant.db "SELECT COUNT(*) FROM daily_kline;"
-sqlite3 data/quant.db "SELECT * FROM holdings WHERE account_id=1;"
-```
-
-### 2.4 修改账户资金
-
 ```bash
-sqlite3 data/quant.db "UPDATE account SET initial_capital=500000 WHERE id=1;"
+# 查看账户
+sqlite3 data/quant_accounts.db "SELECT * FROM account;"
+
+# 查看持仓
+sqlite3 data/quant_accounts.db "SELECT * FROM holdings WHERE account_id=1;"
+
+# 查看 K线 条数
+sqlite3 data/quant_stocks.db "SELECT COUNT(*) FROM daily_kline;"
+
+# 修改账户资金
+sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=500000 WHERE id=1;"
 ```
 
 ---
@@ -717,26 +721,27 @@ python -m pytest tests/test_ensemble.py -v     # 19 个 Ensemble 测试
 
 ```
 
-### Q: 找不到 quant.db
+### Q: 找不到数据库文件
 
 ```bash
-# 初始化数据
-python scripts/tools/update_daily_data_async.py
-# 确认文件存在
-ls -la data/quant.db
+# 确认两个 DB 文件存在
+ls -la data/quant_stocks.db data/quant_accounts.db
+
+# 如果不存在，重新初始化
+python scripts/tools/init_project.py --db-only
 ```
 
 ### Q: 回测结果全是负数 / 和之前记录不一致
 
 1. 检查选股池是否正确排除了科创板（688/689 前缀）：
 ```bash
-sqlite3 data/quant.db "SELECT COUNT(*) FROM stock_pool WHERE code LIKE '688%';"
+sqlite3 data/quant_stocks.db "SELECT COUNT(*) FROM stock_pool WHERE code LIKE '688%';"
 # 应该返回 0
 ```
 
 2. 检查数据是否最新：
 ```bash
-sqlite3 data/quant.db "SELECT MAX(trade_date) FROM daily_kline;"
+sqlite3 data/quant_stocks.db "SELECT MAX(date) FROM daily_kline;"
 ```
 
 3. 检查数据源差异：不同数据源的"前复权"算法不同，可能导致结果差异

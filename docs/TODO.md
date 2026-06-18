@@ -16,20 +16,21 @@
 
 ---
 
-## 2. 数据库分离
+## ~~2. 数据库分离~~ ✅ 2026-06-18
 
-**现状：** 股票数据（K线、成分股、因子）和账户数据（持仓、交易记录）混在一个 `quant.db` 里。
+**完成内容：**
+- `core/db.py` 重构为双库架构：`quant_stocks.db`（股票数据）+ `quant_accounts.db`（账户数据）
+- 所有现有函数签名保持不变，向后兼容
+- 新增 `scripts/tools/migrate_db.py` 一键迁移旧库
+- 更新 `sentiment_cycle.py` 和 `news_sentiment_factor.py` 的 DB 路径
+- `*.db` 加入 `.gitignore`
 
-**问题：**
-- 股票数据量大（50万条K线），每次备份都要备份账户数据
-- 账户数据频繁更新（每天多次交易），被大数据量拖慢
-- 清空/重初始化股票数据时会丢失账户记录
-
-**目标：**
-- `data/quant_stocks.db` — 股票数据（K线、成分股、因子、指数）
-- `data/quant_accounts.db` — 账户数据（持仓、交易记录、账户余额）
-- 账户DB 每日收盘后自动备份（保留30天）
-- 两个DB 可以独立备份、独立重初始化
+**新库结构：**
+```
+data/
+├── quant_stocks.db    # stock_pool, daily_kline, indicators, industry_map
+└── quant_accounts.db  # account, holdings, trade_log
+```
 
 ---
 

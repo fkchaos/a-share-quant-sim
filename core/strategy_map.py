@@ -136,6 +136,8 @@ STRATEGY_MAP = {
             "MAX_POSITION": 0.20,
             "HOLD_DAYS_MAX": 5,
             "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
             "REGIME_ENABLED": True,
             "REGIME_MA_PERIOD": 20,
             "REGIME_SLOPE_DAYS": 5,

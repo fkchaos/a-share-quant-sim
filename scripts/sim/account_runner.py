@@ -158,8 +158,17 @@ def save_account(state, account_id):
 
 
 # ── 风控 ──────────────────────────────────────────────────────────
-def check_risk(state, date, price_data, params):
-    """风控检查：止损/止盈/超时（浮盈延长）"""
+def check_risk(state, date, price_data, params, prev_close=None):
+    """风控检查：止损/止盈/超时（浮盈延长 + 涨停延长）
+
+    Args:
+        state: PortfolioState
+        date: 当前日期
+        price_data: 当期收盘价 Series
+        params: 策略参数
+        prev_close: 前一交易日收盘价 Series（用于判断涨停，可选；
+                     若不传则不判断涨停）
+    """
     to_sell = []
     hold_max = params["HOLD_DAYS_MAX"]
     hold_ext = params.get("HOLD_DAYS_EXTEND", hold_max)
@@ -171,9 +180,20 @@ def check_risk(state, date, price_data, params):
         if pd.isna(cp) or cp <= 0:
             continue
         pnl = (cp - h['cost_price']) / h['cost_price']
+
+        # 涨停判断：当日收盘 / 前日收盘 >= 1.099（9.9%以上视为涨停）
+        is_limit_up = False
+        if prev_close is not None and code in prev_close.index:
+            prev = prev_close[code]
+            if not pd.isna(prev) and prev > 0 and cp / prev >= 1.099:
+                is_limit_up = True
+
         if pnl <= params["STOP_LOSS"]:
             to_sell.append((code, 'stop_loss', pnl))
         elif pnl >= params["TAKE_PROFIT"]:
+            # 涨停当天跳过止盈，强制持有（吃次日溢价）
+            if is_limit_up:
+                continue
             to_sell.append((code, 'take_profit', pnl))
         else:
             hd = h.get('hold_days', 0)
@@ -313,7 +333,13 @@ def run_signal(strategy_name, date):
     # 风控
     state = load_account(account_id)
     price_data = cp.loc[date] if date in cp.index else pd.Series()
-    to_sell = check_risk(state, date, price_data, params)
+    # 取前一日收盘价用于涨停判断
+    prev_close = None
+    if date in cp.index:
+        idx_pos = cp.index.get_loc(date)
+        if isinstance(idx_pos, (int, np.integer)) and idx_pos > 0:
+            prev_close = cp.iloc[idx_pos - 1]
+    to_sell = check_risk(state, date, price_data, params, prev_close=prev_close)
 
     # 选股（不同策略函数签名不同，分别适配）
     if strategy_name == "v20c":

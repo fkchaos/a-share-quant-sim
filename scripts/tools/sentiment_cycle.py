@@ -23,7 +23,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 DATA_DIR = Path(os.environ.get('BACKTEST_DATA_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')))
-DB_PATH = DATA_DIR / 'quant.db'
+DB_PATH = DATA_DIR / 'quant_stocks.db'
 REPORT_DIR = DATA_DIR / 'backtest_results'
 REPORT_DIR.mkdir(exist_ok=True)
 

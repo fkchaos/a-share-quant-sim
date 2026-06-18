@@ -158,21 +158,34 @@ def save_account(state, account_id):
 
 
 # ── 风控 ──────────────────────────────────────────────────────────
-def check_risk(state, date, price_data, params, prev_close=None):
-    """风控检查：止损/止盈/超时（浮盈延长 + 涨停延长）
+def check_risk(state, date, price_data, params, prev_close=None, sell1_vol=None):
+    """风控检查：止损/止盈/超时（浮盈延长 + 封板延长）
+
+    封板判断逻辑（比涨幅阈值更准确）：
+      - 卖一量 == 0：封板，无人卖出 → 延长止盈
+      - 卖一量 > 0 但涨幅 >= 阈值：视为封板（兼容创业板20%）
+      - 其他：正常止盈
 
     Args:
         state: PortfolioState
         date: 当前日期
         price_data: 当期收盘价 Series
         params: 策略参数
-        prev_close: 前一交易日收盘价 Series（用于判断涨停，可选；
-                     若不传则不判断涨停）
+        prev_close: 前一交易日收盘价 Series（用于涨幅阈值兜底）
+        sell1_vol: 卖一量 Series（手），为 None 时退化为涨幅阈值判断
     """
     to_sell = []
     hold_max = params["HOLD_DAYS_MAX"]
     hold_ext = params.get("HOLD_DAYS_EXTEND", hold_max)
     hold_ext_pnl = params.get("HOLD_DAYS_EXTEND_PNL", 0.03)
+
+    # 按代码前缀确定涨停阈值
+    def _limit_threshold(code):
+        if code.startswith('300') or code.startswith('688'):
+            return 0.199  # 创业板/科创板 20%
+        # ST股判断需要名称，这里用保守阈值
+        return 0.099  # 主板 10%
+
     for code, h in list(state.holdings.items()):
         if code not in price_data.index:
             continue
@@ -181,17 +194,27 @@ def check_risk(state, date, price_data, params, prev_close=None):
             continue
         pnl = (cp - h['cost_price']) / h['cost_price']
 
-        # 涨停判断：当日收盘 / 前日收盘 >= 1.099（9.9%以上视为涨停）
+        # ── 封板判断 ──
         is_limit_up = False
-        if prev_close is not None and code in prev_close.index:
-            prev = prev_close[code]
-            if not pd.isna(prev) and prev > 0 and cp / prev >= 1.099:
+
+        # 方法1：卖一量 == 0（最准确，实时数据）
+        if sell1_vol is not None and code in sell1_vol.index:
+            sv = sell1_vol[code]
+            if not pd.isna(sv) and sv == 0:
                 is_limit_up = True
+
+        # 方法2：涨幅 >= 涨停阈值（兜底，用于信号生成时只有日K线数据）
+        if not is_limit_up and prev_close is not None and code in prev_close.index:
+            prev = prev_close[code]
+            if not pd.isna(prev) and prev > 0:
+                chg = (cp - prev) / prev
+                if chg >= _limit_threshold(code):
+                    is_limit_up = True
 
         if pnl <= params["STOP_LOSS"]:
             to_sell.append((code, 'stop_loss', pnl))
         elif pnl >= params["TAKE_PROFIT"]:
-            # 涨停当天跳过止盈，强制持有（吃次日溢价）
+            # 封板当天跳过止盈，强制持有（吃次日溢价）
             if is_limit_up:
                 continue
             to_sell.append((code, 'take_profit', pnl))

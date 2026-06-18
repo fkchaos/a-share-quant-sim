@@ -102,27 +102,34 @@ sqlite3 /root/data/quant.db "UPDATE account SET initial_capital=500000 WHERE id=
 
 ## 三、回测引擎
 
-### 3.1 基本用法
+> ⚠️ **重要区分**：项目有两套回测入口，不要混淆：
+> - `run_backtest.py` — 内置通用回测框架，只支持 v4_baseline 等内置策略
+> - 独立 WF 脚本 — v27/v20c/v11b 有各自独立的 Walk-Forward 回测脚本
+> - `account_runner.py` — 模拟盘回测，直接跑完整交易逻辑
+
+### 3.1 内置回测框架（run_backtest.py）
+
+适用于内置多因子策略（v4_baseline、ic_ir_weighted、markowitz 等），**不支持 v27/v20c/v11b**。
 
 ```bash
-# 跑单个策略
-python scripts/backtest/run_backtest.py --strategy v27
+# 跑单个内置策略
+python scripts/backtest/run_backtest.py --strategy v4_baseline
 
-# 跑所有策略
+# 跑所有内置策略
 python scripts/backtest/run_backtest.py
 
 # 指定回测区间
-python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
+python scripts/backtest/run_backtest.py --strategy v4_baseline --start 2023-01-01 --end 2025-12-31
 
 # 用开盘价执行（更接近实盘）
-python scripts/backtest/run_backtest.py --strategy v27 --exec-timing open
+python scripts/backtest/run_backtest.py --strategy v4_baseline --exec-timing open
 ```
 
-### 3.2 完整参数列表
+**参数列表：**
 
 | 参数 | 默认值 | 说明 | 示例 |
 |------|--------|------|------|
-| `--strategy` | `all` | 策略名，或 `all` 跑全部 | `--strategy v27` |
+| `--strategy` | `all` | 内置策略名，或 `all` 跑全部 | `--strategy v4_baseline` |
 | `--start` | `2021-01-01` | 回测起始日期 | `--start 2023-01-01` |
 | `--end` | 今天 | 回测结束日期 | `--end 2025-06-30` |
 | `--exec-timing` | `close` | `close`=收盘价(理想) / `open`=开盘价(接近实盘) | `--exec-timing open` |
@@ -130,21 +137,45 @@ python scripts/backtest/run_backtest.py --strategy v27 --exec-timing open
 | `--log` | 关闭 | 自动追加结果到 RESULTS_LOG.md | `--log` |
 | `--param` | 无 | 覆盖单个参数（可多次使用） | `--param top_n=15 rebalance_freq=10` |
 
-### 3.3 有哪些策略？
+### 3.2 独立 WF 脚本（v27/v20c/v11b）
+
+这三个策略有独立的 Walk-Forward 回测脚本，**必须用对应脚本而非 run_backtest.py**：
 
 ```bash
-# 查看帮助（列出所有可用策略）
-python scripts/backtest/run_backtest.py --help
+# v27 价量共振 — WF 回测
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v27_walk_forward.py
+
+# v20c 尾盘缩量 — WF 过拟合检测
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20_walk_forward.py
+
+# v20c 尾盘缩量 — TP/SL 参数扫描（可选，较慢）
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20c_wf_sl_tp_scan.py
+
+# v11b 多因子 Ensemble — WF 回测
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v11b_walk_forward.py
 ```
 
-当前可用策略：
+**各策略 WF 结果参考（2026-06 数据）：**
 
-| 策略名 | 风格 | 全量年化 | 状态 |
-|--------|------|---------|------|
-| `v11b_zz800_union` | 多因子 Ensemble | ~30% | legacy 模式 |
-| `v27` | 价量共振 | ~252% | 推荐，WF 最优 |
-| `v20c` | 尾盘缩量 | ~59% | 推荐，WF 通过 |
-| `v13_small_mid_short` | 小市值反转 | ~68% | 独立运行 |
+| 策略 | 脚本 | 平均年化 | 夏普 | 正收益fold | 状态 |
+|------|------|---------|------|-----------|------|
+| v27 | `v27_walk_forward.py` | 87.2% | 4.61 | 60% | ✅ WF通过 |
+| v20c | `v20_walk_forward.py` | 22.6% | 1.92 | 81% | ✅ WF通过 |
+| v11b | `v11b_walk_forward.py` | 34.9% | 0.95 | 67% | ✅ WF通过 |
+
+### 3.3 模拟盘回测（account_runner.py）
+
+直接跑模拟盘交易逻辑，验证策略在实盘数据上的表现：
+
+```bash
+# 三账户统一回测
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy all report_only
+
+# 单账户回测
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v27 report_only
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v20c report_only
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy v11b report_only
+```
 
 ### 3.4 输出在哪？
 
@@ -156,32 +187,13 @@ ls -lt /root/data/backtest_results/ | head -5
 
 # 查看某个回测的绩效摘要
 cat /root/data/backtest_results/20260715_120000/summary.json
-
-# 查看回测报告（Markdown）
-cat /root/data/backtest_results/20260715_120000/report.md
-```
-
-目录内容：
-```
-20260715_120000/
-├── summary.json          # 全部策略绩效指标（JSON）
-├── comparison.csv        # 策略对比表
-├── nav_v27.csv           # 净值曲线（可用 Excel 打开画图）
-├── trades_v27.csv        # 全部交易记录
-├── monthly_returns_v27.csv  # 月度收益
-├── walk_forward.csv      # WF 结果（如有 --walk-forward）
-└── report.md             # Markdown 报告（人看的）
 ```
 
 ### 3.5 单次回测需要多久？
 
-单策略全量回测（2020-2026，715 只股票）约 **50 秒**，内存占用约 **1GB**。
-
-如果需要扫描参数范围（保存到 `data/backtest_results/` 的 summary.json）：
-```bash
-# 扫描 lookback 在 12~24 个月、threshold 在 0.8~1.2 之间的所有组合
-python scripts/backtest/sweep_lookback_threshold.py
-```
+- 内置策略全量回测（2020-2026，800 只股票）：约 **50 秒**，内存约 1GB
+- v27 WF（15 folds）：约 **10 秒**
+- v11b WF（15 folds）：约 **4 秒**
 
 ---
 
@@ -196,8 +208,14 @@ Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段
 ### 4.2 运行 WF
 
 ```bash
+# v27 价量共振
 PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v27_walk_forward.py
-PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20_walk_forward.py
+
+# v20c 尾盘缩量（参数扫描，较慢）
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20c_wf_sl_tp_scan.py
+
+# v11b 多因子 Ensemble
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v11b_walk_forward.py
 ```
 
 ### 4.3 怎么看结果

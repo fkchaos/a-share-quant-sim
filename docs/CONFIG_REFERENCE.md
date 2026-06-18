@@ -236,9 +236,11 @@ PROFILE_MY_STRATEGY = StrategyConfig(
 
 ### 方法三：命令行覆盖（仅回测）
 
+> ⚠️ `run_backtest.py` 只支持内置策略（v4_baseline 等），不支持 v27/v20c/v11b。
+
 ```bash
-python scripts/run_backtest.py --strategy v11b_zz800_union \
-    --top-n 15 --stop-loss 0.15 --rebalance-freq 10
+python scripts/backtest/run_backtest.py --strategy v4_baseline \
+    --param top_n=15 --param stop_loss=0.15 --param rebalance_freq=10
 ```
 
 ---

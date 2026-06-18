@@ -72,17 +72,22 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 export PYTHONPATH=$(pwd)
 export BACKTEST_DATA_DIR=/root/data
 
-# 跑单个策略
-python scripts/backtest/run_backtest.py --strategy v27
+# ⚠️ run_backtest.py 不支持 v27/v20c/v11b，需要用独立脚本
 
-# 跑 Walk-Forward 验证（16 folds 样本外检测）
-python scripts/backtest/run_backtest.py --strategy v27 --walk-forward
+# 跑内置策略（v4_baseline、ic_ir_weighted、markowitz 等）
+python scripts/backtest/run_backtest.py --strategy v4_baseline
 
-# 跑 v20c（尾盘策略）
-python scripts/backtest/run_backtest.py --strategy v20c
+# 跑 v27 价量共振 — WF 回测
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v27_walk_forward.py
 
-# 跑 v11b（legacy）
-python scripts/backtest/run_backtest.py --strategy v11b_zz800_union
+# 跑 v20c 尾盘缩量 — WF 参数扫描
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v20c_wf_sl_tp_scan.py
+
+# 跑 v11b 多因子 Ensemble — WF 回测
+PYTHONPATH=/root/a-share-quant-sim python scripts/backtest/v11b_walk_forward.py
+
+# 跑模拟盘回测
+PYTHONPATH=/root/a-share-quant-sim python scripts/sim/account_runner.py --strategy all report_only
 ```
 
 输出在 `data/backtest_results/` 目录下，包含 summary.json、NAV 曲线、交易记录。
@@ -260,7 +265,8 @@ python scripts/sim/account_runner.py --strategy v27 intraday_execute
 **Q: 如何添加新策略？**
 1. 在 `scripts/strategies/` 下新建 `xxx_select.py`
 2. 在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中注册
-3. 跑回测验证
+3. 写独立 WF 脚本（参考 `v20_walk_forward.py`）+ 跑回测验证
+4. ⚠️ `run_backtest.py` 不支持自定义策略，必须写独立脚本
 
 ---
 

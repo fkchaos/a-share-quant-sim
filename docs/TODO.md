@@ -4,18 +4,15 @@
 
 ---
 
-## 1. 路径硬编码问题
+## ~~1. 路径硬编码问题~~ ✅ 2026-06-18
 
-**现状：** 多处脚本硬编码 `/root`、`/root/data`、`/root/a-share-quant-sim` 等绝对路径。项目挪到其他目录就挂。
+**现状：** ~~多处脚本硬编码 `/root`~~ → 已改用 `pip install -e .` editable 安装，所有脚本可直接 `import core` 和 `from scripts.xxx`，无需 `PYTHONPATH`。
 
-**目标：** 所有路径通过 `PROJECT_ROOT` 环境变量或 `os.path` 相对计算，零硬编码。
-
-**涉及范围：**
-- `scripts/tools/` 下各更新脚本
-- `scripts/sim/account_runner.py`
-- `scripts/backtest/` 下各回测脚本
-- `core/db.py`（DB 文件路径）
-- Cron prompt 中的路径
+**完成内容：**
+- 新增 `pyproject.toml`，`core/` 和 `scripts/` 子包安装为 editable
+- 清理 104 个脚本中的 `sys.path.insert`
+- `PROJECT_ROOT` 环境变量 fallback 改为 `__file__` 相对路径
+- 更新 README.md、USER_MANUAL.md、ARCHITECTURE.md
 
 ---
 

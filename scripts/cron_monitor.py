@@ -238,7 +238,19 @@ def check_jobs():
             continue
 
         # 检查是否是今天的执行
-        if not status["ts"].startswith(today):
+        # 方法1：CRON_STATUS 的 ts（可能被 agent 写死，不可靠）
+        ts_is_today = status["ts"].startswith(today) if status else False
+        # 方法2：输出文件的 mtime（更可靠，文件今天被修改过说明今天执行了）
+        file_is_today = False
+        if filepath:
+            try:
+                from datetime import datetime as _dt
+                mtime = _dt.fromtimestamp(os.path.getmtime(filepath))
+                file_is_today = mtime.strftime("%Y-%m-%d") == today
+            except Exception:
+                pass
+
+        if not ts_is_today and not file_is_today:
             # 今天还没执行，检查是否漏执行
             # 解析计划时间
             scheduled_time = parse_schedule_time(schedule, now)

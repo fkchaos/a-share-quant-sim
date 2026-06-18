@@ -68,26 +68,28 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 
 ## 4. 跑回测
 
-```bash
-# ⚠️ run_backtest.py 不支持 v27/v20c/v11b，需要用独立脚本
+> ✅ 所有策略（内置 + v27/v20c）都通过 `run_backtest.py` 统一入口。
 
+```bash
 # 跑内置策略（v4_baseline、ic_ir_weighted、markowitz 等）
 python scripts/backtest/run_backtest.py --strategy v4_baseline
 
 # 跑 v27 价量共振 — WF 回测
-python scripts/backtest/v27_walk_forward.py
+python scripts/backtest/run_backtest.py --strategy v27
 
-# 跑 v20c 尾盘缩量 — WF 参数扫描
-python scripts/backtest/v20c_wf_sl_tp_scan.py
+# 跑 v20c 尾盘缩量 — WF 回测
+python scripts/backtest/run_backtest.py --strategy v20c
 
-# 跑 v11b 多因子 Ensemble — WF 回测
-python scripts/backtest/v11b_walk_forward.py
+# 指定回测区间
+python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
 
 # 跑模拟盘回测
 python scripts/sim/account_runner.py --strategy all report_only
 ```
 
 输出在 `data/backtest_results/` 目录下，包含 summary.json、NAV 曲线、交易记录。
+
+> 旧独立 WF 脚本（v27_walk_forward.py、v20c_wf_sl_tp_scan.py 等）仍保留，但推荐使用统一入口。
 
 ---
 

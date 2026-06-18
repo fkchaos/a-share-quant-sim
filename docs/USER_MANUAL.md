@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-17（cron 极简 prompt + 监控增强 + Hermes cron 方案）
+> 最后更新：2026-06-18（回测框架统一入口 + strategy_adapter 架构）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -99,80 +99,56 @@ sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=500000 WHERE 
 
 ## 三、回测引擎
 
-> ⚠️ **重要区分**：项目有两套回测入口，不要混淆：
-> - `run_backtest.py` — 内置通用回测框架，只支持 v4_baseline 等内置策略
-> - 独立 WF 脚本 — v27/v20c/v11b 有各自独立的 Walk-Forward 回测脚本
-> - `account_runner.py` — 模拟盘回测，直接跑完整交易逻辑
+> **统一入口**：所有策略（内置 + v27/v20c/v11b）都通过 `run_backtest.py` 跑回测。
+> 策略路由自动识别：内置策略走通用回测框架，v27/v20c 走 `wf_runner`。
 
-### 3.1 内置回测框架（run_backtest.py）
-
-适用于内置多因子策略（v4_baseline、ic_ir_weighted、markowitz 等），**不支持 v27/v20c/v11b**。
+### 3.1 快速开始
 
 ```bash
-# 跑单个内置策略
+# 跑内置策略（v4_baseline 等）
 python scripts/backtest/run_backtest.py --strategy v4_baseline
+
+# 跑 v27 价量共振（WF 回测）
+python scripts/backtest/run_backtest.py --strategy v27
+
+# 跑 v20c 尾盘缩量（WF 回测）
+python scripts/backtest/run_backtest.py --strategy v20c
+
+# 指定回测区间
+python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
 
 # 跑所有内置策略
 python scripts/backtest/run_backtest.py
-
-# 指定回测区间
-python scripts/backtest/run_backtest.py --strategy v4_baseline --start 2023-01-01 --end 2025-12-31
-
-# 用开盘价执行（更接近实盘）
-python scripts/backtest/run_backtest.py --strategy v4_baseline --exec-timing open
 ```
 
-**参数列表：**
+### 3.2 回测架构
+
+```
+run_backtest.py
+├── 内置策略 (v4/v5/v6/v7/v8) → 通用回测框架
+│   ├── core/factors.py (51 因子)
+│   ├── core/scoring.py (Z-score + Ensemble)
+│   └── core/account.py (PortfolioState + buy/sell)
+└── v27/v20c → wf_runner.py
+    ├── strategy_adapter.py (统一选股+风控+市场状态)
+    │   ├── v27: v27_select.py (价量共振)
+    │   └── v20c: v20_tail_pick.py (尾盘缩量)
+    └── core/account.py (buy/sell — 与模拟盘完全一致)
+```
+
+**关键设计**：回测和模拟盘使用**同一套交易逻辑**（`core/account.py` 的 `buy()`/`sell()`），确保结果一致。
+
+### 3.3 参数列表
 
 | 参数 | 默认值 | 说明 | 示例 |
 |------|--------|------|------|
-| `--strategy` | `all` | 内置策略名，或 `all` 跑全部 | `--strategy v4_baseline` |
+| `--strategy` | `all` | 策略名（v4_baseline/v27/v20c 等），或 `all` | `--strategy v27` |
 | `--start` | `2021-01-01` | 回测起始日期 | `--start 2023-01-01` |
 | `--end` | 今天 | 回测结束日期 | `--end 2025-06-30` |
 | `--exec-timing` | `close` | `close`=收盘价(理想) / `open`=开盘价(接近实盘) | `--exec-timing open` |
-| `--walk-forward` | 关闭 | 启用 Walk-Forward 验证 | `--walk-forward` |
+| `--walk-forward` | 关闭 | 启用 Walk-Forward 验证（仅内置策略） | `--walk-forward` |
 | `--log` | 关闭 | 自动追加结果到 RESULTS_LOG.md | `--log` |
-| `--param` | 无 | 覆盖单个参数（可多次使用） | `--param top_n=15 rebalance_freq=10` |
-
-### 3.2 独立 WF 脚本（v27/v20c/v11b）
-
-这三个策略有独立的 Walk-Forward 回测脚本，**必须用对应脚本而非 run_backtest.py**：
-
-```bash
-# v27 价量共振 — WF 回测
-python scripts/backtest/v27_walk_forward.py
-
-# v20c 尾盘缩量 — WF 过拟合检测
-python scripts/backtest/v20_walk_forward.py
-
-# v20c 尾盘缩量 — TP/SL 参数扫描（可选，较慢）
-python scripts/backtest/v20c_wf_sl_tp_scan.py
-
-# v11b 多因子 Ensemble — WF 回测
-python scripts/backtest/v11b_walk_forward.py
-```
-
-**各策略 WF 结果参考（2026-06 数据）：**
-
-| 策略 | 脚本 | 平均年化 | 夏普 | 正收益fold | 状态 |
-|------|------|---------|------|-----------|------|
-| v27 | `v27_walk_forward.py` | 87.2% | 4.61 | 60% | ✅ WF通过 |
-| v20c | `v20_walk_forward.py` | 22.6% | 1.92 | 81% | ✅ WF通过 |
-| v11b | `v11b_walk_forward.py` | 34.9% | 0.95 | 67% | ✅ WF通过 |
-
-### 3.3 模拟盘回测（account_runner.py）
-
-直接跑模拟盘交易逻辑，验证策略在实盘数据上的表现：
-
-```bash
-# 三账户统一回测
-python scripts/sim/account_runner.py --strategy all report_only
-
-# 单账户回测
-python scripts/sim/account_runner.py --strategy v27 report_only
-python scripts/sim/account_runner.py --strategy v20c report_only
-python scripts/sim/account_runner.py --strategy v11b report_only
-```
+| `--param` | 无 | 覆盖单个参数（可多次使用，仅内置策略） | `--param top_n=15 rebalance_freq=10` |
 
 ### 3.4 输出在哪？
 
@@ -189,8 +165,22 @@ cat data/backtest_results/20260715_120000/summary.json
 ### 3.5 单次回测需要多久？
 
 - 内置策略全量回测（2020-2026，800 只股票）：约 **50 秒**，内存约 1GB
-- v27 WF（15 folds）：约 **10 秒**
+- v27 WF（4 folds, step=252）：约 **50 秒**
 - v11b WF（15 folds）：约 **4 秒**
+
+### 3.6 模拟盘回测（account_runner.py）
+
+直接跑模拟盘交易逻辑，验证策略在实盘数据上的表现：
+
+```bash
+# 三账户统一回测
+python scripts/sim/account_runner.py --strategy all report_only
+
+# 单账户回测
+python scripts/sim/account_runner.py --strategy v27 report_only
+python scripts/sim/account_runner.py --strategy v20c report_only
+python scripts/sim/account_runner.py --strategy v11b report_only
+```
 
 ---
 
@@ -206,13 +196,13 @@ Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段
 
 ```bash
 # v27 价量共振
-python scripts/backtest/v27_walk_forward.py
+python scripts/backtest/run_backtest.py --strategy v27
 
-# v20c 尾盘缩量（参数扫描，较慢）
-python scripts/backtest/v20c_wf_sl_tp_scan.py
+# v27 快速扫描（step=252，更少 fold）
+python scripts/backtest/wf_runner.py --strategy v27 --step 252
 
-# v11b 多因子 Ensemble
-python scripts/backtest/v11b_walk_forward.py
+# v20c 尾盘缩量
+python scripts/backtest/run_backtest.py --strategy v20c
 ```
 
 ### 4.3 怎么看结果
@@ -224,11 +214,11 @@ cat data/backtest_results/wf_v27_latest.json
 结果示例：
 ```json
 {
-  "n_folds": 15,
-  "test_ann_return": "48.77%",
-  "test_sharpe": "8.61",
-  "test_max_dd": "-1.88%",
-  "positive_folds": "15/15 (100%)",
+  "n_folds": 4,
+  "test_ann_return": "121.31%",
+  "test_sharpe": "4.16",
+  "test_max_dd": "-8.16%",
+  "positive_folds": "4/4 (100%)",
   "pass": true
 }
 ```
@@ -242,6 +232,13 @@ cat data/backtest_results/wf_v27_latest.json
 | 最差 fold | > -30% | 不能有一个 fold 亏太多 |
 
 全部满足 = **WF 通过**，策略可以上线模拟盘。
+
+### 4.5 各策略 WF 结果参考（2026-06 数据）
+
+| 策略 | 平均收益率 | 夏普 | 回撤 | 正收益fold | 状态 |
+|------|-----------|------|------|-----------|------|
+| v27 | 121.3% | 4.16 | -8.2% | 4/4 (100%) | ✅ WF通过 |
+| v20c | — | — | — | — | ⚠️ 2021-2022选股范围受限 |
 
 ---
 

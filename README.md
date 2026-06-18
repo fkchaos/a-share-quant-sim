@@ -10,33 +10,34 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     cron 调度层（7个任务）                      │
+│                     cron 调度层（9个任务）                      │
 │  账户1(v11b)  账户2(v27)  账户3(v20c)  收盘报告                 │
 └──────────┬──────────────────────────┬───────────────────────┘
            │                          │
            ▼                          ▼
 ┌─────────────────────┐   ┌──────────────────────────────────┐
-│ scripts/sim/        │   │ core/strategy_map.py             │
-│ account_runner.py   │◄──│  策略注册表（动态加载选股函数）      │
-│ --strategy v27|v20c │   │  v11b → legacy 模式              │
-└──────────┬──────────┘   │  v27  → v27_select.py           │
-           │              │  v20c → v20_tail_pick.py        │
-           ▼              └──────────────────────────────────┘
-┌──────────────────────────────────────────────┐
-│                  core/ (共享引擎)              │
-│  config.py   ← STRATEGY_PROFILES + MarketFilter│
-│  account.py  ← PortfolioState + buy/sell       │
-│  db.py       ← SQLite 数据库层                 │
-│  factors.py  ← 51 技术因子计算                 │
-│  scoring.py  ← Z-score + Ensemble 评分         │
-└──────────────────────────────────────────────┘
-           ▲
-           │ 数据
-┌──────────┴──────────┐
-│ data/quant.db  │
-│  account/holdings/   │
-│  trade_log/daily_kline│
-└─────────────────────┘
+│ scripts/sim/        │   │ scripts/backtest/                 │
+│ account_runner.py   │   │ run_backtest.py (统一入口)        │
+│ (模拟盘统一入口)     │   │   ├── 内置策略 → 通用回测框架      │
+│                     │   │   └── v27/v20c → wf_runner.py     │
+│                     │   │       └── strategy_adapter.py      │
+└──────────┬──────────┘   └──────────────────────────────────┘
+           │                          │
+           ▼                          ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  core/ (共享引擎)                              │
+│  account.py  ← PortfolioState + buy/sell (回测+模拟盘共用)   │
+│  db.py       ← SQLite 双库 (stocks + accounts)               │
+│  factors.py  ← 51 技术因子计算                               │
+│  strategy_map.py ← 策略注册表                                │
+└──────────────────────────────────────────────────────────────┘
+           ▲                          ▲
+┌──────────┴──────────┐   ┌──────────┴──────────┐
+│ data/quant_stocks.db │   │ data/quant_accounts.db│
+│  stock_pool          │   │  account              │
+│  daily_kline         │   │  holdings             │
+│  indicators          │   │  trade_log            │
+└─────────────────────┘   └───────────────────────┘
 ```
 
 ## 目录结构
@@ -60,6 +61,9 @@ a-share-quant-sim/
 │   │   ├── v27_select.py        # v27 价量共振选股
 │   │   └── v20_tail_pick.py     # v20c 尾盘缩量选股
 │   ├── backtest/            # 回测脚本
+│   │   ├── run_backtest.py      # 统一回测入口（内置策略 + v27/v20c）
+│   │   ├── strategy_adapter.py  # 策略适配器（选股+风控+市场状态）
+│   │   └── wf_runner.py         # Walk-Forward 通用运行器
 │   ├── tools/               # 工具脚本
 │   │   ├── cli.py                # 数据库 CLI（账户/持仓/买卖）
 │   │   ├── init_project.py       # 一键初始化（建表+股票池+K线+账户）
@@ -100,7 +104,7 @@ pip install -e .
 python scripts/tools/init_project.py
 
 # 4. 跑回测
-python scripts/backtest/v27_walk_forward.py
+python scripts/backtest/run_backtest.py --strategy v27
 
 # 5. 跑模拟盘
 python scripts/sim/account_runner.py --strategy v27 intraday_signal

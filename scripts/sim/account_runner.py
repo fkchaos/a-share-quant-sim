@@ -611,7 +611,7 @@ def cmd_create_account(account_id, name, cash, strategy=""):
 
     ok = create_account(account_id, name=name, cash=cash, initial_capital=cash, strategy=strategy)
     if ok:
-        print(f"✅ 账户 {account_id} 创建成功: 名称={name}, 现金=¥{cash:,}, 策略={strategy or '未绑定'}")
+        print(f"✅ 账户 {account_id} 创建成功: 名称={name}, 资金=¥{cash:,}, 策略={strategy or '未绑定'}")
     else:
         print(f"⚠️ 账户 {account_id} 已存在，跳过创建")
 

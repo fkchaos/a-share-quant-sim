@@ -1,21 +1,34 @@
 #!/usr/bin/env python3
 """
 scripts/sim/account_runner.py — 统一模拟盘入口
-================================================
-通过 --strategy 参数切换策略，无需为每个策略单独维护脚本。
+===================================================
+
+账户-策略分离架构：
+  - 账户在 DB 中绑定策略（account.strategy 字段）
+  - 运行时通过 --account-id 指定账户，自动读取绑定的策略
+  - 支持子命令管理账户：create / switch / list
 
 用法:
-    python scripts/sim/account_runner.py --strategy v27 intraday_signal
-    python scripts/sim/account_runner.py --strategy v27 intraday_execute
-    python scripts/sim/account_runner.py --strategy v27 report_only
+  # 信号生成（自动读取账户绑定的策略）
+  python scripts/sim/account_runner.py --account-id 1 intraday_signal
+  python scripts/sim/account_runner.py --account-id 2 intraday_signal
 
-    python scripts/sim/account_runner.py --strategy v11b intraday_signal
-    python scripts/sim/account_runner.py --strategy v27 intraday_signal
+  # 执行交易
+  python scripts/sim/account_runner.py --account-id 2 intraday_execute
+
+  # 收盘报告
+  python scripts/sim/account_runner.py --account-id 2 report_only
+
+  # 账户管理子命令
+  python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000
+  python scripts/sim/account_runner.py switch --account-id 4 --strategy v27
+  python scripts/sim/account_runner.py list
 
 设计:
-    - 账户操作（load/save/风控/执行）统一在此脚本
-    - 选股逻辑通过 strategy_map 动态加载
-    - 新增策略只需在 strategy_map.py 注册，不需要新建脚本
+  - 账户操作（load/save/风控/执行）统一在此脚本
+  - 选股逻辑通过 strategy_map 动态加载
+  - 新增策略只需在 strategy_map.py 注册，不需要新建脚本
+  - 账户和策略解耦：一个账户可以随时切换策略
 """
 import sys, os, json, time, logging, argparse
 from datetime import datetime
@@ -27,8 +40,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
-from core.db import get_kline, get_all_codes
-from core.strategy_map import load_strategy
+from core.db import get_kline, get_all_codes, get_account, list_accounts, create_account, switch_strategy
+from core.strategy_map import load_strategy, list_strategy_names
 from scripts.backtest.strategy_adapter import get_adapter
 
 DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
@@ -42,6 +55,22 @@ STAMP_TAX = 0.001
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("account_runner")
+
+
+# ── 策略名白名单（活跃策略，不含已退役的）────────────────────────
+ACTIVE_STRATEGIES = ["v11b", "v27", "v28"]
+
+
+def _resolve_strategy(account_id):
+    """从账户表读取绑定的策略，返回策略名"""
+    acct = get_account(account_id)
+    if not acct:
+        raise ValueError(f"账户 {account_id} 不存在，请先创建账户")
+    strategy = acct.get("strategy", "")
+    if not strategy:
+        raise ValueError(f"账户 {account_id} 未绑定策略，请先执行: account_runner.py switch --account-id {account_id} --strategy <name>")
+    return strategy
+
 
 # ── 数据加载 ──────────────────────────────────────────────────────
 def load_panel(codes, min_days=60):
@@ -67,16 +96,14 @@ def load_panel(codes, min_days=60):
         pd.DataFrame({c: code_dfs[c].get('open', code_dfs[c]['close']) for c in code_dfs}),
     )
 
+
 # ── 账户操作 ──────────────────────────────────────────────────────
 def load_account(account_id):
     """从 DB 加载账户状态，返回 PortfolioState"""
-    from core.db import get_account, get_holdings, upsert_account, get_stock_name_map
+    from core.db import get_holdings, upsert_account, get_stock_name_map
     acct = get_account(account_id)
     if not acct:
-        # 首次运行：在 DB 创建账户记录
-        init_cap = {1: 200000, 2: 100000, 3: 100000}.get(account_id, 100000)
-        upsert_account(account_id=account_id, cash=init_cap, initial_capital=init_cap)
-        return PortfolioState(cash=init_cap, initial_capital=init_cap, holdings={}, trade_log=[])
+        raise ValueError(f"账户 {account_id} 不存在")
 
     holdings_raw = get_holdings(account_id)
     name_map = get_stock_name_map()
@@ -109,8 +136,9 @@ def load_account(account_id):
         holdings=holdings,
         trade_log=[],
     )
-    logger.info(f"加载账户{account_id}: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
+    logger.info(f"加载账户{account_id}: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只, 策略={acct.get('strategy','')}")
     return state
+
 
 def save_account(state, account_id):
     """保存账户状态到 DB"""
@@ -152,10 +180,6 @@ def save_account(state, account_id):
                 )
     logger.info(f"账户{account_id}已保存: 现金 ¥{state.cash:,.0f}, 持仓 {len(state.holdings)} 只")
 
-# ── 风控/市场状态已迁移到 strategy_adapter ──
-# check_risk → adapter.risk_check()
-# calc_regime_multiplier → adapter.calc_regime()
-# 保留 execute_sells 供 run_execute 使用
 
 def execute_sells(state, to_sell, date, spot):
     """执行卖出，返回新 state"""
@@ -163,6 +187,7 @@ def execute_sells(state, to_sell, date, spot):
         if code in spot and spot[code] > 0:
             state = sell(state, code, spot[code], date, reason)
     return state
+
 
 def execute_buys(state, cands, date, spot, params):
     """执行买入，返回新 state"""
@@ -192,18 +217,23 @@ def execute_buys(state, cands, date, spot, params):
         bought += 1
     return state
 
+
 # ── 主流程 ──────────────────────────────────────────────────────
-def run_signal(strategy_name, date):
+def run_signal(account_id, date, strategy_name=None):
     """信号生成：选股 + 风控"""
     t0 = time.time()
+
+    # 如果没指定策略名，从账户表读取
+    if strategy_name is None:
+        strategy_name = _resolve_strategy(account_id)
+
     strategy = load_strategy(strategy_name)
     params = strategy.get("params", {})
-    account_id = strategy["account_id"]
     timing = strategy.get("timing", "intraday")
 
-    logger.info(f"=== {strategy_name} 信号 {date} ===")
+    logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} ===")
 
-    # v20c 已退役，保留兼容代码但不执行
+    # 选股池（排除科创板等）
     if strategy_name == "v20c":
         codes = list(get_all_codes())
     else:
@@ -340,6 +370,7 @@ def run_signal(strategy_name, date):
 
     plan = {
         'date': str(date),
+        'account_id': account_id,
         'strategy': strategy_name,
         'regime': regime_label,
         'regime_multiplier': regime_mult,
@@ -357,7 +388,7 @@ def run_signal(strategy_name, date):
         'hold_plan': hold_plan,
         'timestamp': datetime.now().isoformat(),
     }
-    plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{strategy_name}.json")
+    plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{account_id}.json")
     with open(plan_file, 'w') as f:
         json.dump(plan, f, ensure_ascii=False, indent=2)
 
@@ -365,7 +396,7 @@ def run_signal(strategy_name, date):
 
     # ── 输出信号摘要（print 到 stdout，cron 捕获）──
     print("=" * 60)
-    print(f"{strategy_name} 信号 — {date}")
+    print(f"账户{account_id} / {strategy_name} 信号 — {date}")
     print(f"市场状态: {regime_label} (仓位乘数 {regime_mult})")
     print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
     print("-" * 60)
@@ -401,20 +432,24 @@ def run_signal(strategy_name, date):
         print("⚪ 无操作")
     print("=" * 60)
 
-def run_execute(strategy_name, date):
+
+def run_execute(account_id, date, strategy_name=None):
     """执行交易：先卖后买"""
     import requests
     t0 = time.time()
+
+    if strategy_name is None:
+        strategy_name = _resolve_strategy(account_id)
+
     strategy = load_strategy(strategy_name)
     params = strategy.get("params", {})
-    account_id = strategy["account_id"]
 
-    logger.info(f"=== {strategy_name} 执行 {date} ===")
+    logger.info(f"=== 账户{account_id} / {strategy_name} 执行 {date} ===")
 
     state = load_account(account_id)
 
     # 加载计划
-    plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{strategy_name}.json")
+    plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{account_id}.json")
     try:
         with open(plan_file) as f:
             plan = json.load(f)
@@ -482,7 +517,7 @@ def run_execute(strategy_name, date):
 
     # ── 输出摘要（print 到 stdout，cron 捕获）──
     print("=" * 60)
-    print(f"{strategy_name} 执行 — {date}")
+    print(f"账户{account_id} / {strategy_name} 执行 — {date}")
     print(f"市场状态: {regime_label} (仓位乘数 {regime_mult})")
     print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
     print("-" * 60)
@@ -500,10 +535,12 @@ def run_execute(strategy_name, date):
 
     logger.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
 
-def run_report(strategy_name, date):
+
+def run_report(account_id, date, strategy_name=None):
     """收盘报告"""
-    strategy = load_strategy(strategy_name)
-    account_id = strategy["account_id"]
+    if strategy_name is None:
+        strategy_name = _resolve_strategy(account_id)
+
     state = load_account(account_id)
 
     nav = state.cash
@@ -522,7 +559,7 @@ def run_report(strategy_name, date):
 
     # ── 输出收盘报告（print 到 stdout，cron 捕获）──
     print("=" * 60)
-    print(f"{strategy_name} 收盘报告 — {date}")
+    print(f"账户{account_id} / {strategy_name} 收盘报告 — {date}")
     print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
     print(f"持仓市值: ¥{total_mv:,.0f}  净值: ¥{nav:,.0f}")
     print(f"总收益: ¥{pnl:+,.0f} ({pnl_pct:+.2f}%)")
@@ -544,21 +581,124 @@ def run_report(strategy_name, date):
             print(f"  {code} {h.get('name', '')} — {shares}股 成本{cost:.2f} 市值¥{mv:,.0f} ({pnl_i_pct:+.1f}%)")
     print("=" * 60)
 
-    logger.info(f"=== {strategy_name} 收盘报告 {date} === 持仓 {len(state.holdings)} 只 现金 ¥{state.cash:,.0f} 净值 ¥{nav:,.0f} 收益 {pnl_pct:+.2f}%")
+    logger.info(f"=== 账户{account_id} / {strategy_name} 收盘报告 {date} === 持仓 {len(state.holdings)} 只 现金 ¥{state.cash:,.0f} 净值 ¥{nav:,.0f} 收益 {pnl_pct:+.2f}%")
+
+
+# ── 账户管理子命令 ─────────────────────────────────────────────────
+def cmd_list_accounts():
+    """列出所有账户"""
+    accounts = list_accounts()
+    if not accounts:
+        print("暂无账户，使用 create 子命令创建")
+        return
+
+    print("=" * 70)
+    print(f"{'ID':>4}  {'名称':<12}  {'策略':<10}  {'现金':>12}  {'初始资金':>12}  {'更新时间'}")
+    print("-" * 70)
+    for acct in accounts:
+        print(f"{acct['id']:>4}  {acct.get('name',''):<12}  {acct.get('strategy',''):<10}  ¥{acct['cash']:>10,.0f}  ¥{acct['initial_capital']:>10,.0f}  {acct.get('updated_at','')}")
+    print("=" * 70)
+    print(f"可用策略: {', '.join(list_strategy_names())}")
+    print(f"活跃策略: {', '.join(ACTIVE_STRATEGIES)}")
+
+
+def cmd_create_account(account_id, name, cash, strategy=""):
+    """创建新账户"""
+    if strategy and strategy not in list_strategy_names():
+        print(f"❌ 未知策略: {strategy}")
+        print(f"可用策略: {', '.join(list_strategy_names())}")
+        return
+
+    ok = create_account(account_id, name=name, cash=cash, initial_capital=cash, strategy=strategy)
+    if ok:
+        print(f"✅ 账户 {account_id} 创建成功: 名称={name}, 现金=¥{cash:,}, 策略={strategy or '未绑定'}")
+    else:
+        print(f"⚠️ 账户 {account_id} 已存在，跳过创建")
+
+
+def cmd_switch_strategy(account_id, strategy):
+    """切换账户策略"""
+    if strategy not in list_strategy_names():
+        print(f"❌ 未知策略: {strategy}")
+        print(f"可用策略: {', '.join(list_strategy_names())}")
+        return
+
+    ok = switch_strategy(account_id, strategy)
+    if ok:
+        print(f"✅ 账户 {account_id} 策略已切换为: {strategy}")
+    else:
+        print(f"⚠️ 账户 {account_id} 不存在")
+
 
 # ── 入口 ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="统一模拟盘入口")
-    parser.add_argument("--strategy", required=True, choices=["v11b", "v27", "v20c(retired)", "all"], help="策略名称（all=全部）")
-    parser.add_argument("mode", choices=["intraday_signal", "intraday_execute", "tail_signal", "tail_execute", "report_only"], help="运行模式")
+    parser = argparse.ArgumentParser(
+        description="统一模拟盘入口（账户-策略分离）",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # 创建账户并绑定策略
+  python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --strategy v27
+
+  # 切换策略
+  python scripts/sim/account_runner.py switch --account-id 4 --strategy v11b
+
+  # 查看所有账户
+  python scripts/sim/account_runner.py list
+
+  # 信号生成（自动读取账户绑定的策略）
+  python scripts/sim/account_runner.py --account-id 2 intraday_signal
+
+  # 执行交易
+  python scripts/sim/account_runner.py --account-id 2 intraday_execute
+
+  # 收盘报告
+  python scripts/sim/account_runner.py --account-id 2 report_only
+
+  # 临时指定策略（覆盖账户绑定）
+  python scripts/sim/account_runner.py --account-id 2 --strategy v27 intraday_signal
+        """
+    )
+    parser.add_argument("--account-id", type=int, default=1, help="账户ID（默认: 1）")
+    parser.add_argument("--strategy", type=str, default=None, help="临时指定策略（覆盖账户绑定的策略）")
     parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="交易日期")
+
+    subparsers = parser.add_subparsers(dest="subcommand", help="子命令")
+
+    # list 子命令
+    subparsers.add_parser("list", help="列出所有账户")
+
+    # create 子命令
+    p_create = subparsers.add_parser("create", help="创建新账户")
+    p_create.add_argument("--account-id", type=int, required=True, help="账户ID")
+    p_create.add_argument("--name", type=str, default="", help="账户名称")
+    p_create.add_argument("--cash", type=float, default=100000, help="初始资金（默认: 100000）")
+    p_create.add_argument("--strategy", type=str, default="", help="绑定策略（可选）")
+
+    # switch 子命令
+    p_switch = subparsers.add_parser("switch", help="切换账户策略")
+    p_switch.add_argument("--account-id", type=int, required=True, help="账户ID")
+    p_switch.add_argument("--strategy", type=str, required=True, help="目标策略名")
+
+    # 运行模式（positional）
+    parser.add_argument("mode", nargs="?", choices=["intraday_signal", "intraday_execute", "tail_signal", "tail_execute", "report_only"], help="运行模式")
+
     args = parser.parse_args()
 
-    strategies = ["v11b", "v27", "v20c"] if args.strategy == "all" else [args.strategy]
-    for s in strategies:
+    # 子命令处理
+    if args.subcommand == "list":
+        cmd_list_accounts()
+    elif args.subcommand == "create":
+        cmd_create_account(args.account_id, args.name, args.cash, args.strategy)
+    elif args.subcommand == "switch":
+        cmd_switch_strategy(args.account_id, args.strategy)
+    elif args.mode:
+        # 运行模式
         if args.mode in ("intraday_signal", "tail_signal"):
-            run_signal(s, args.date)
+            run_signal(args.account_id, args.date, args.strategy)
         elif args.mode in ("intraday_execute", "tail_execute"):
-            run_execute(s, args.date)
+            run_execute(args.account_id, args.date, args.strategy)
         elif args.mode == "report_only":
-            run_report(s, args.date)
+            run_report(args.account_id, args.date, args.strategy)
+    else:
+        parser.print_help()

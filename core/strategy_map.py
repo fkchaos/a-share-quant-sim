@@ -8,8 +8,9 @@ core/strategy_map.py — 策略映射表
 - 回测和模拟盘共享同一套选股逻辑
 - 通过 strategy name 映射到具体的选股函数
 - 新增策略只需在此表注册，不需要改账户脚本
+- 策略与账户解耦：账户在 DB 中绑定策略，不在代码里硬编码
 
-使用方式：
+使用方式:
     from core.strategy_map import STRATEGY_MAP, load_strategy
     strategy = load_strategy("v27")
     factors = strategy["calc_factors"](close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel)
@@ -40,12 +41,16 @@ def load_strategy(name):
     return result
 
 
+def list_strategy_names():
+    """列出所有可用策略名"""
+    return list(STRATEGY_MAP.keys())
+
+
 STRATEGY_MAP = {
-    # ── v11b: Ensemble 截面因子（账户1）──
+    # ── v11b: Ensemble 截面因子 ──
     "v11b": {
         "mode": "custom",
         "description": "Ensemble 截面因子选股（Momentum+Volatility+Reversal 3组并集）",
-        "account_id": 1,
         "timing": "intraday",
         "select_fn": "scripts.strategies.v11b_select.select_stocks",
         "calc_factors_fn": "scripts.strategies.v11b_select.calc_factors",
@@ -61,11 +66,10 @@ STRATEGY_MAP = {
         },
     },
 
-    # ── v27: 价量共振动量（账户2）──
+    # ── v27: 价量共振动量 ──
     "v27": {
         "mode": "custom",
         "description": "价量共振动量（mom_5>2% + pv_corr_20 + gap/illiq/boll）",
-        "account_id": 2,
         "timing": "intraday",
         "select_fn": "scripts.strategies.v27_select.select_stocks_v27",
         "calc_factors_fn": "scripts.strategies.v27_select.calc_factors",
@@ -93,7 +97,6 @@ STRATEGY_MAP = {
     "v28": {
         "mode": "custom",
         "description": "Kronos AI 增强选股（v27初筛 + kronos_ret/conf/trend二次排序）",
-        "account_id": 4,
         "timing": "intraday",
         "select_fn": "scripts.strategies.v28_kronos.select_stocks_v28",
         "calc_factors_fn": "scripts.strategies.v28_kronos.calc_factors",
@@ -120,12 +123,13 @@ STRATEGY_MAP = {
         },
     },
 
-    # ── v20c: 尾盘缩量企稳（账户3）──
+    # ── v20c: 尾盘缩量企稳（已退役）──
+    # 面板顺序 bug 修复后策略失效（WF 5/16，全量 -67%，核心因子 IC≈0）
+    # 代码保留在 scripts/strategies/v20_tail_pick.py，不参与活跃交易
     "v20c": {
         "mode": "custom",
-        "description": "尾盘缩量企稳（软约束评分排序）",
-        "account_id": 3,
-        "timing": "tail",  # 14:40信号 → 14:55执行
+        "description": "尾盘缩量企稳（软约束评分排序）— 已退役",
+        "timing": "tail",
         "select_fn": "scripts.strategies.v20_tail_pick.select_stocks_tail_pick",
         "calc_factors_fn": "scripts.strategies.v20_tail_pick.calc_tail_pick_factors",
         "params": {

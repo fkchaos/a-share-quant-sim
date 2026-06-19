@@ -193,19 +193,28 @@ def step_init_kline(start_year=2020):
     return True
 
 def step_init_accounts():
-    """初始化3个模拟账户"""
-    from core.db import upsert_account
+    """初始化模拟账户（空账户，策略由用户自行绑定）"""
+    from core.db import create_account, list_accounts
+
+    existing = list_accounts()
+    existing_ids = {a["id"] for a in existing}
 
     accounts = [
-        (1, "v11b", 200000, "v11b"),
-        (2, "v27", 100000, "v27"),
-        (3, "v20c", 100000, "v20c"),
+        (1, "账户1", 200000),
+        (2, "账户2", 100000),
+        (3, "账户3", 100000),
     ]
-    for aid, name, capital, strategy in accounts:
-        upsert_account(account_id=aid, name=name, cash=capital, initial_capital=capital, strategy=strategy)
-        print(f"  ✅ 账户{aid}: {name} 初始资金 ¥{capital:,}")
+    for aid, name, capital in accounts:
+        if aid not in existing_ids:
+            create_account(aid, name=name, cash=capital, initial_capital=capital, strategy="")
+            print(f"  ✅ 账户{aid}: {name} 初始资金 ¥{capital:,}（未绑定策略）")
+        else:
+            print(f"  ⏭️ 账户{aid} 已存在，跳过")
 
     print()
+    print("  提示: 使用以下命令绑定策略:")
+    print("    python scripts/sim/account_runner.py switch --account-id 1 --strategy v11b")
+    print("    python scripts/sim/account_runner.py switch --account-id 2 --strategy v27")
 
 def main():
     parser = argparse.ArgumentParser(description="项目初始化")
@@ -250,9 +259,11 @@ def main():
         print("✅ 初始化完成！")
         print()
         print("下一步:")
-        print("  1. 跑回测: python scripts/backtest/run_backtest.py --strategy v27")
-        print("  2. 跑模拟盘: python scripts/sim/account_runner.py --strategy v27 intraday_signal")
-        print("  3. 查看账户: python scripts/tools/cli.py account 2")
+        print("  1. 绑定策略:")
+        print("     python scripts/sim/account_runner.py switch --account-id 1 --strategy v27")
+        print("  2. 跑回测: python scripts/backtest/run_backtest.py --strategy v27")
+        print("  3. 跑模拟盘: python scripts/sim/account_runner.py --account-id 1 intraday_signal")
+        print("  4. 查看账户: python scripts/sim/account_runner.py list")
         print("=" * 60)
 
 if __name__ == "__main__":

@@ -60,7 +60,7 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 - `data/quant_accounts.db` — 账户 + 持仓 + 交易记录
 - 中证 800 成分股（约 800 只）
 - 近 30 日日 K 线
-- 3 个模拟账户（v11b 暂停/v27 运行中/v20c 已退役）
+- 3 个模拟账户（策略由用户自行绑定）
 
 > ⚠️ 不需要 CSV 文件，所有数据直接写入 SQLite。
 
@@ -77,14 +77,14 @@ python scripts/backtest/run_backtest.py --strategy v4_baseline
 # 跑 v27 价量共振 — WF 回测
 python scripts/backtest/run_backtest.py --strategy v27
 
-# 跑 v20c 尾盘缩量 — WF 回测
+# 跑 v20c 尾盘缩量 — WF 回测（已退役，仅作参考）
 python scripts/backtest/run_backtest.py --strategy v20c
 
 # 指定回测区间
 python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
 
 # 跑模拟盘回测
-python scripts/sim/account_runner.py --strategy all report_only
+python scripts/sim/account_runner.py --account-id 2 report_only
 ```
 
 输出在 `data/backtest_results/` 目录下，包含 summary.json、NAV 曲线、交易记录。
@@ -93,30 +93,79 @@ python scripts/sim/account_runner.py --strategy all report_only
 
 ---
 
-## 5. 跑模拟盘
+## 5. 账户管理（账户-策略分离）
 
-模拟盘 = 信号生成 + 执行 + 报告，三步。
+账户和策略解耦：账户在 DB 中绑定策略，一个账户可以随时切换策略。
+
+### 5.1 查看所有账户
 
 ```bash
-# 账户1（v11b legacy）
-python scripts/sim/sim_account1.py intraday_signal   # 上午出信号
-python scripts/sim/sim_account1.py intraday_execute  # 下午开盘执行
-python scripts/sim/sim_account1.py report_only       # 收盘报告
+python scripts/sim/account_runner.py list
+```
 
-# 账户2（v27 价量共振）
-python scripts/sim/account_runner.py --strategy v27 intraday_signal
-python scripts/sim/account_runner.py --strategy v27 intraday_execute
-python scripts/sim/account_runner.py --strategy v27 report_only
+输出示例：
+```
+======================================================================
+ID  名称          策略        现金          初始资金      更新时间
+----------------------------------------------------------------------
+ 1   账户1         v27        ¥  200,000  ¥  200,000  2026-06-19 10:00:00
+ 2   账户2                    ¥  100,000  ¥  100,000  2026-06-19 10:00:00
+======================================================================
+可用策略: v11b, v27, v28, v20c
+活跃策略: v11b, v27, v28
+```
 
-# 账户3（v20c 尾盘缩量）
-python scripts/sim/account_runner.py --strategy v20c tail_signal
-python scripts/sim/account_runner.py --strategy v20c tail_execute
-python scripts/sim/account_runner.py --strategy v20c report_only
+### 5.2 创建新账户
+
+```bash
+# 创建空账户（不绑定策略）
+python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000
+
+# 创建账户并绑定策略
+python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --strategy v27
+```
+
+### 5.3 切换策略
+
+```bash
+# 将账户4切换为 v27 策略
+python scripts/sim/account_runner.py switch --account-id 4 --strategy v27
+
+# 切换到 v11b
+python scripts/sim/account_runner.py switch --account-id 4 --strategy v11b
+```
+
+### 5.4 修改初始资金
+
+```bash
+sqlite3 data/quant_accounts.db "UPDATE account SET cash=500000, initial_capital=500000 WHERE id=4;"
 ```
 
 ---
 
-## 6. 定时调度
+## 6. 跑模拟盘
+
+模拟盘 = 信号生成 + 执行 + 报告，三步。
+
+```bash
+# 信号生成（自动读取账户绑定的策略）
+python scripts/sim/account_runner.py --account-id 1 intraday_signal
+
+# 执行交易
+python scripts/sim/account_runner.py --account-id 1 intraday_execute
+
+# 收盘报告
+python scripts/sim/account_runner.py --account-id 1 report_only
+
+# 临时指定策略（覆盖账户绑定的策略，用于测试）
+python scripts/sim/account_runner.py --account-id 1 --strategy v11b intraday_signal
+```
+
+旧脚本（`sim_account1/2/3.py`）保留作为备份，不再被 cron 调用。
+
+---
+
+## 7. 定时调度
 
 ### 方案一：Hermes cron（推荐）
 
@@ -128,11 +177,11 @@ python scripts/sim/account_runner.py --strategy v20c report_only
 |------|------|------|
 | 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` |
 | 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` |
-| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` | ✅ |
-| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` | ✅ |
-| 账户1-上午信号 | 11:45 工作日 | `--strategy v11b intraday_signal` | ⏸️ 暂停 |
-| 账户1-下午执行 | 13:00 工作日 | `--strategy v11b intraday_execute` | ⏸️ 暂停 |
-| 收盘报告 | 15:30 工作日 | `--strategy all report_only` |
+| 账户2-上午信号 | 11:45 工作日 | `--account-id 2 intraday_signal` | ✅ |
+| 账户2-下午执行 | 13:00 工作日 | `--account-id 2 intraday_execute` | ✅ |
+| 账户1-上午信号 | 11:45 工作日 | `--account-id 1 intraday_signal` | ⏸️ 暂停 |
+| 账户1-下午执行 | 13:00 工作日 | `--account-id 1 intraday_execute` | ⏸️ 暂停 |
+| 收盘报告 | 15:30 工作日 | `--account-id 1 report_only` + `--account-id 2 report_only` |
 | Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` |
 | Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` |
 
@@ -154,16 +203,12 @@ crontab -e
 31 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
 40 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
 
-# 账户2
-45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> data/portfolio/account_runner.log 2>&1
+# 账户2（v27 价量共振）
+45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --account-id 2 intraday_signal >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --account-id 2 intraday_execute >> data/portfolio/account_runner.log 2>&1
 
-# 账户3
-45 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> data/portfolio/account_runner.log 2>&1
-55 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> data/portfolio/account_runner.log 2>&1
-
-# 收盘报告（三账户）
-30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy all report_only >> data/portfolio/account_runner.log 2>&1
+# 收盘报告
+30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --account-id 2 report_only >> data/portfolio/account_runner.log 2>&1
 ```
 
 ---
@@ -183,11 +228,12 @@ data/
 
 ## 8. 策略选择
 
-| 策略 | 风格 | 资金 | 特点 |
+| 策略 | 风格 | 特点 | 状态 |
 |------|------|------|------|
-| v11b | 多因子 Ensemble | 20万 | 最保守，多组选股并集 |
-| v27 | 价量共振 | 10万 | 动量最强，WF 夏普 8.66 |
-| v20c | 尾盘缩量 | 10万 | 尾盘选股，次日开盘买 |
+| v11b | 多因子 Ensemble | 最保守，多组选股并集 | ⏸️ 暂停 |
+| v27 | 价量共振 | 动量最强，WF 夏普 5.96 | ✅ 运行中 |
+| v28 | Kronos AI 增强 | v27 + 预测因子 | 🔬 研发中 |
+| v20c | 尾盘缩量 | 尾盘选股，次日开盘买 | ❌ 已退役 |
 
 新手建议先用 v27 跑回测看效果。
 
@@ -197,16 +243,24 @@ data/
 
 策略参数统一在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中管理，修改 `params` 字典即可：
 
-| 策略 | 账户 | 关键参数（strategy_map.py 中的 params） |
-|------|------|----------------------------------------|
-| v11b | 账户1 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX | ⏸️ 暂停 |
-| v27 | 账户2 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD, REGIME_* | ✅ 运行中 |
+| 策略 | 关键参数（strategy_map.py 中的 params） | 状态 |
+|------|----------------------------------------|------|
+| v11b | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX | ⏸️ 暂停 |
+| v27 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD, REGIME_* | ✅ 运行中 |
 
-改完后跑回测验证，再提交代码。旧脚本（`sim_account1/2/3.py`）保留作为备份，不再被 cron 调用。
+改完后跑回测验证，再提交代码。
 
 ---
 
-## 10. 数据更新
+## 10. 添加新策略
+
+1. 在 `scripts/strategies/` 下新建 `xxx_select.py`，实现 `select_stocks_xxx()` 和 `calc_factors()` 函数
+2. 在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中注册
+3. 写独立 WF 脚本（参考 `v20_walk_forward.py`）+ 跑回测验证
+4. 创建账户并绑定策略：
+   ```bash
+   python scripts/sim/account_runner.py create --account-id 5 --name "新策略账户" --cash 100000 --strategy xxx
+   ```
 
 日 K 线数据每个交易日更新。手动更新：
 
@@ -247,16 +301,22 @@ sqlite3 data/quant_stocks.db "SELECT COUNT(*) FROM daily_kline;"
 
 **Q: 如何只跑单个账户？**
 ```bash
-# 只跑 v27（v11b 暂停中，v20c 已退役）
-python scripts/sim/account_runner.py --strategy v27 intraday_signal
-python scripts/sim/account_runner.py --strategy v27 intraday_execute
+# 查看账户列表
+python scripts/sim/account_runner.py list
+
+# 跑账户2的信号
+python scripts/sim/account_runner.py --account-id 2 intraday_signal
+python scripts/sim/account_runner.py --account-id 2 intraday_execute
 ```
 
 **Q: 如何添加新策略？**
 1. 在 `scripts/strategies/` 下新建 `xxx_select.py`
 2. 在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中注册
 3. 写独立 WF 脚本（参考 `v20_walk_forward.py`）+ 跑回测验证
-4. ⚠️ `run_backtest.py` 不支持自定义策略，必须写独立脚本
+4. 创建账户并绑定策略：
+   ```bash
+   python scripts/sim/account_runner.py create --account-id 5 --name "新策略账户" --cash 100000 --strategy xxx
+   ```
 
 ---
 

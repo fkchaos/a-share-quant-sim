@@ -343,6 +343,41 @@ def upsert_account(account_id=1, name="main", cash=200000, initial_capital=20000
         )
 
 
+def list_accounts():
+    """返回所有账户列表 [{"id", "name", "strategy", "cash", "initial_capital"}, ...]"""
+    with get_conn("account") as conn:
+        rows = conn.execute(
+            "SELECT id, name, strategy, cash, initial_capital, updated_at FROM account ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def create_account(account_id, name="", cash=100000, initial_capital=100000, strategy=""):
+    """创建新账户（如果已存在则跳过）"""
+    with get_conn("account") as conn:
+        existing = conn.execute("SELECT id FROM account WHERE id=?", (account_id,)).fetchone()
+        if existing:
+            return False  # 已存在
+        conn.execute(
+            """INSERT INTO account(id,name,cash,initial_capital,strategy,params_json,updated_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (account_id, name, cash, initial_capital, strategy,
+             json.dumps({}),
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        )
+        return True
+
+
+def switch_strategy(account_id, strategy):
+    """切换账户绑定的策略"""
+    with get_conn("account") as conn:
+        conn.execute(
+            "UPDATE account SET strategy=?, updated_at=? WHERE id=?",
+            (strategy, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), account_id),
+        )
+        return conn.total_changes > 0
+
+
 def update_cash(account_id=1, cash=None, delta=None):
     """更新现金：直接设值 或 增减"""
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

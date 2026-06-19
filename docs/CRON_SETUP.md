@@ -1,6 +1,6 @@
 # Cron 任务配置指南
 
-> 最后更新：2026-06-17
+> 最后更新：2026-06-19
 
 本文档说明如何从零重建所有 cron 任务。
 
@@ -36,7 +36,7 @@ hermes cron create \
   --prompt "执行上午数据更新。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py
+cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py
 
 整理为报告。（更新结果无需代码名称）
 
@@ -52,7 +52,7 @@ hermes cron create \
   --prompt "执行下午数据更新。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/tools/update_daily_data_async.py
+cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py
 
 整理为报告。（更新结果无需代码名称）
 
@@ -68,7 +68,7 @@ hermes cron create \
   --prompt "执行账户2（v27）上午信号。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_signal
+cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
 
 整理为报告，包含：市场状态、现金、持仓数、🔴卖出明细（代码+名称+股数+价格+原因）、🟢买入明细（代码+名称+股数+价格+目标金额）、➡️持有明细（代码+名称+股数+价格）。
 
@@ -84,62 +84,31 @@ hermes cron create \
   --prompt "执行账户2（v27）下午操作。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v27 intraday_execute
+cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute
 
 整理为报告，包含股票代码和名称（卖出/买入/持仓明细都要有代码+名称）。
 
 [CRON_STATUS] job_id=REPLACE_ME status=ok duration=0 ts=REPLACE_TS"
 ```
 
-### 2.6 账户3-尾盘信号
-
-```bash
-hermes cron create \
-  --name "账户3-尾盘信号" \
-  --schedule "45 14 * * 1-5" \
-  --prompt "执行账户3（v20c）尾盘信号。
-
-运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_signal
-
-整理为报告，包含：市场状态、现金、持仓数、🔴卖出明细（代码+名称+股数+价格+原因）、🟢买入明细（代码+名称+股数+价格+目标金额）、➡️持有明细（代码+名称+股数+价格）。
-
-[CRON_STATUS] job_id=REPLACE_ME status=ok duration=0 ts=REPLACE_TS"
-```
-
-### 2.7 账户3-尾盘执行
-
-```bash
-hermes cron create \
-  --name "账户3-尾盘执行" \
-  --schedule "55 14 * * 1-5" \
-  --prompt "执行账户3（v20c）尾盘操作。
-
-运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy v20c tail_execute
-
-整理为报告，包含股票代码和名称（卖出/买入/持仓明细都要有代码+名称）。
-
-[CRON_STATUS] job_id=REPLACE_ME status=ok duration=0 ts=REPLACE_TS"
-```
-
-### 2.8 收盘报告
+### 2.6 收盘报告
 
 ```bash
 hermes cron create \
   --name "收盘报告" \
   --schedule "30 15 * * 1-5" \
-  --prompt "执行收盘报告（三个账户统一）。
+  --prompt "执行收盘报告（所有活跃账户）。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/sim/account_runner.py --strategy all report_only
+cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 1 report_only
+cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 report_only
 
 整理为报告，包含股票代码和名称（持仓明细要有代码+名称）。
 
 [CRON_STATUS] job_id=REPLACE_ME status=ok duration=0 ts=REPLACE_TS"
 ```
 
-### 2.9 Cron监控-巡检
+### 2.7 Cron监控-巡检
 
 ```bash
 hermes cron create \
@@ -148,14 +117,14 @@ hermes cron create \
   --prompt "执行 cron 监控巡检。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/cron_monitor.py
+cd /root/a-share-quant-sim && python3 scripts/cron_monitor.py
 
 将脚本输出整理为报告。
 
 [CRON_STATUS] job_id=REPLACE_ME status=ok duration=0 ts=REPLACE_TS"
 ```
 
-### 2.10 Cron监控-心跳
+### 2.8 Cron监控-心跳
 
 ```bash
 hermes cron create \
@@ -164,7 +133,7 @@ hermes cron create \
   --prompt "执行 cron 心跳报告。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts/cron_monitor.py --heartbeat
+cd /root/a-share-quant-sim && python3 scripts/cron_monitor.py --heartbeat
 
 将脚本输出整理为报告。
 
@@ -181,7 +150,7 @@ cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 scripts
 执行<任务名>。
 
 运行命令：
-cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 <脚本> <参数>
+cd /root/a-share-quant-sim && python3 <脚本> <参数>
 
 整理为报告，包含股票代码和名称。
 
@@ -215,13 +184,11 @@ cd /root/a-share-quant-sim && PYTHONPATH=/root/a-share-quant-sim python3 <脚本
 |------|------|------|------|
 | 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` | ✅ 活跃 |
 | 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` | ✅ 活跃 |
-| 账户1-上午信号 | 11:45 工作日 | `--strategy v11b intraday_signal` | ⏸️ 暂停 |
-| 账户1-下午执行 | 13:00 工作日 | `--strategy v11b intraday_execute` | ⏸️ 暂停 |
-| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` | ✅ 活跃 |
-| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` | ✅ 活跃 |
-| 账户3-尾盘信号 | 14:45 工作日 | `--strategy v20c tail_signal` | ✅ 活跃 |
-| 账户3-尾盘执行 | 14:55 工作日 | `--strategy v20c tail_execute` | ✅ 活跃 |
-| 收盘报告 | 15:30 工作日 | `--strategy all report_only` | ✅ 活跃 |
+| 账户1-上午信号 | 11:45 工作日 | `run --account-id 1 intraday_signal` | ⏸️ 暂停 |
+| 账户1-下午执行 | 13:00 工作日 | `run --account-id 1 intraday_execute` | ⏸️ 暂停 |
+| 账户2-上午信号 | 11:45 工作日 | `run --account-id 2 intraday_signal` | ✅ 活跃 |
+| 账户2-下午执行 | 13:00 工作日 | `run --account-id 2 intraday_execute` | ✅ 活跃 |
+| 收盘报告 | 15:30 工作日 | `run --account-id 1+2 report_only` | ✅ 活跃 |
 | Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` | ✅ 活跃 |
 | Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` | ✅ 活跃 |
 | 每日记忆整理 | 08:00 每日 | hermes-memery 备份 | ⏸️ 暂停 |

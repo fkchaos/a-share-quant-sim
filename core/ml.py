@@ -51,6 +51,8 @@ ALL_FACTOR_NAMES = [
     'gap_ratio', 'high_low_range', 'intraday_drift',
     # 小市值
     'small_cap',
+    # 方案4: 波动率+振幅+均线偏离（中长周期）
+    'rev_1d', 'std_60', 'roc_60', 'amp_trend', 'ma60_dev',
 ]
 
 # 因子分组（用于分组训练 stacking）
@@ -75,6 +77,10 @@ FACTOR_GROUPS = {
     ],
     # 小市值单独一组（风格因子）
     'style': ['small_cap'],
+    # 方案4: 中长周期（波动率+振幅+均线偏离）
+    'mid_long': [
+        'rev_1d', 'std_60', 'roc_60', 'amp_trend', 'ma60_dev',
+    ],
 }
 
 # 市场状态（regime）参数

@@ -23,10 +23,10 @@ def calc_factors_single(df: pd.DataFrame) -> dict:
             (amount optional, defaults to close*volume)
     Output: {factor_name: float}  (latest value of each factor)
     """
-    close = df['close']
-    volume = df.get('volume', pd.Series(1, index=df.index))
-    amount = df.get('amount', close * volume)
-    returns = close.pct_change()
+    close: pd.Series = df['close']
+    volume: pd.Series = df['volume'] if 'volume' in df.columns else pd.Series(1.0, index=df.index)
+    amount: pd.Series = df['amount'] if 'amount' in df.columns else close * volume
+    returns: pd.Series = close.pct_change()
     eps = 1e-10
 
     factors = {}
@@ -554,6 +554,27 @@ def calc_factors_panel(
             factors['industry_rot'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
     else:
         factors['industry_rot'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
+
+    # ── 方案4: LightGBM 中长周期因子（波动率+振幅+均线偏离）──────────
+    # rev_1d: 昨日反转 = -1 * 昨日收益率
+    factors['rev_1d'] = -close_panel.pct_change(1)
+
+    # std_60: 60日波动率（年化）
+    factors['std_60'] = returns.rolling(60).std() * np.sqrt(252)
+
+    # roc_60: 60日涨幅（动量）
+    factors['roc_60'] = close_panel.pct_change(60)
+
+    # amp_trend: 振幅趋势 = (high-low)/close 的60日均值
+    if high_panel is not None and low_panel is not None:
+        amp = (high_panel - low_panel) / (close_panel + eps)
+        factors['amp_trend'] = amp.rolling(60).mean()
+    else:
+        factors['amp_trend'] = pd.DataFrame(0.0, index=close_panel.index, columns=close_panel.columns)
+
+    # ma60_dev: 60日均线偏离 = (close - ma60) / ma60
+    ma60 = close_panel.rolling(60).mean()
+    factors['ma60_dev'] = (close_panel - ma60) / (ma60 + eps)
 
     return factors
 

@@ -60,7 +60,7 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 - `data/quant_accounts.db` — 账户 + 持仓 + 交易记录
 - 中证 800 成分股（约 800 只）
 - 近 30 日日 K 线
-- 3 个模拟账户（v11b/v27/v20c）
+- 3 个模拟账户（v11b 暂停/v27 运行中/v20c 已退役）
 
 > ⚠️ 不需要 CSV 文件，所有数据直接写入 SQLite。
 
@@ -128,10 +128,10 @@ python scripts/sim/account_runner.py --strategy v20c report_only
 |------|------|------|
 | 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` |
 | 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` |
-| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` |
-| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` |
-| 账户3-尾盘信号 | 14:45 工作日 | `--strategy v20c tail_signal` |
-| 账户3-尾盘执行 | 14:55 工作日 | `--strategy v20c tail_execute` |
+| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` | ✅ |
+| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` | ✅ |
+| 账户1-上午信号 | 11:45 工作日 | `--strategy v11b intraday_signal` | ⏸️ 暂停 |
+| 账户1-下午执行 | 13:00 工作日 | `--strategy v11b intraday_execute` | ⏸️ 暂停 |
 | 收盘报告 | 15:30 工作日 | `--strategy all report_only` |
 | Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` |
 | Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` |
@@ -199,9 +199,8 @@ data/
 
 | 策略 | 账户 | 关键参数（strategy_map.py 中的 params） |
 |------|------|----------------------------------------|
-| v11b | 账户1 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX |
-| v27 | 账户2 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD, REGIME_* |
-| v20c | 账户3 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, REGIME_* |
+| v11b | 账户1 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX | ⏸️ 暂停 |
+| v27 | 账户2 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD, REGIME_* | ✅ 运行中 |
 
 改完后跑回测验证，再提交代码。旧脚本（`sim_account1/2/3.py`）保留作为备份，不再被 cron 调用。
 
@@ -248,7 +247,7 @@ sqlite3 data/quant_stocks.db "SELECT COUNT(*) FROM daily_kline;"
 
 **Q: 如何只跑单个账户？**
 ```bash
-# 只跑 v27
+# 只跑 v27（v11b 暂停中，v20c 已退役）
 python scripts/sim/account_runner.py --strategy v27 intraday_signal
 python scripts/sim/account_runner.py --strategy v27 intraday_execute
 ```

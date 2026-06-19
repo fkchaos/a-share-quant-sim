@@ -647,22 +647,18 @@ if __name__ == "__main__":
   python scripts/sim/account_runner.py list
 
   # 信号生成（自动读取账户绑定的策略）
-  python scripts/sim/account_runner.py --account-id 2 intraday_signal
+  python scripts/sim/account_runner.py run --account-id 2 intraday_signal
 
   # 执行交易
-  python scripts/sim/account_runner.py --account-id 2 intraday_execute
+  python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 
   # 收盘报告
-  python scripts/sim/account_runner.py --account-id 2 report_only
+  python scripts/sim/account_runner.py run --account-id 2 report_only
 
   # 临时指定策略（覆盖账户绑定）
-  python scripts/sim/account_runner.py --account-id 2 --strategy v27 intraday_signal
+  python scripts/sim/account_runner.py run --account-id 2 --strategy v27 intraday_signal
         """
     )
-    parser.add_argument("--account-id", type=int, default=1, help="账户ID（默认: 1）")
-    parser.add_argument("--strategy", type=str, default=None, help="临时指定策略（覆盖账户绑定的策略）")
-    parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="交易日期")
-
     subparsers = parser.add_subparsers(dest="subcommand", help="子命令")
 
     # list 子命令
@@ -680,8 +676,12 @@ if __name__ == "__main__":
     p_switch.add_argument("--account-id", type=int, required=True, help="账户ID")
     p_switch.add_argument("--strategy", type=str, required=True, help="目标策略名")
 
-    # 运行模式（positional）
-    parser.add_argument("mode", nargs="?", choices=["intraday_signal", "intraday_execute", "tail_signal", "tail_execute", "report_only"], help="运行模式")
+    # run 子命令（运行模式）
+    p_run = subparsers.add_parser("run", help="运行信号/执行/报告")
+    p_run.add_argument("mode", choices=["intraday_signal", "intraday_execute", "tail_signal", "tail_execute", "report_only"], help="运行模式")
+    p_run.add_argument("--account-id", type=int, default=1, help="账户ID（默认: 1）")
+    p_run.add_argument("--strategy", type=str, default=None, help="临时指定策略（覆盖账户绑定）")
+    p_run.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="交易日期")
 
     args = parser.parse_args()
 
@@ -692,8 +692,7 @@ if __name__ == "__main__":
         cmd_create_account(args.account_id, args.name, args.cash, args.strategy)
     elif args.subcommand == "switch":
         cmd_switch_strategy(args.account_id, args.strategy)
-    elif args.mode:
-        # 运行模式
+    elif args.subcommand == "run":
         if args.mode in ("intraday_signal", "tail_signal"):
             run_signal(args.account_id, args.date, args.strategy)
         elif args.mode in ("intraday_execute", "tail_execute"):

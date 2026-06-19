@@ -1,0 +1,20 @@
+{
+  "date": "2026-06-19",
+  "account_id": 2,
+  "strategy": "v27",
+  "regime": "指数日期缺失",
+  "regime_multiplier": 1.0,
+  "sell_plan": [],
+  "buy_plan": [],
+  "hold_plan": [
+    {
+      "code": "600000",
+      "name": "浦发银行",
+      "current_shares": 500,
+      "price": 0,
+      "cost_price": 10.5,
+      "action": "hold"
+    }
+  ],
+  "timestamp": "2026-06-19T14:33:05.308253"
+}

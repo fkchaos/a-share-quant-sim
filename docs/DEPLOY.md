@@ -149,16 +149,16 @@ sqlite3 data/quant_accounts.db "UPDATE account SET cash=500000, initial_capital=
 
 ```bash
 # 信号生成（自动读取账户绑定的策略）
-python scripts/sim/account_runner.py --account-id 1 intraday_signal
+python scripts/sim/account_runner.py run --account-id 1 intraday_signal
 
 # 执行交易
-python scripts/sim/account_runner.py --account-id 1 intraday_execute
+python scripts/sim/account_runner.py run --account-id 1 intraday_execute
 
 # 收盘报告
-python scripts/sim/account_runner.py --account-id 1 report_only
+python scripts/sim/account_runner.py run --account-id 1 report_only
 
 # 临时指定策略（覆盖账户绑定的策略，用于测试）
-python scripts/sim/account_runner.py --account-id 1 --strategy v11b intraday_signal
+python scripts/sim/account_runner.py run --account-id 1 --strategy v11b intraday_signal
 ```
 
 旧脚本（`sim_account1/2/3.py`）保留作为备份，不再被 cron 调用。
@@ -177,11 +177,11 @@ python scripts/sim/account_runner.py --account-id 1 --strategy v11b intraday_sig
 |------|------|------|
 | 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` |
 | 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` |
-| 账户2-上午信号 | 11:45 工作日 | `--account-id 2 intraday_signal` | ✅ |
-| 账户2-下午执行 | 13:00 工作日 | `--account-id 2 intraday_execute` | ✅ |
-| 账户1-上午信号 | 11:45 工作日 | `--account-id 1 intraday_signal` | ⏸️ 暂停 |
-| 账户1-下午执行 | 13:00 工作日 | `--account-id 1 intraday_execute` | ⏸️ 暂停 |
-| 收盘报告 | 15:30 工作日 | `--account-id 1 report_only` + `--account-id 2 report_only` |
+| 账户2-上午信号 | 11:45 工作日 | `run --account-id 2 intraday_signal` | ✅ |
+| 账户2-下午执行 | 13:00 工作日 | `run --account-id 2 intraday_execute` | ✅ |
+| 账户1-上午信号 | 11:45 工作日 | `run --account-id 1 intraday_signal` | ⏸️ 暂停 |
+| 账户1-下午执行 | 13:00 工作日 | `run --account-id 1 intraday_execute` | ⏸️ 暂停 |
+| 收盘报告 | 15:30 工作日 | `run --account-id 1 report_only` + `run --account-id 2 report_only` |
 | Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` |
 | Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` |
 
@@ -204,11 +204,11 @@ crontab -e
 40 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
 
 # 账户2（v27 价量共振）
-45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --account-id 2 intraday_signal >> data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --account-id 2 intraday_execute >> data/portfolio/account_runner.log 2>&1
+45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute >> data/portfolio/account_runner.log 2>&1
 
 # 收盘报告
-30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --account-id 2 report_only >> data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 report_only >> data/portfolio/account_runner.log 2>&1
 ```
 
 ---

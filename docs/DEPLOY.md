@@ -52,13 +52,14 @@ python scripts/tools/init_project.py
 python scripts/tools/init_project.py --db-only      # 只建表
 python scripts/tools/init_project.py --pool-only    # 只获取股票池
 python scripts/tools/init_project.py --kline-only  # 只下载K线
+python scripts/tools/init_project.py --indices  # 只下载指数K线（上证/深证/创业板）
 python scripts/tools/init_project.py --accounts    # 只初始化账户
-```
 
 数据存入两个 SQLite 数据库：
-- `data/quant_stocks.db` — 股票池 + K线 + 技术指标
+- `data/quant_stocks.db` — 股票池 + K线 + 指数K线 + 技术指标
 - `data/quant_accounts.db` — 账户 + 持仓 + 交易记录
 - 中证 800 成分股（约 800 只）
+- 3 个指数（上证 sh000001、深证 sz399001、创业板 sz399006）
 - 近 30 日日 K 线
 - 3 个模拟账户（策略由用户自行绑定）
 

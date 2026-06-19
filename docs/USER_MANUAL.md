@@ -56,10 +56,12 @@ python scripts/tools/init_project.py
 ```
 
 产物：两个 SQLite 数据库：
-- `data/quant_stocks.db` — 中证 800 成分股 + K线数据
+- `data/quant_stocks.db` — 中证 800 成分股 + 股票K线 + 指数K线（上证/深证/创业板）
 - `data/quant_accounts.db` — 3 个模拟账户 + 持仓 + 交易记录
 
 > ⚠️ 不需要 CSV 文件，所有数据直接写入 SQLite。
+>
+> `init_project.py` 还支持 `--indices` 参数可单独更新指数K线，`--start-year` 指定起始年份。
 
 ### 2.2 日常更新（每天收盘后）
 

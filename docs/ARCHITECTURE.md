@@ -86,9 +86,11 @@ a-share-quant-sim/
 │   └── STRATEGY_REGISTRY.md # 策略注册表
 │
 └── data/
-    ├── quant_stocks.db      # 股票池 + K线 + 技术指标
+    ├── quant_stocks.db      # 股票池 + K线 + 指数K线 + 技术指标
     ├── quant_accounts.db    # 账户 + 持仓 + 交易记录
     └── portfolio/           # 交易计划 + 日志
+
+指数K线存储在 `index_kline` 表（与 `daily_kline` 同库但分表），`calc_regime` 从中读取上证指数判断市场状态（牛1.0/震0.7/熊0.3）。
 ```
 
 ## 三、策略注册表（strategy_map + strategy_adapter）

@@ -123,6 +123,8 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                     sell_price = price_data[code]
                     if not pd.isna(sell_price) and sell_price > 0:
                         state = sell(state, code, sell_price, date, reason=reason)
+                    sold += 1
+                    print(f"  SELL {code} @ {sell_price:.2f} reason {reason} cash {state.cash:.2f}")
 
             # 选股（每天调用，和模拟盘一致）
             if len(state.holdings) < max_holdings:
@@ -142,6 +144,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                     per_stock = min(avail / nb, initial_capital * max_position) if nb > 0 else 0
 
                     bought = 0
+                    sold = 0
                     for code, score in cands[:max_daily_buy]:
                         if len(state.holdings) >= max_holdings or bought >= nb:
                             break
@@ -149,6 +152,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                             continue
                         buy_price = open_data[code]
                         if pd.isna(buy_price) or buy_price <= 0:
+                            print(f"  SKIP {code} invalid buy_price {buy_price}")
                             continue
                         # 用 core/account.py 的 buy（shares 模式）
                         adj = buy_price * (1 + TradingCosts().slippage_rate)
@@ -158,6 +162,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                         state = buy(state, code, buy_price, date, shares=shares)
                         if code in state.holdings:
                             bought += 1
+                            print(f"  BUY {code} {shares} @ {buy_price:.2f} cash {state.cash:.2f}")
 
             # NAV（用 core/account.py 的 portfolio_value）
             pv = portfolio_value(state, date, price_data)

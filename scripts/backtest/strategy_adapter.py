@@ -137,7 +137,7 @@ class StrategyAdapter:
         # 排除科创板/北交所等（与 account_runner.py 一致）
         codes = [c for c in codes if not c.startswith(('688', '689', '8', '4', '2'))]
         # select_stocks_tail_pick 返回 list[str]，统一转为 list[(code, score)]
-        return [(c, 0.0) for c in codes]
+        return [(c, 1.0) for c in codes]
 
     # ── 统一风控接口 ──────────────────────────────────────────────
 

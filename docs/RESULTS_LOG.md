@@ -6,6 +6,10 @@
 
 2026-07-24 19:00:00 | **v11b 账户1 暂停** | — | — | — | — | — | — | cron 已禁用（job: d09a4fdbe506, 050969e9b685），代码保留，随时可恢复。v11b WF 11/16(69%)正收益，夏普1.70。
 
+2026-06-19 18:00:00 | **v30_lgbm_5factor 因子调研（完成）** | close+IC | 2020-01~2026-05 | — | — | — | — | 5个因子（REV_1D, STD60, ROC60, AMP_TREND, MA60DEV）已加入代码 `core/factors.py` + `core/ml.py`。单因子 IC：AMP_TREND=+0.087, STD60=+0.082, ROC60=+0.071, MA60DEV=+0.070, REV_1D=-0.032。LightGBM 5因子组合：Train IC=0.16, **Test IC=0.03**（过拟合严重，Train/Test 差距5倍）。全量45因子 Test IC=0.019（噪声因子稀释）。**结论：因子有微弱预测力但独立使用太弱，不融合 v27。已注册到 ALL_FACTOR_NAMES，可通过开关启用测试。**
+
+2026-06-18 16:00:00 | **账户-策略分离架构完成** | — | — | — | — | — | — | 账户和策略解耦：`core/db.py` 新增 `list_accounts()`/`create_account()`/`switch_strategy()`；`account_runner.py` 重写为子命令模式（`create`/`switch`/`list`/`run --account-id N`）；`strategy_map.py` 移除 `account_id`；`init_project.py` 简化为创建空账户。96个过时脚本归档到 `scripts/archive/`。全链路测试通过（信号→执行→报告）。
+
 2026-07-24 18:00:00 | **v20c 面板顺序 bug 修复（策略失效）** | close+WF | 2021-01~2025-12 | **-67%（全量）** | **-0.96（WF夏普）** | **-13.6%** | — | 面板顺序修复后 v20c 完全失效：WF 5/16(31%)正收益，全量-67%。根因：v20_tail_pick.load_panel() 历史上把 tpl[3] 当 high、[4] 当 low、[5] 当 open（全错），daily_range=(open-high)/close 负值碰巧有预测能力。修复后 range_ratio IC=-0.002，无预测能力。旧版 WF 15/16(94%)好结果完全源于错位假阳性。**v20c 需重新设计因子或退役。** v27 不受影响（WF 15/100%，夏普5.96）。关键教训：①DB amount 单位是元，换数据源必须确认单位；②load_panel_from_db 返回顺序 [close,volume,amount,open,high,low]，解包不能错位；③策略因子有效性验证必须基于正确数据。
 
 # 回测结果记录

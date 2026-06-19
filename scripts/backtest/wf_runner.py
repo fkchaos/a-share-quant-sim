@@ -50,7 +50,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     t0 = time.time()
     tpl, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True)
     close_panel, volume_panel, amount_panel = tpl[0], tpl[1], tpl[2]
-    open_panel, high_panel, low_panel = tpl[3], tpl[4], tpl[5]
+    high_panel, low_panel, open_panel = tpl[3], tpl[4], tpl[5]
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只")
     print(f"  耗时 {time.time()-t0:.1f}s")
 
@@ -121,11 +121,19 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
             to_sell = adapter.risk_check(strategy_name, state, date, price_data,
                                           risk_params, prev_close=prev_close)
 
-            # 执行卖出（用 core/account.py 的 sell）
+            # 执行卖出（含跌停封板跳过，与旧版 v20_walk_forward 一致）
             for code, reason, pnl in to_sell:
                 if code in state.holdings and code in price_data.index:
                     sell_price = price_data[code]
                     if not pd.isna(sell_price) and sell_price > 0:
+                        # 跌停封板检查：卖价 <= 前日收盘×0.90×1.01 → 卖不出，hold_days 回退
+                        if i > 0 and prev_close is not None and code in prev_close.index:
+                            prev_c = prev_close[code]
+                            if not pd.isna(prev_c) and prev_c > 0:
+                                if sell_price <= prev_c * 0.90 * 1.01:
+                                    info = state.holdings[code]
+                                    info['hold_days'] = max(0, info.get('hold_days', 0) - 1)
+                                    continue
                         state = sell(state, code, sell_price, date, reason=reason)
                     sold += 1
                     print(f"  SELL {code} @ {sell_price:.2f} reason {reason} cash {state.cash:.2f}")
@@ -154,6 +162,12 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                         if pd.isna(buy_price) or buy_price <= 0:
                             print(f"  SKIP {code} invalid buy_price {buy_price}")
                             continue
+                        # 涨停封板检查：买价 >= 前日收盘×1.10×0.99 → 买不进
+                        if i > 0 and prev_close is not None and code in prev_close.index:
+                            prev_c = prev_close[code]
+                            if not pd.isna(prev_c) and prev_c > 0:
+                                if buy_price >= prev_c * 1.10 * 0.99:
+                                    continue
                         # 用 core/account.py 的 buy（shares 模式）
                         adj = buy_price * (1 + TradingCosts().slippage_rate)
                         shares = int(per_stock / adj / 100) * 100

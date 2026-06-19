@@ -354,6 +354,7 @@ score = 缩量加分(0~3.0) + 收窄加分(0~2.0) + 活跃加分(0~1.0) + 趋势
 5. v20c 用软约束替代硬过滤，大幅提高选股率（24%→80%+）
 
 **当前 V20Config（2026-07-12 确认）：**
+> ⚠️ **面板顺序历史 bug（2026-07-24 发现）**：`v20_tail_pick.py` 的 `load_panel()` 把 `panels[3]` 当 high、`panels[4]` 当 low、`panels[5]` 当 open，但 `load_panel_from_db` 返回顺序是 `[close, volume, amount, open, high, low]`。因此旧版 `calc_tail_pick_factors` 计算的 `daily_range = (open - high) / close`（负值），而非正确的 `(high - low) / close`。旧版 WF 结果好是因为错用数据碰巧有效。`wf_runner.py` 已对齐旧版顺序以复现结果，待后续修复 `load_panel()` 后需重新验证策略。
 
 | 参数 | 值 | 说明 |
 |------|-----|------|

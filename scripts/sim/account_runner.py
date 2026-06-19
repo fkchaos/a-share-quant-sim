@@ -164,7 +164,7 @@ def save_account(state, account_id):
         )
     # 写入 trade_log
     if state.trade_log:
-        with get_conn() as conn:
+        with get_conn("trade_log") as conn:
             for t in state.trade_log:
                 code = t.get("code", "")
                 name = t.get("name", "") or name_map.get(code, code)

@@ -1,20 +1,54 @@
 {
-  "date": "2026-06-19",
+  "date": "2026-06-18",
   "account_id": 2,
   "strategy": "v27",
-  "regime": "指数日期缺失",
-  "regime_multiplier": 1.0,
+  "regime": "震荡",
+  "regime_multiplier": 0.7,
   "sell_plan": [],
-  "buy_plan": [],
+  "buy_plan": [
+    {
+      "code": "600362",
+      "name": "江西铜业",
+      "score": 34.61,
+      "price": 53.31,
+      "qty": 700,
+      "target_amount": 39356.55,
+      "position_ratio": 1.0
+    }
+  ],
   "hold_plan": [
     {
-      "code": "600000",
-      "name": "浦发银行",
+      "code": "000032",
+      "name": "深桑达A",
       "current_shares": 500,
-      "price": 0,
-      "cost_price": 10.5,
+      "price": 24.6,
+      "cost_price": 24.6,
+      "action": "hold"
+    },
+    {
+      "code": "002436",
+      "name": "兴森科技",
+      "current_shares": 100,
+      "price": 52.06,
+      "cost_price": 52.06,
+      "action": "hold"
+    },
+    {
+      "code": "300285",
+      "name": "国瓷材料",
+      "current_shares": 100,
+      "price": 89.53,
+      "cost_price": 89.53,
+      "action": "hold"
+    },
+    {
+      "code": "301526",
+      "name": "国际复材",
+      "current_shares": 300,
+      "price": 40.89,
+      "cost_price": 40.89,
       "action": "hold"
     }
   ],
-  "timestamp": "2026-06-19T14:33:05.308253"
+  "timestamp": "2026-06-19T14:41:28.417260"
 }

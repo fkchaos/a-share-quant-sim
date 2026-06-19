@@ -86,9 +86,9 @@ def load_panel(start_date='2021-01-01', end_date='2026-05-31'):
     close_panel  = panels[0]
     volume_panel = panels[1]
     amount_panel = panels[2]
-    high_panel   = panels[3] if len(panels) > 3 else panels[0]
-    low_panel    = panels[4] if len(panels) > 4 else panels[0]
-    open_panel   = panels[5] if len(panels) > 5 else panels[0]
+    open_panel   = panels[3] if len(panels) > 3 else panels[0]
+    high_panel   = panels[4] if len(panels) > 4 else panels[0]
+    low_panel    = panels[5] if len(panels) > 5 else panels[0]
 
     # 流动性筛选
     avg_amount = amount_panel.rolling(20).mean() / 1e4

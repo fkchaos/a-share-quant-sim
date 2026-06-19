@@ -50,7 +50,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     t0 = time.time()
     tpl, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True)
     close_panel, volume_panel, amount_panel = tpl[0], tpl[1], tpl[2]
-    high_panel, low_panel, open_panel = tpl[3], tpl[4], tpl[5]
+    open_panel, high_panel, low_panel = tpl[3], tpl[4], tpl[5]
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只")
     print(f"  耗时 {time.time()-t0:.1f}s")
 

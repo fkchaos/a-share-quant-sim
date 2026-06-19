@@ -44,7 +44,7 @@ STOCKS_DB = os.environ.get("QUANT_STOCKS_DB", "") or _db_path("quant_stocks.db")
 ACCOUNTS_DB = os.environ.get("QUANT_ACCOUNTS_DB", "") or _db_path("quant_accounts.db")
 
 # 表名 → DB 文件映射
-_STOCK_TABLES = {"stock_pool", "daily_kline", "indicators", "industry_map"}
+_STOCK_TABLES = {"stock_pool", "daily_kline", "index_kline", "indicators", "industry_map"}
 _ACCOUNT_TABLES = {"account", "holdings", "trade_log"}
 
 
@@ -143,6 +143,21 @@ def _init_stocks_db():
 
             CREATE INDEX IF NOT EXISTS idx_kline_date ON daily_kline(date);
             CREATE INDEX IF NOT EXISTS idx_kline_code ON daily_kline(code);
+
+            CREATE TABLE IF NOT EXISTS index_kline (
+                code    TEXT NOT NULL,
+                date    TEXT NOT NULL,
+                open    REAL,
+                high    REAL,
+                low     REAL,
+                close   REAL,
+                volume  REAL,
+                amount  REAL,
+                PRIMARY KEY (code, date)
+            ) WITHOUT ROWID;
+
+            CREATE INDEX IF NOT EXISTS idx_ikline_date ON index_kline(date);
+            CREATE INDEX IF NOT EXISTS idx_ikline_code ON index_kline(code);
 
             CREATE TABLE IF NOT EXISTS indicators (
                 code        TEXT NOT NULL,
@@ -256,6 +271,61 @@ def upsert_kline_batch(records):
             records,
         )
 
+
+# ── 指数K线 ─────────────────────────────────────────────────
+
+def upsert_index_batch(records):
+    """批量写入 [(code,date,open,high,low,close,volume,amount), ...]"""
+    with get_conn("index_kline") as conn:
+        conn.executemany(
+            """INSERT OR REPLACE INTO index_kline(code,date,open,high,low,close,volume,amount)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            records,
+        )
+
+
+def upsert_index(code, date, open_, high, low, close, volume, amount):
+    with get_conn("index_kline") as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO index_kline(code,date,open,high,low,close,volume,amount)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (code, date, open_, high, low, close, volume, amount),
+        )
+
+
+def get_index_kline(code, limit=None, start_date=None, end_date=None):
+    """返回某条指数的K线，按日期升序"""
+    with get_conn("index_kline") as conn:
+        sql = "SELECT * FROM index_kline WHERE code=?"
+        params = [code]
+        if start_date:
+            sql += " AND date>=?"
+            params.append(start_date)
+        if end_date:
+            sql += " AND date<=?"
+            params.append(end_date)
+        sql += " ORDER BY date"
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+        return conn.execute(sql, params).fetchall()
+
+
+def get_all_index_codes():
+    """返回 index_kline 中所有不同的 code"""
+    with get_conn("index_kline") as conn:
+        rows = conn.execute("SELECT DISTINCT code FROM index_kline ORDER BY code").fetchall()
+        return [r["code"] for r in rows]
+
+
+def get_index_latest_date(code):
+    """返回某条指数最新日期"""
+    with get_conn("index_kline") as conn:
+        row = conn.execute("SELECT MAX(date) as d FROM index_kline WHERE code=?", (code,)).fetchone()
+        return row["d"] if row else None
+
+
+# ── 股票日K线（继续）──────────────────────────────────────────
 
 def get_kline(code, limit=None, start_date=None, end_date=None):
     """返回某只股票的日K线，按日期升序"""

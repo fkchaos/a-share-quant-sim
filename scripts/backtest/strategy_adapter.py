@@ -197,12 +197,13 @@ class StrategyAdapter:
         if not merged.get("REGIME_ENABLED", False):
             return ("未启用", 1.0)
 
+        from core.db import get_index_kline
         INDEX_CODE = "sh000001"
-        kl = get_kline(INDEX_CODE)
+        kl = get_index_kline(INDEX_CODE)
         if not kl:
             return ("指数数据缺失", 1.0)
 
-        idx_df = pd.DataFrame(kl)
+        idx_df = pd.DataFrame([dict(r) for r in kl])
         idx_df["date"] = pd.to_datetime(idx_df["date"])
         idx_df = idx_df.set_index("date").sort_index()
         idx_df = idx_df[idx_df["volume"] > 0]

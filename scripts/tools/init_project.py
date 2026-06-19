@@ -192,6 +192,105 @@ def step_init_kline(start_year=2020):
     print(f"     耗时: {t_total:.1f}s (失败{fail_count})")
     return True
 
+DEFAULT_INDICES = [
+    ("sh000001", "上证指数"),
+    ("sz399001", "深证成指"),
+    ("sz399006", "创业板指"),
+]
+
+def step_init_indices(start_year=2020):
+    """下载指数K线数据"""
+    from core.db import upsert_index_batch
+    from scripts.tools.update_daily_data import fetch_tencent_kline
+    import asyncio
+    from datetime import date, timedelta
+
+    MAX_CHUNK = 2000
+    today = date.today()
+    start_date = date(start_year, 1, 1)
+
+    # 计算分段
+    chunks = []
+    remaining_end = today
+    while remaining_end > start_date:
+        chunk_start = max(start_date, remaining_end - timedelta(days=MAX_CHUNK - 1))
+        days_param = (today - chunk_start).days
+        if days_param <= 0:
+            break
+        days_param = min(days_param, MAX_CHUNK)
+        if not chunks or chunks[-1][0] != days_param:
+            chunks.append((days_param, chunk_start))
+        remaining_end = chunk_start - timedelta(days=1)
+    chunks.reverse()
+
+    print(f"🔄 下载 {len(DEFAULT_INDICES)} 个指数 {start_year}年1月1日至今的K线")
+    print(f"   分段: {len(chunks)} 段 (并发=30)")
+
+    t0 = time.time()
+    all_records = []
+    ok_count = 0
+    fail_count = 0
+    CONCURRENCY = 30
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+
+    async def fetch_one(idx_code, days_param):
+        nonlocal ok_count, fail_count
+        async with semaphore:
+            loop = asyncio.get_event_loop()
+            try:
+                df = await loop.run_in_executor(None, fetch_tencent_kline, idx_code, days_param)
+                if df is not None and len(df) > 0:
+                    records = []
+                    for date_idx, row in df.iterrows():
+                        date_str = str(date_idx)[:10]
+                        records.append((
+                            idx_code, date_str,
+                            float(row.get("open", 0) or 0),
+                            float(row.get("high", 0) or 0),
+                            float(row.get("low", 0) or 0),
+                            float(row.get("close", 0) or 0),
+                            float(row.get("volume", 0) or 0),
+                            float(row.get("amount", 0) or 0),
+                        ))
+                    return records
+                else:
+                    return []
+            except Exception:
+                return []
+
+    async def run_all():
+        tasks = []
+        for days_param, chunk_start in chunks:
+            for idx_code, _ in DEFAULT_INDICES:
+                tasks.append((idx_code, fetch_one(idx_code, days_param)))
+        results = await asyncio.gather(*[t[1] for t in tasks])
+        seen = set()
+        for records in results:
+            for rec in records:
+                key = (rec[0], rec[1])
+                if key not in seen:
+                    seen.add(key)
+                    all_records.append(rec)
+
+    asyncio.run(run_all())
+
+    ok_codes = set(r[0] for r in all_records)
+    ok_count = len(ok_codes)
+    fail_count = len(DEFAULT_INDICES) - ok_count
+
+    if all_records:
+        upsert_index_batch(all_records)
+
+    t_total = time.time() - t0
+    dates = sorted(set(r[1] for r in all_records))
+    earliest = dates[0] if dates else "无"
+    latest = dates[-1] if dates else "无"
+    print(f"  ✅ 指数K线: {ok_count}/{len(DEFAULT_INDICES)} 成功, {len(all_records)} 条记录")
+    print(f"     日期范围: {earliest} ~ {latest}")
+    print(f"     耗时: {t_total:.1f}s (失败{fail_count})")
+    return True
+
+
 def step_init_accounts():
     """初始化模拟账户（空账户，策略由用户自行绑定）"""
     from core.db import create_account, list_accounts
@@ -221,6 +320,7 @@ def main():
     parser.add_argument("--db-only", action="store_true", help="只建表")
     parser.add_argument("--pool-only", action="store_true", help="只更新股票池")
     parser.add_argument("--kline-only", action="store_true", help="只下载K线")
+    parser.add_argument("--indices", action="store_true", help="只下载指数K线（可与 --kline-only 同时使用）")
     parser.add_argument("--accounts", action="store_true", help="只初始化账户")
     parser.add_argument("--start-year", type=int, default=2020, help="K线数据起始年份 (默认: 2020)")
     args = parser.parse_args()
@@ -231,7 +331,7 @@ def main():
     print()
 
     # 如果没有指定特定步骤，执行完整初始化
-    full_init = not (args.db_only or args.pool_only or args.kline_only or args.accounts)
+    full_init = not (args.db_only or args.pool_only or args.kline_only or args.indices or args.accounts)
 
     if full_init or args.db_only:
         print("📦 Step 1: 建表...")
@@ -249,6 +349,17 @@ def main():
     if full_init or args.kline_only:
         print(f"📦 Step 3: 下载日K线 (起始年份: {args.start_year})...")
         step_init_kline(start_year=args.start_year)
+
+    if full_init or args.kline_only:
+        print(f"📦 Step 3b: 下载指数K线 (起始年份: {args.start_year})...")
+        step_init_indices(start_year=args.start_year)
+
+    if args.indices:
+        print(f"📦 Step 指数: 下载指数K线 (起始年份: {args.start_year})...")
+        # 先确保表存在
+        from core.db import init_db
+        init_db()
+        step_init_indices(start_year=args.start_year)
 
     if full_init or args.accounts:
         print("📦 Step 4: 初始化账户...")

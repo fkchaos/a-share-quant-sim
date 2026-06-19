@@ -49,7 +49,9 @@ def fetch_tencent_kline(code, days=30):
     返回: DataFrame with columns [open, high, low, close, volume, amount]
     """
     # 判断市场前缀
-    if code.startswith('6') or code.startswith('9'):
+    if code.startswith('sh') or code.startswith('sz'):
+        tx_code = code  # 已带前缀（如指数 sh000001、深证 sz399001）
+    elif code.startswith('6') or code.startswith('9'):
         tx_code = f"sh{code}"
     elif code.startswith('0') or code.startswith('3') or code.startswith('2'):
         tx_code = f"sz{code}"

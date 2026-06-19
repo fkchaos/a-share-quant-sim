@@ -2,7 +2,7 @@
 """
 scripts/backtest/strategy_adapter.py — 统一策略适配器
 =====================================================
-所有策略（v27/v20c/v11b/内置）的统一接口层。
+所有策略（v27/v11b/内置）的统一接口层。v20c 已退役。
 
 职责：
 1. 策略注册表：策略名 → 选股函数 + 风控参数 + 市场状态参数
@@ -63,26 +63,9 @@ class StrategyAdapter:
             "REGIME_BEAR_ALLOC": 0.3,
         }
 
-        # ── v20c: 尾盘缩量 ──
-        self._select_fns["v20c"] = self._v20c_select
-        self._risk_params["v20c"] = {
-            "STOP_LOSS": -0.05,
-            "TAKE_PROFIT": 0.15,
-            "HOLD_DAYS_MAX": 2,
-            "HOLD_DAYS_EXTEND": 7,
-            "HOLD_DAYS_EXTEND_PNL": 0.03,
-            "MAX_DAILY_BUY": 8,
-            "MAX_POSITION": 0.30,
-            "INITIAL_CAPITAL": 200000,
-        }
-        self._regime_params["v20c"] = {
-            "REGIME_ENABLED": True,
-            "REGIME_MA_PERIOD": 20,
-            "REGIME_SLOPE_DAYS": 5,
-            "REGIME_BULL_ALLOC": 1.0,
-            "REGIME_SIDEWAYS_ALLOC": 0.7,
-            "REGIME_BEAR_ALLOC": 0.3,
-        }
+        # ── v20c: 已退役（2026-07-24）──
+        # 面板顺序 bug 修复后策略失效（WF 5/16，全量 -67%，核心因子 IC≈0）
+        # 代码保留在 scripts/strategies/v20_tail_pick.py，不注册到适配器
 
     # ── 统一选股接口 ──────────────────────────────────────────────
 
@@ -94,7 +77,7 @@ class StrategyAdapter:
         统一选股接口。
 
         参数:
-            strategy_name: 策略名 ("v27" / "v20c")
+            strategy_name: 策略名 ("v27")
             factors: dict — calc_factors() 返回的因子面板
             date: Timestamp — 选股日期
             close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel:
@@ -126,22 +109,7 @@ class StrategyAdapter:
             merged_params.update(params)
         return select_stocks_v27(factors, date, current_holdings, merged_params)
 
-    def _v20c_select(self, factors, date, close_panel, volume_panel, amount_panel,
-                     high_panel, low_panel, open_panel, current_holdings, params):
-        """v20c 选股 — 委托给 v20_tail_pick.py，统一返回 list[(code, score)]"""
-        from scripts.strategies.v20_tail_pick import calc_tail_pick_factors, select_stocks_tail_pick
-
-        # 如果 factors 是 None 或原始面板，先计算因子
-        if factors is None or "vol_ratio" not in factors:
-            factors = calc_tail_pick_factors(close_panel, volume_panel, amount_panel,
-                                             high_panel, low_panel)
-
-        codes = select_stocks_tail_pick(factors, date, close_panel, volume_panel,
-                                        amount_panel, high_panel, low_panel,
-                                        current_holdings)
-        # select_stocks_tail_pick 返回 list[str]，统一转为 list[(code, score)]
-        # 注意：板块过滤由调用方（account_runner/wf_runner）根据策略配置决定
-        return [(c, 1.0) for c in codes]
+    # v20c 已退役，_v20c_select 方法移除
 
     # ── 统一风控接口 ──────────────────────────────────────────────
 

@@ -7,7 +7,7 @@ scripts/backtest/wf_runner.py — 通用 Walk-Forward 运行器
 
 用法:
     python scripts/backtest/wf_runner.py --strategy v27
-    python scripts/backtest/wf_runner.py --strategy v20c --train 252 --test 126 --step 63
+    python scripts/backtest/wf_runner.py --strategy v27 --train 252 --test 126 --step 63  # v20c 已退役
     python scripts/backtest/wf_runner.py --strategy v27  # 默认 train=252, test=252, step=252
 """
 import sys
@@ -64,7 +64,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     # ── 获取策略参数 ──
     risk_params = adapter.get_risk_params(strategy_name)
     regime_params = adapter.get_regime_params(strategy_name)
-    initial_capital = risk_params.get("INITIAL_CAPITAL", 100000 if strategy_name in ("v27", "v20c") else 200000)
+    initial_capital = risk_params.get("INITIAL_CAPITAL", 100000 if strategy_name == "v27" else 200000)
     max_holdings = risk_params.get("HOLD_DAYS_MAX", 8)
     max_daily_buy = risk_params.get("MAX_DAILY_BUY", 8)
     max_position = risk_params.get("MAX_POSITION", 0.30)
@@ -238,10 +238,7 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v27_select import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
-    elif strategy_name == "v20c":
-        from scripts.strategies.v20_tail_pick import calc_tail_pick_factors
-        return calc_tail_pick_factors(close_panel, volume_panel, amount_panel,
-                                      high_panel, low_panel)
+    # v20c 已退役
     else:
         raise ValueError(f"不支持的策略: {strategy_name}")
 
@@ -259,7 +256,7 @@ def _slice_factors(factors, start_idx, end_idx):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="通用 Walk-Forward 运行器")
-    parser.add_argument("--strategy", required=True, help="策略名 (v27/v20c)")
+    parser.add_argument("--strategy", required=True, help="策略名 (v27)，v20c 已退役")
     parser.add_argument("--train", type=int, default=252, help="训练期天数 (默认: 252)")
     parser.add_argument("--test", type=int, default=252, help="测试期天数 (默认: 252)")
     parser.add_argument("--step", type=int, default=252, help="滑动步长 (默认: 252)")

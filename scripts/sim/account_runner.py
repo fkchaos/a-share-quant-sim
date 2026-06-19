@@ -10,7 +10,7 @@ scripts/sim/account_runner.py — 统一模拟盘入口
     python scripts/sim/account_runner.py --strategy v27 report_only
 
     python scripts/sim/account_runner.py --strategy v11b intraday_signal
-    python scripts/sim/account_runner.py --strategy v20c tail_signal
+    python scripts/sim/account_runner.py --strategy v27 intraday_signal
 
 设计:
     - 账户操作（load/save/风控/执行）统一在此脚本
@@ -203,7 +203,7 @@ def run_signal(strategy_name, date):
 
     logger.info(f"=== {strategy_name} 信号 {date} ===")
 
-    # 加载数据（v20c 需要全市场选股，不过滤科创板）
+    # v20c 已退役，保留兼容代码但不执行
     if strategy_name == "v20c":
         codes = list(get_all_codes())
     else:
@@ -549,7 +549,7 @@ def run_report(strategy_name, date):
 # ── 入口 ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="统一模拟盘入口")
-    parser.add_argument("--strategy", required=True, choices=["v11b", "v27", "v20c", "all"], help="策略名称（all=全部）")
+    parser.add_argument("--strategy", required=True, choices=["v11b", "v27", "v20c(retired)", "all"], help="策略名称（all=全部）")
     parser.add_argument("mode", choices=["intraday_signal", "intraday_execute", "tail_signal", "tail_execute", "report_only"], help="运行模式")
     parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="交易日期")
     args = parser.parse_args()

@@ -51,6 +51,8 @@ class StrategyAdapter:
             "HOLD_DAYS_MAX": 5,
             "HOLD_DAYS_EXTEND": 7,
             "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
         }
         self._regime_params["v27"] = {
             "REGIME_ENABLED": True,
@@ -64,11 +66,14 @@ class StrategyAdapter:
         # ── v20c: 尾盘缩量 ──
         self._select_fns["v20c"] = self._v20c_select
         self._risk_params["v20c"] = {
-            "STOP_LOSS": -0.02,
-            "TAKE_PROFIT": 0.05,
-            "HOLD_DAYS_MAX": 5,
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.15,
+            "HOLD_DAYS_MAX": 2,
             "HOLD_DAYS_EXTEND": 7,
             "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 8,
+            "MAX_POSITION": 0.30,
+            "INITIAL_CAPITAL": 200000,
         }
         self._regime_params["v20c"] = {
             "REGIME_ENABLED": True,
@@ -134,9 +139,8 @@ class StrategyAdapter:
         codes = select_stocks_tail_pick(factors, date, close_panel, volume_panel,
                                         amount_panel, high_panel, low_panel,
                                         current_holdings)
-        # 排除科创板/北交所等（与 account_runner.py 一致）
-        codes = [c for c in codes if not c.startswith(('688', '689', '8', '4', '2'))]
         # select_stocks_tail_pick 返回 list[str]，统一转为 list[(code, score)]
+        # 注意：板块过滤由调用方（account_runner/wf_runner）根据策略配置决定
         return [(c, 1.0) for c in codes]
 
     # ── 统一风控接口 ──────────────────────────────────────────────

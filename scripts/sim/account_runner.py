@@ -203,8 +203,11 @@ def run_signal(strategy_name, date):
 
     logger.info(f"=== {strategy_name} 信号 {date} ===")
 
-    # 加载数据
-    codes = [c for c in get_all_codes() if not c.startswith(('688', '689', '8', '4', '2'))]
+    # 加载数据（v20c 需要全市场选股，不过滤科创板）
+    if strategy_name == "v20c":
+        codes = list(get_all_codes())
+    else:
+        codes = [c for c in get_all_codes() if not c.startswith(('688', '689', '8', '4', '2'))]
     panels = load_panel(codes)
     if not panels:
         logger.error("数据加载失败")

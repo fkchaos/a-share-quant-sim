@@ -165,6 +165,22 @@ def step_init_kline(start_year=2020):
     fail_count = len(codes) - ok_count
 
     if all_records:
+        # amount 单位检查：DB 统一为元（非分）
+        # amount / volume 应 ≈ close（允许 ±30% 误差）
+        bad_amount = 0
+        for rec in all_records:
+            code, date_str, o, h, l, c, v, a = rec
+            if v > 0 and c > 0:
+                ratio = a / (v * c)
+                if ratio < 0.5 or ratio > 2.0:
+                    bad_amount += 1
+                    if bad_amount <= 3:
+                        print(f"  ⚠️ amount 异常: {code} {date_str} amount={a:.0f} volume={v:.0f} close={c:.2f} ratio={ratio:.2f}")
+        if bad_amount > 0:
+            print(f"  ⚠️ 共 {bad_amount} 条 amount 异常记录（已跳过）")
+            all_records = [r for r in all_records
+                          if not (r[6] > 0 and r[5] > 0 and not (0.5 <= r[7] / (r[6] * r[5]) <= 2.0))]
+
         upsert_kline_batch(all_records)
 
     t_total = time.time() - t0

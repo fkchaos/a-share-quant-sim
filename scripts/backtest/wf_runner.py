@@ -64,10 +64,10 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     # ── 获取策略参数 ──
     risk_params = adapter.get_risk_params(strategy_name)
     regime_params = adapter.get_regime_params(strategy_name)
-    initial_capital = 100000 if strategy_name in ("v27", "v20c") else 200000
+    initial_capital = risk_params.get("INITIAL_CAPITAL", 100000 if strategy_name in ("v27", "v20c") else 200000)
     max_holdings = risk_params.get("HOLD_DAYS_MAX", 8)
-    max_daily_buy = 4
-    max_position = 0.20
+    max_daily_buy = risk_params.get("MAX_DAILY_BUY", 8)
+    max_position = risk_params.get("MAX_POSITION", 0.30)
 
     # ── WF 循环 ──
     print("\n[3/4] 运行 Walk-Forward...")
@@ -81,7 +81,11 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
         end_idx = min(start_idx + train_days + test_days, total_days)
 
         win_close = close_panel.iloc[start_idx:end_idx]
+        win_vol = volume_panel.iloc[start_idx:end_idx]
+        win_amt = amount_panel.iloc[start_idx:end_idx]
         win_open = open_panel.iloc[start_idx:end_idx]
+        win_hi = high_panel.iloc[start_idx:end_idx]
+        win_lo = low_panel.iloc[start_idx:end_idx]
         win_factors = _slice_factors(factors, start_idx, end_idx)
 
         # 初始化账户（用 core/account.py 的 PortfolioState）
@@ -129,14 +133,10 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
             # 选股（每天调用，和模拟盘一致）
             if len(state.holdings) < max_holdings:
                 cands = adapter.select(strategy_name, win_factors, date,
-                                       win_close, win_close, win_close,
-                                       win_close, win_close, win_open,
+                                       win_close, win_vol, win_amt,
+                                       win_hi, win_lo, win_open,
                                        current_holdings=state.holdings,
                                        params=risk_params)
-
-                # 市场过滤：排除科创板/北交所等（与 account_runner.py 一致）
-                cands = [(c, s) for c, s in cands
-                         if not c.startswith(('688', '689', '8', '4', '2'))]
 
                 if cands and state.cash > initial_capital * 0.03:
                     avail = state.cash - initial_capital * 0.03

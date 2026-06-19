@@ -1,0 +1,47 @@
+{
+  "date": "2024-06-03",
+  "strategy": "v20c",
+  "regime": "指数数据缺失",
+  "regime_multiplier": 1.0,
+  "sell_plan": [],
+  "buy_plan": [
+    {
+      "code": "002851",
+      "name": "麦格米特",
+      "score": 1.0,
+      "price": 27.68,
+      "qty": 900,
+      "target_amount": 25000.0,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "300346",
+      "name": "南大光电",
+      "score": 1.0,
+      "price": 21.76,
+      "qty": 1100,
+      "target_amount": 25000.0,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "300073",
+      "name": "当升科技",
+      "score": 1.0,
+      "price": 38.3,
+      "qty": 600,
+      "target_amount": 25000.0,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "003035",
+      "name": "南网能源",
+      "score": 1.0,
+      "price": 4.83,
+      "qty": 5100,
+      "target_amount": 25000.0,
+      "position_ratio": 0.25
+    }
+  ],
+  "hold_plan": [],
+  "timestamp": "2026-06-18T23:19:14.814255"
+}

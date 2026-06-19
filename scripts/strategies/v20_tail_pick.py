@@ -34,8 +34,8 @@ REPORT_DIR = os.path.join(DATA_DIR, "backtest_results")
 # ============================================================
 class V20Config:
     # 选股池
-    min_liquidity = 100     # 最小日均成交额 100万
-    max_liquidity = 20000   # 最大日均成交额 2亿
+    min_liquidity = 1       # 最小日均成交额 1万（DB amount 单位：元，/1e4 转万元）
+    max_liquidity = 200     # 最大日均成交额 200万
     exclude_st = True
     exclude_new_ipo_days = 60
 
@@ -82,11 +82,12 @@ def load_panel(start_date='2021-01-01', end_date='2026-05-31'):
         panels = loaded[0]
     else:
         panels = loaded
+    # panels: tuple of 3-6 DataFrames (close, volume, amount, [open], [high], [low])
     close_panel  = panels[0]
     volume_panel = panels[1]
     amount_panel = panels[2]
-    high_panel   = panels[3]
-    low_panel    = panels[4]
+    high_panel   = panels[3] if len(panels) > 3 else panels[0]
+    low_panel    = panels[4] if len(panels) > 4 else panels[0]
     open_panel   = panels[5] if len(panels) > 5 else panels[0]
 
     # 流动性筛选

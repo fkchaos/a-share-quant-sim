@@ -19,6 +19,9 @@ import os
 import json
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Tuple, List, Union
+
+import pandas as pd
 
 
 def _default_db_dir():
@@ -603,7 +606,7 @@ def load_kline_for_sim(codes=None, lookback=250):
     return result
 
 
-def load_panel_from_db(start_date=None, end_date=None, need_open=False, need_hl=False, pool="zz800"):
+def load_panel_from_db(start_date=None, end_date=None, need_open=False, need_hl=False, pool="zz800") -> tuple[tuple[pd.DataFrame, ...], list[str]]:
     """
     从 SQLite 数据库加载日K线面板数据。
 

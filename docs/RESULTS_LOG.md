@@ -4,6 +4,14 @@
 
 ## 结果记录（按时间倒序）
 
+2026-07-24 18:00:00 | **v20c 面板顺序 bug 修复（策略失效）** | close+WF | 2021-01~2025-12 | **-67%（全量）** | **-0.96（WF夏普）** | **-13.6%** | — | 面板顺序修复后 v20c 完全失效：WF 5/16(31%)正收益，全量-67%。根因：v20_tail_pick.load_panel() 历史上把 tpl[3] 当 high、[4] 当 low、[5] 当 open（全错），daily_range=(open-high)/close 负值碰巧有预测能力。修复后 range_ratio IC=-0.002，无预测能力。旧版 WF 15/16(94%)好结果完全源于错位假阳性。**v20c 需重新设计因子或退役。** v27 不受影响（WF 15/100%，夏普5.96）。关键教训：①DB amount 单位是元，换数据源必须确认单位；②load_panel_from_db 返回顺序 [close,volume,amount,open,high,low]，解包不能错位；③策略因子有效性验证必须基于正确数据。
+
+# 回测结果记录
+
+> 每次跑完回测后追加到此文件。Date 格式: YYYY-MM-DD HH:MM:SS（CST），便于 git log 追溯。
+
+## 结果记录（按时间倒序）
+
 2026-07-17 16:00:00 | **v28 Kronos AI 增强（调研完成，代码就绪，暂缓上线）** | close+WF | 2022-01~2026-05 | — | — | — | — | Kronos(financial K线基础模型, AAAI 2026)零样本对A股完全无效：kronos_ret全部为负，kronos_conf全部=5.0(截断)。代码已提交(feature/v28-kronos)，需GPU微调后才能验证。已安装agent-reach/last30days/ai-daily-news三个skill 🔬
 
 2026-07-14 12:00:00 | **v27 价量共振（WF 通过，采纳）** | close+WF | 2022-01~2026-05 | **251%** | **5.72** | **-6.7%** | **8.66** | mom_5>2% + pv_corr_20价量共振 + gap/illiq/boll。WF: 15/15(100%)正收益，夏普8.66，回撤1.74% ✅ 已上线账户2

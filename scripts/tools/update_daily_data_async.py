@@ -64,25 +64,66 @@ async def async_update_all(write_csv=False):
 
     # 按股票逐个处理：请求到的数据直接 upsert
     all_records = []
+    skip_codes = {}  # code -> skip_reason
     for code, df, err in results:
         if df is None or len(df) == 0:
             db_fail += 1
             continue
         try:
+            code_records = []
+            bad_count = 0
             for date_idx, row in df.iterrows():
                 date_str = str(date_idx)[:10]
-                all_records.append((
-                    code, date_str,
-                    float(row.get("open", 0) or 0),
-                    float(row.get("high", 0) or 0),
-                    float(row.get("low", 0) or 0),
-                    float(row.get("close", 0) or 0),
-                    float(row.get("volume", 0) or 0),
-                    float(row.get("amount", 0) or 0),
-                ))
+                o = float(row.get("open", 0) or 0)
+                h = float(row.get("high", 0) or 0)
+                l = float(row.get("low", 0) or 0)
+                c = float(row.get("close", 0) or 0)
+                v = float(row.get("volume", 0) or 0)
+                a = float(row.get("amount", 0) or 0)
+
+                # ── 数据校验 ──
+                # 1. 价格必须 > 0
+                if c <= 0 or o <= 0:
+                    bad_count += 1
+                    continue
+                # 2. high >= low
+                if h < l:
+                    bad_count += 1
+                    continue
+                # 3. high >= close >= low
+                if c > h or c < l:
+                    bad_count += 1
+                    continue
+                # 4. volume > 0
+                if v <= 0:
+                    bad_count += 1
+                    continue
+                # 5. amount ≈ close × volume（误差 < 50%）
+                if v > 0 and c > 0:
+                    expected_amount = c * v
+                    if a > 0 and (a < expected_amount * 0.5 or a > expected_amount * 1.5):
+                        bad_count += 1
+                        continue
+
+                code_records.append((code, date_str, o, h, l, c, v, a))
+
+            # 如果单只股票异常数据超过 5 条，跳过全天数据
+            if bad_count > 5:
+                skip_codes[code] = f"异常数据 {bad_count} 条"
+                db_fail += 1
+                continue
+
+            all_records.extend(code_records)
             db_success += 1
         except Exception:
             db_fail += 1
+
+    if skip_codes:
+        print(f"  ⚠️ 跳过 {len(skip_codes)} 只股票（数据异常）：")
+        for code, reason in list(skip_codes.items())[:5]:
+            print(f"    {code}: {reason}")
+        if len(skip_codes) > 5:
+            print(f"    ... 共 {len(skip_codes)} 只")
 
     if all_records:
         upsert_kline_batch(all_records)

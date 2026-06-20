@@ -224,11 +224,9 @@ def is_trade_day(date_str):
     """
     判断是否为交易日：
     1. 周一到周五（weekday 0-4）
-    2. DB 最新 K 线数据 >= date_str 的前一天（数据已更新）
+    2. DB 中有该日期的 K 线数据（排除节假日）
 
-    注意：当天信号生成时，当日K线可能尚未入库（上午跑信号），
-    因此只要 DB 最新数据 >= date_str 的前一天即可。
-    例如：周四跑信号时 DB 最新 >= 周三，周四就认为是交易日。
+    注意：如果当天数据未入库，说明数据更新有问题，跳过是正确的。
 
     参数:
         date_str: 日期字符串，格式 'YYYY-MM-DD'
@@ -236,8 +234,8 @@ def is_trade_day(date_str):
     返回:
         bool: 是否为交易日
     """
-    from datetime import datetime, timedelta
-    from core.db import get_latest_date
+    from datetime import datetime
+    from core.db import get_latest_date, get_kline_df
 
     # 检查星期（周一=0 ... 周五=4）
     try:
@@ -252,9 +250,16 @@ def is_trade_day(date_str):
     if latest is None:
         return False
 
-    # DB 最新数据 >= 前一天，说明数据已更新到该交易日
-    prev_day = (dt - timedelta(days=1)).strftime("%Y-%m-%d")
-    return latest >= prev_day
+    # 当天数据必须已入库
+    if latest < date_str:
+        return False
+
+    # 检查该日期是否有 K 线数据（至少 100 条记录，排除数据缺失）
+    df = get_kline_df(start_date=date_str)
+    if df is None or len(df) < 100:
+        return False
+
+    return True
 
 
 # ── 主流程 ──────────────────────────────────────────────────────

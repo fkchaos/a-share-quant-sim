@@ -138,8 +138,23 @@ def load_account(account_id, stale_days=30):
         if added:
             try:
                 from datetime import datetime as dt
-                buy_dt = dt.strptime(added[:10], "%Y-%m-%d")
-                hd = max(0, (dt.now() - buy_dt).days)
+                from core.db import get_index_kline
+                buy_date = added[:10]
+                # 用中证800指数K线计算交易日天数
+                idx_kl = get_index_kline("sh000001")
+                if idx_kl:
+                    dates = sorted([r["date"] for r in idx_kl if r.get("volume", 0) > 0])
+                    if buy_date in dates and str(dt.now().date()) in dates:
+                        buy_idx = dates.index(buy_date)
+                        today_idx = dates.index(str(dt.now().date()))
+                        hd = max(0, today_idx - buy_idx)
+                    else:
+                        # 回退到日历天数
+                        buy_dt = dt.strptime(buy_date, "%Y-%m-%d")
+                        hd = max(0, (dt.now() - buy_dt).days)
+                else:
+                    buy_dt = dt.strptime(buy_date, "%Y-%m-%d")
+                    hd = max(0, (dt.now() - buy_dt).days)
             except Exception:
                 pass
         holdings[code] = {

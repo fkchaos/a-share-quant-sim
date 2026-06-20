@@ -106,13 +106,20 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
             price_data = win_close.loc[date]
             open_data = win_open.loc[date]
 
-            # 更新 hold_days（从 entry_date 计算）
+            # 更新 hold_days（从 entry_date 计算，用交易日天数而非日历天数）
             for code in list(state.holdings.keys()):
                 info = state.holdings[code]
                 try:
                     entry = pd.Timestamp(info.get('entry_date', str(date)))
                     today = pd.Timestamp(date)
-                    info['hold_days'] = (today - entry).days
+                    # 用面板索引差值计算交易日天数（跳过非交易日）
+                    if entry in win_close.index and today in win_close.index:
+                        entry_idx = win_close.index.get_loc(entry)
+                        today_idx = win_close.index.get_loc(today)
+                        info['hold_days'] = today_idx - entry_idx
+                    else:
+                        # 回退到日历天数
+                        info['hold_days'] = (today - entry).days
                 except Exception:
                     info['hold_days'] = info.get('hold_days', 0) + 1
 

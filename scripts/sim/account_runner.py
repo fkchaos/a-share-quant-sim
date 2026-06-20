@@ -219,10 +219,53 @@ def execute_buys(state, cands, date, spot, params):
     return state
 
 
+# ── 交易日判断 ────────────────────────────────────────────────────
+def is_trade_day(date_str):
+    """
+    判断是否为交易日：
+    1. 周一到周五（weekday 0-4）
+    2. DB 最新 K 线数据 >= date_str 的前一天（数据已更新）
+
+    注意：当天信号生成时，当日K线可能尚未入库（上午跑信号），
+    因此只要 DB 最新数据 >= date_str 的前一天即可。
+    例如：周四跑信号时 DB 最新 >= 周三，周四就认为是交易日。
+
+    参数:
+        date_str: 日期字符串，格式 'YYYY-MM-DD'
+
+    返回:
+        bool: 是否为交易日
+    """
+    from datetime import datetime, timedelta
+    from core.db import get_latest_date
+
+    # 检查星期（周一=0 ... 周五=4）
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return False
+    if dt.weekday() > 4:
+        return False
+
+    # 检查 DB 最新数据日期
+    latest = get_latest_date()
+    if latest is None:
+        return False
+
+    # DB 最新数据 >= 前一天，说明数据已更新到该交易日
+    prev_day = (dt - timedelta(days=1)).strftime("%Y-%m-%d")
+    return latest >= prev_day
+
+
 # ── 主流程 ──────────────────────────────────────────────────────
 def run_signal(account_id, date, strategy_name=None):
     """信号生成：选股 + 风控"""
     t0 = time.time()
+
+    # 交易日检查
+    if not is_trade_day(date):
+        print(f"⏭️ {date} 非交易日，跳过信号生成")
+        return
 
     # 如果没指定策略名，从账户表读取
     if strategy_name is None:
@@ -438,6 +481,11 @@ def run_execute(account_id, date, strategy_name=None):
     """执行交易：先卖后买"""
     import requests
     t0 = time.time()
+
+    # 交易日检查
+    if not is_trade_day(date):
+        print(f"⏭️ {date} 非交易日，跳过交易执行")
+        return
 
     if strategy_name is None:
         strategy_name = _resolve_strategy(account_id)

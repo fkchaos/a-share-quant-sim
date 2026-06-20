@@ -37,3 +37,4 @@ data/quality_factors_cache.csv
 data/*.csv
 quant.db
 *.db
+config/mcporter.json

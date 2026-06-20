@@ -242,6 +242,12 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v29_select import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v32":
+        from scripts.strategies.v32_analyst_expectation import calc_factors
+        from core.strategy_map import load_strategy
+        strategy = load_strategy("v32")
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, strategy["params"])
     # v20c 已退役
     else:
         raise ValueError(f"不支持的策略: {strategy_name}")

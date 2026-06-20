@@ -151,6 +151,36 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v32: 分析师预期因子 ──
+    "v32": {
+        "mode": "custom",
+        "description": "分析师预期因子（SUE代理+盈利预测上调+异常覆盖+综合因子）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v32_analyst_expectation.select_stocks_v32",
+        "calc_factors_fn": "scripts.strategies.v32_analyst_expectation.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.02,
+            "TAKE_PROFIT": 0.05,
+            "MAX_HOLDINGS": 8,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "ANALYST_WEIGHT": 0.30,
+            "SUE_THRESHOLD": 0.0,
+            "FORECAST_UP_THRESHOLD": 0.10,
+            "ANALYST_COVERAGE_MIN": 5,
+            "REGIME_ENABLED": True,
+            "REGIME_MA_PERIOD": 20,
+            "REGIME_SLOPE_DAYS": 5,
+            "REGIME_BULL_ALLOC": 1.0,
+            "REGIME_SIDEWAYS_ALLOC": 0.7,
+            "REGIME_BEAR_ALLOC": 0.3,
+        },
+    },
+
     # ── v31: 价量共振+动量增强（已归档，与 v27 高度重复）──
     # mom_20/mom_40 与 mom_5 相关性 0.3-0.5，非独立信息，预期选股重叠度 >70%
     # 代码保留在 scripts/strategies/v29_select.py，不参与活跃交易

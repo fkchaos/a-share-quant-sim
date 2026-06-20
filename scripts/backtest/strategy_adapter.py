@@ -190,6 +190,13 @@ class StrategyAdapter:
         merged_params = dict(self._risk_params["v35"])
         if params:
             merged_params.update(params)
+        
+        # 环境变量覆盖（用于参数扫描）
+        import os
+        for key in ['SECTOR_MOM_WEIGHT', 'SECTOR_W_SHORT', 'SECTOR_W_MID', 'SECTOR_W_LONG']:
+            if key in os.environ:
+                merged_params[key] = float(os.environ[key])
+        
         return select_stocks_v35(factors, date, current_holdings, merged_params)
 
     def _v33_select(self, factors, date, close_panel, volume_panel, amount_panel,

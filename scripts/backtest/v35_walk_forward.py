@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-scripts/backtest/v35_walk_forward.py — v35 行业轮动 Walk-Forward 回测
+scripts/backtest/v35_walk_forward.py — v35 行业轮动 Walk-Forward 回测（支持参数扫描）
+
+用法:
+    # 默认参数
+    python scripts/backtest/v35_walk_forward.py
+    
+    # 指定权重扫描
+    SECTOR_MOM_WEIGHT=0.4 python scripts/backtest/v35_walk_forward.py
 """
 import sys
 import os
@@ -10,6 +17,19 @@ import argparse
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
+
+# 在导入 wf_runner 之前，通过环境变量覆盖 strategy_map 中的参数
+from core.strategy_map import STRATEGY_MAP
+
+# 读取环境变量覆盖
+if 'SECTOR_MOM_WEIGHT' in os.environ:
+    STRATEGY_MAP['v35']['params']['SECTOR_MOM_WEIGHT'] = float(os.environ['SECTOR_MOM_WEIGHT'])
+if 'SECTOR_W_SHORT' in os.environ:
+    STRATEGY_MAP['v35']['params']['SECTOR_W_SHORT'] = float(os.environ['SECTOR_W_SHORT'])
+if 'SECTOR_W_MID' in os.environ:
+    STRATEGY_MAP['v35']['params']['SECTOR_W_MID'] = float(os.environ['SECTOR_W_MID'])
+if 'SECTOR_W_LONG' in os.environ:
+    STRATEGY_MAP['v35']['params']['SECTOR_W_LONG'] = float(os.environ['SECTOR_W_LONG'])
 
 from scripts.backtest.wf_runner import run_wf
 
@@ -25,8 +45,12 @@ def main():
 
     t0 = time.time()
 
+    # 打印当前使用的参数
+    p = STRATEGY_MAP['v35']['params']
     print("=" * 60)
     print("v35 行业轮动 Walk-Forward 回测")
+    print(f"  SECTOR_MOM_WEIGHT = {p['SECTOR_MOM_WEIGHT']}")
+    print(f"  SECTOR_W_SHORT/MID/LONG = {p['SECTOR_W_SHORT']}/{p['SECTOR_W_MID']}/{p['SECTOR_W_LONG']}")
     print(f"  WF: train={args.train}, test={args.test}, step={args.step}")
     print(f"  区间: {args.start} ~ {args.end}")
     print("=" * 60)
@@ -65,15 +89,6 @@ def main():
     print(f"  平均收益: {avg_return*100:.2f}%")
     print(f"  平均夏普: {avg_sharpe:.3f}")
     print(f"  平均最大回撤: {avg_maxdd*100:.2f}%")
-
-    print("\n各 Fold 详情:")
-    for i, f in enumerate(folds):
-        ret = f.get("test_return", 0) * 100
-        sharpe = f.get("test_sharpe", 0)
-        maxdd = f.get("test_max_drawdown", 0) * 100
-        n_trades = f.get("n_trades", 0)
-        status = "✅" if ret > 0 else "❌"
-        print(f"  Fold {i+1}: {status} 收益={ret:+.2f}% 夏普={sharpe:.3f} 回撤={maxdd:.2f}% 交易={n_trades}次")
 
     elapsed = time.time() - t0
     print(f"\n耗时: {elapsed:.1f}s")

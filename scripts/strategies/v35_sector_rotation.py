@@ -56,13 +56,20 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
                  open_panel=None, params=None):
     """
     计算 v35 行业轮动因子
-
-    返回 dict:
-        sector_momentum: 各股票所属行业分组动量
-        stock_momentum: 个股动量（mom_5）
-        size_group: 市值分组（large/mid/small）
+    支持环境变量覆盖：SECTOR_MOM_WEIGHT, SECTOR_W_SHORT/MID/LONG
     """
+    import os
     p = {**DEFAULT_PARAMS, **(params or {})}
+    
+    # 环境变量覆盖（用于参数扫描）
+    if 'SECTOR_MOM_WEIGHT' in os.environ:
+        p['SECTOR_MOM_WEIGHT'] = float(os.environ['SECTOR_MOM_WEIGHT'])
+    if 'SECTOR_W_SHORT' in os.environ:
+        p['SECTOR_W_SHORT'] = float(os.environ['SECTOR_W_SHORT'])
+    if 'SECTOR_W_MID' in os.environ:
+        p['SECTOR_W_MID'] = float(os.environ['SECTOR_W_MID'])
+    if 'SECTOR_W_LONG' in os.environ:
+        p['SECTOR_W_LONG'] = float(os.environ['SECTOR_W_LONG'])
     eps = 1e-10
 
     returns = close_panel.pct_change()

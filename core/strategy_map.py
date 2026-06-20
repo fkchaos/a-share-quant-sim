@@ -79,7 +79,7 @@ STRATEGY_MAP = {
             "MAX_HOLDINGS": 8,
             "MAX_DAILY_BUY": 4,
             "MAX_POSITION": 0.20,
-            "HOLD_DAYS_MAX": 7,
+            "HOLD_DAYS_MAX": 5,
             "HOLD_DAYS_MIN": 1,
             "HOLD_DAYS_EXTEND": 5,
             "HOLD_DAYS_EXTEND_PNL": 0.03,

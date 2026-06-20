@@ -48,7 +48,7 @@ class StrategyAdapter:
         self._risk_params["v27"] = {
             "STOP_LOSS": -0.015,
             "TAKE_PROFIT": 0.03,
-            "HOLD_DAYS_MAX": 7,
+            "HOLD_DAYS_MAX": 5,
             "HOLD_DAYS_EXTEND": 5,
             "HOLD_DAYS_EXTEND_PNL": 0.03,
             "MAX_DAILY_BUY": 4,

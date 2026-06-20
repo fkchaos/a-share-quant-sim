@@ -352,9 +352,7 @@ def run_backtest(close_panel, score, top_n=12, rebalance_freq=20, stop_loss=0.20
 
             top_stocks = day_score.nlargest(top_n).index.tolist()
 
-            # 排除科创板（688xxx/689xxx）— 股票池包含科创板但不交易
-            top_stocks = [c for c in top_stocks if not (c.startswith('688') or c.startswith('689'))]
-
+            # 选股结果（load_panel_from_db 已排除科创板/北交所）
             if top_stocks:
                 current_pv = portfolio_value(state, date, price_data)
 

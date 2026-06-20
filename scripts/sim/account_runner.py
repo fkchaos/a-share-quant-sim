@@ -41,7 +41,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
-from core.db import get_kline, get_all_codes, get_account, list_accounts, create_account, switch_strategy
+from core.db import get_kline, get_all_codes, get_tradeable_codes, get_account, list_accounts, create_account, switch_strategy
 from core.strategy_map import load_strategy, list_strategy_names
 from scripts.backtest.strategy_adapter import get_adapter
 
@@ -331,11 +331,8 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
     logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} ===")
 
-    # 选股池（排除科创板等）
-    if strategy_name == "v20c":
-        codes = list(get_all_codes())
-    else:
-        codes = [c for c in get_all_codes() if not c.startswith(('688', '689', '8', '4', '2'))]
+    # 选股池（排除科创板/北交所/老三板/B股）
+    codes = get_tradeable_codes()
     panels = load_panel(codes)
     if not panels:
         logger.error("数据加载失败")

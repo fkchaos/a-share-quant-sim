@@ -380,6 +380,12 @@ def get_all_codes():
         return [r["code"] for r in rows]
 
 
+def get_tradeable_codes():
+    """返回可交易的股票代码（排除科创板/北交所/老三板/B股）"""
+    EXCLUDE_PREFIXES = ('688', '689', '8', '4', '2')
+    return [c for c in get_all_codes() if not any(c.startswith(p) for p in EXCLUDE_PREFIXES)]
+
+
 def get_latest_date():
     """返回数据库中最新的交易日"""
     with get_conn("daily_kline") as conn:

@@ -46,10 +46,10 @@ class StrategyAdapter:
         # ── v27: 价量共振 ──
         self._select_fns["v27"] = self._v27_select
         self._risk_params["v27"] = {
-            "STOP_LOSS": -0.02,
-            "TAKE_PROFIT": 0.05,
-            "HOLD_DAYS_MAX": 5,
-            "HOLD_DAYS_EXTEND": 7,
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 7,
+            "HOLD_DAYS_EXTEND": 5,
             "HOLD_DAYS_EXTEND_PNL": 0.03,
             "MAX_DAILY_BUY": 4,
             "MAX_POSITION": 0.20,

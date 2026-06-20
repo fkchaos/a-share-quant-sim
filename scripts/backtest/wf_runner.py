@@ -254,6 +254,12 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         strategy = load_strategy("v33")
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, strategy["params"])
+    elif strategy_name == "v35":
+        from scripts.strategies.v35_sector_rotation import calc_factors
+        from core.strategy_map import load_strategy
+        strategy = load_strategy("v35")
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, strategy["params"])
     # v20c 已退役
     else:
         raise ValueError(f"不支持的策略: {strategy_name}")

@@ -91,6 +91,26 @@ class StrategyAdapter:
             "REGIME_BEAR_ALLOC": 0.3,
         }
 
+        # ── v35: 行业轮动 ──
+        self._select_fns["v35"] = self._v35_select
+        self._risk_params["v35"] = {
+            "STOP_LOSS": -0.02,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+        }
+        self._regime_params["v35"] = {
+            "REGIME_ENABLED": True,
+            "REGIME_MA_PERIOD": 20,
+            "REGIME_SLOPE_DAYS": 5,
+            "REGIME_BULL_ALLOC": 1.0,
+            "REGIME_SIDEWAYS_ALLOC": 0.7,
+            "REGIME_BEAR_ALLOC": 0.3,
+        }
+
         # ── v33: 残差动量 ──
         self._select_fns["v33"] = self._v33_select
         self._risk_params["v33"] = {
@@ -155,6 +175,22 @@ class StrategyAdapter:
 
     # v20c 已退役，_v20c_select 方法移除
     # v31 已归档，_v29_select 方法移除
+
+    def _v35_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params):
+        """v35 选股 — 委托给 v35_sector_rotation.py"""
+        from scripts.strategies.v35_sector_rotation import (
+            calc_factors, select_stocks_v35
+        )
+
+        if factors is None or "sector_momentum" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v35"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v35(factors, date, current_holdings, merged_params)
 
     def _v33_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params):

@@ -182,6 +182,40 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v35: 行业轮动（市值分组代理行业）──
+    "v35": {
+        "mode": "custom",
+        "description": "行业轮动选股（大盘/中/小盘分组动量 + 个股动量加权）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v35_sector_rotation.select_stocks_v35",
+        "calc_factors_fn": "scripts.strategies.v35_sector_rotation.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.02,
+            "TAKE_PROFIT": 0.05,
+            "MAX_HOLDINGS": 8,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "SECTOR_MOM_WEIGHT": 0.30,
+            "SECTOR_SHORT": 5,
+            "SECTOR_MID": 20,
+            "SECTOR_LONG": 60,
+            "SECTOR_W_SHORT": 0.4,
+            "SECTOR_W_MID": 0.3,
+            "SECTOR_W_LONG": 0.3,
+            "MOM_THRESHOLD": 0.01,
+            "REGIME_ENABLED": True,
+            "REGIME_MA_PERIOD": 20,
+            "REGIME_SLOPE_DAYS": 5,
+            "REGIME_BULL_ALLOC": 1.0,
+            "REGIME_SIDEWAYS_ALLOC": 0.7,
+            "REGIME_BEAR_ALLOC": 0.3,
+        },
+    },
+
     # ── v32: 分析师预期因子 ──
     "v32": {
         "mode": "custom",

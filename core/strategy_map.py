@@ -151,6 +151,37 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v33: 残差动量 ──
+    "v33": {
+        "mode": "custom",
+        "description": "残差动量（剥离市场Beta后的个股alpha信号）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v33_residual_momentum.select_stocks_v33",
+        "calc_factors_fn": "scripts.strategies.v33_residual_momentum.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.02,
+            "TAKE_PROFIT": 0.05,
+            "MAX_HOLDINGS": 8,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "RESID_WINDOW": 12,
+            "RESID_LOOKBACK": 6,
+            "RESID_SKIP": 1,
+            "MIN_OBS": 6,
+            "MOM_THRESHOLD": 0.0,
+            "REGIME_ENABLED": True,
+            "REGIME_MA_PERIOD": 20,
+            "REGIME_SLOPE_DAYS": 5,
+            "REGIME_BULL_ALLOC": 1.0,
+            "REGIME_SIDEWAYS_ALLOC": 0.7,
+            "REGIME_BEAR_ALLOC": 0.3,
+        },
+    },
+
     # ── v32: 分析师预期因子 ──
     "v32": {
         "mode": "custom",

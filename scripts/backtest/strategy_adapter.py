@@ -91,6 +91,26 @@ class StrategyAdapter:
             "REGIME_BEAR_ALLOC": 0.3,
         }
 
+        # ── v33: 残差动量 ──
+        self._select_fns["v33"] = self._v33_select
+        self._risk_params["v33"] = {
+            "STOP_LOSS": -0.02,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+        }
+        self._regime_params["v33"] = {
+            "REGIME_ENABLED": True,
+            "REGIME_MA_PERIOD": 20,
+            "REGIME_SLOPE_DAYS": 5,
+            "REGIME_BULL_ALLOC": 1.0,
+            "REGIME_SIDEWAYS_ALLOC": 0.7,
+            "REGIME_BEAR_ALLOC": 0.3,
+        }
+
     # ── 统一选股接口 ──────────────────────────────────────────────
 
     def select(self, strategy_name, factors, date, close_panel=None,
@@ -135,6 +155,22 @@ class StrategyAdapter:
 
     # v20c 已退役，_v20c_select 方法移除
     # v31 已归档，_v29_select 方法移除
+
+    def _v33_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params):
+        """v33 选股 — 委托给 v33_residual_momentum.py"""
+        from scripts.strategies.v33_residual_momentum import (
+            calc_factors, select_stocks_v33
+        )
+
+        if factors is None or "resid_mom" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v33"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v33(factors, date, current_holdings, merged_params)
 
     def _v32_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params):

@@ -4,7 +4,41 @@
 
 ---
 
-## 一、2024-2025 A股因子表现全景
+---
+
+## v32 分析师预期因子 — 已验证
+
+**状态：✅ WF 通过（2026-06-20）**
+
+### 代码位置
+- 选股函数：`scripts/strategies/v32_analyst_expectation.py`
+- 策略注册：`core/strategy_map.py`（"v32"）
+- WF 脚本：`scripts/backtest/v32_walk_forward.py`
+- Adapter：`scripts/backtest/strategy_adapter.py`（_v32_select）
+
+### WF 结果（2022-01~2026-06，800只，train=252/test=63/step=63）
+- 正收益 fold：**13/13 (100%)** ✅
+- 测试期平均收益率：26.07%
+- 测试期平均夏普：**6.525**
+- 测试期平均回撤：2.67%
+
+### IC 分析（2025-06~2026-06，近1年）
+| 因子 | IC均值 | ICIR | +% | vs mom_5 相关性 |
+|------|--------|------|-----|---------------|
+| analyst_composite | +0.0283 | +0.33 | 62.9% | -0.21 ✅ |
+| sue_proxy | +0.0051 | +0.04 | 42.9% | +0.05 ✅ |
+| forecast_up_proxy | +0.0043 | +0.04 | 52.0% | +0.53 ⚠️ |
+| analyst_coverage_proxy | +0.0092 | +0.06 | 46.8% | -0.95 ⚠️ |
+
+### 注意事项
+- 当前使用**行情代理因子**近似分析师预期（非真正的一致预期数据）
+- 后续接入 Tushare `stock_comment_consensus()` 可获取真正的一致预期数据
+- 代理因子中 sue_proxy 与 mom_5 独立性最好（相关性0.05）
+- analyst_composite 综合因子 ICIR=0.33，有独立 alpha
+
+---
+
+### 1. 2024-2025 A股因子表现全景
 
 ### 1.1 年度风格切换剧烈
 

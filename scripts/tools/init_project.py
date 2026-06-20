@@ -7,7 +7,8 @@ init_project.py — 项目初始化（从零开始）
   python scripts/tools/init_project.py --db-only    # 只建表
   python scripts/tools/init_project.py --pool-only  # 只更新股票池
   python scripts/tools/init_project.py --kline-only  # 只下载K线（需先有股票池）
-  python scripts/tools/init_project.py --accounts   # 只初始化账户
+  python scripts/tools/init_project.py --accounts         # 只初始化账户
+  python scripts/tools/init_project.py --accounts --force # 强制重建账户（清空已有数据）
 
 依赖: pip install pandas numpy requests
 """
@@ -291,12 +292,21 @@ def step_init_indices(start_year=2020):
     return True
 
 
-def step_init_accounts():
+def step_init_accounts(force=False):
     """初始化模拟账户（空账户，策略由用户自行绑定）"""
-    from core.db import create_account, list_accounts
+    from core.db import create_account, list_accounts, get_conn
 
     existing = list_accounts()
     existing_ids = {a["id"] for a in existing}
+
+    # 如果要强制重建，先清空
+    if force:
+        with get_conn("account") as conn:
+            conn.execute("DELETE FROM holdings")
+            conn.execute("DELETE FROM trade_log")
+            conn.execute("DELETE FROM account")
+        print("  ⚠️ 已清空所有账户、持仓、交易记录")
+        existing_ids = set()
 
     accounts = [
         (1, "账户1", 200000),
@@ -322,6 +332,7 @@ def main():
     parser.add_argument("--kline-only", action="store_true", help="只下载K线")
     parser.add_argument("--indices", action="store_true", help="只下载指数K线（可与 --kline-only 同时使用）")
     parser.add_argument("--accounts", action="store_true", help="只初始化账户")
+    parser.add_argument("--force", action="store_true", help="强制重建（清空已有数据，仅与 --accounts 配合使用）")
     parser.add_argument("--start-year", type=int, default=2020, help="K线数据起始年份 (默认: 2020)")
     args = parser.parse_args()
 
@@ -363,7 +374,7 @@ def main():
 
     if full_init or args.accounts:
         print("📦 Step 4: 初始化账户...")
-        step_init_accounts()
+        step_init_accounts(force=args.force)
 
     if full_init:
         print("=" * 60)

@@ -81,10 +81,14 @@ def get_conn(table_hint=None):
     - table_hint: 表名提示，用于路由到正确的DB
     - 如果 table_hint 为 None，自动从 SQL 中提取（仅对简单查询有效）
     - 兼容旧代码：不传 table_hint 时默认用 stocks DB
+    - 首次访问账户库时自动建表
     """
     if table_hint is None:
         table_hint = "stock_pool"  # 默认 stocks
     db_path = _resolve_db(table_hint)
+    # 首次访问账户库时自动建表
+    if table_hint in _ACCOUNT_TABLES:
+        _auto_init_accounts()
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -107,6 +111,17 @@ def get_stocks_conn():
 def get_accounts_conn():
     """获取账户库连接"""
     return get_conn("account")
+
+
+def _auto_init_accounts():
+    """首次访问账户库时自动建表（幂等），直接用 sqlite3 连接避免递归"""
+    import sqlite3
+    conn = sqlite3.connect(ACCOUNTS_DB)
+    tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    table_names = {t[0] for t in tables}
+    conn.close()
+    if "account" not in table_names:
+        _init_accounts_db()
 
 
 def init_db():
@@ -180,46 +195,51 @@ def _init_stocks_db():
 
 
 def _init_accounts_db():
-    with get_conn("account") as conn:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS account (
-                id              INTEGER PRIMARY KEY,
-                name            TEXT NOT NULL DEFAULT 'main',
-                cash            REAL NOT NULL DEFAULT 0,
-                initial_capital REAL NOT NULL DEFAULT 200000,
-                strategy        TEXT NOT NULL DEFAULT '',
-                params_json     TEXT NOT NULL DEFAULT '{}',
-                updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
-            );
+    """建账户库表（直接用 sqlite3 连接，避免递归）"""
+    import sqlite3
+    conn = sqlite3.connect(ACCOUNTS_DB)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS account (
+            id              INTEGER PRIMARY KEY,
+            name            TEXT NOT NULL DEFAULT 'main',
+            cash            REAL NOT NULL DEFAULT 0,
+            initial_capital REAL NOT NULL DEFAULT 200000,
+            strategy        TEXT NOT NULL DEFAULT '',
+            params_json     TEXT NOT NULL DEFAULT '{}',
+            updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
 
-            CREATE TABLE IF NOT EXISTS holdings (
-                account_id  INTEGER NOT NULL DEFAULT 1,
-                code        TEXT NOT NULL,
-                name        TEXT NOT NULL DEFAULT '',
-                shares      INTEGER NOT NULL DEFAULT 0,
-                cost_price  REAL NOT NULL DEFAULT 0,
-                tp_taken    TEXT NOT NULL DEFAULT '[]',
-                added_at    TEXT NOT NULL DEFAULT (datetime('now')),
-                PRIMARY KEY (account_id, code),
-                FOREIGN KEY (account_id) REFERENCES account(id)
-            ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS holdings (
+            account_id  INTEGER NOT NULL DEFAULT 1,
+            code        TEXT NOT NULL,
+            name        TEXT NOT NULL DEFAULT '',
+            shares      INTEGER NOT NULL DEFAULT 0,
+            cost_price  REAL NOT NULL DEFAULT 0,
+            tp_taken    TEXT NOT NULL DEFAULT '[]',
+            added_at    TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (account_id, code),
+            FOREIGN KEY (account_id) REFERENCES account(id)
+        ) WITHOUT ROWID;
 
-            CREATE TABLE IF NOT EXISTS trade_log (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id  INTEGER NOT NULL DEFAULT 1,
-                code        TEXT NOT NULL,
-                name        TEXT NOT NULL DEFAULT '',
-                action      TEXT NOT NULL,
-                shares      INTEGER NOT NULL,
-                price       REAL NOT NULL,
-                amount      REAL NOT NULL,
-                reason      TEXT NOT NULL DEFAULT '',
-                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            );
+        CREATE TABLE IF NOT EXISTS trade_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id  INTEGER NOT NULL DEFAULT 1,
+            code        TEXT NOT NULL,
+            name        TEXT NOT NULL DEFAULT '',
+            action      TEXT NOT NULL,
+            shares      INTEGER NOT NULL,
+            price       REAL NOT NULL,
+            amount      REAL NOT NULL,
+            reason      TEXT NOT NULL DEFAULT '',
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
 
-            CREATE INDEX IF NOT EXISTS idx_trade_account ON trade_log(account_id, created_at);
-            CREATE INDEX IF NOT EXISTS idx_trade_code ON trade_log(code);
-        """)
+        CREATE INDEX IF NOT EXISTS idx_trade_account ON trade_log(account_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_trade_code ON trade_log(code);
+    """)
+    conn.commit()
+    conn.close()
 
 
 # ── 股票池 ─────────────────────────────────────────────────

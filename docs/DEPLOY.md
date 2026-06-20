@@ -124,7 +124,12 @@ python scripts/sim/account_runner.py create --account-id 4 --name "我的账户"
 
 # 创建账户并绑定策略
 python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --strategy v27
+
+# 强制覆盖已有账户（清空持仓和交易记录后重建）
+python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --force
 ```
+
+> ⚠️ 如果账户已存在，`create` 会跳过。使用 `--force` 强制清空重建。
 
 ### 5.3 切换策略
 
@@ -136,11 +141,34 @@ python scripts/sim/account_runner.py switch --account-id 4 --strategy v27
 python scripts/sim/account_runner.py switch --account-id 4 --strategy v11b
 ```
 
-### 5.4 修改初始资金
+### 5.4 修改账户资金
 
 ```bash
+# 直接修改现金和初始资金
 sqlite3 data/quant_accounts.db "UPDATE account SET cash=500000, initial_capital=500000 WHERE id=4;"
 ```
+
+### 5.5 重置所有账户
+
+```bash
+# 方法1：重新初始化（推荐，会重建3个默认账户）
+python scripts/tools/init_project.py --accounts --force
+
+# 方法2：手动清空后重建单个账户
+python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --cash 200000 --force
+```
+
+### 5.6 账户数据说明
+
+账户数据存储在 `data/quant_accounts.db` 中，首次访问时自动建表：
+
+| 表 | 说明 |
+|---|---|
+| `account` | 账户信息（id, name, cash, initial_capital, strategy） |
+| `holdings` | 持仓（account_id, code, shares, cost_price, added_at） |
+| `trade_log` | 交易记录（account_id, code, action, shares, price, amount, reason, created_at） |
+
+> 💡 **自动建表**：首次运行任何账户操作时，系统会自动检查并创建 `account`/`holdings`/`trade_log` 表，无需手动执行 `init_db()`。但股票数据表（`stock_pool`/`daily_kline` 等）仍需通过 `init_project.py` 初始化。
 
 ---
 
@@ -318,6 +346,28 @@ python scripts/sim/account_runner.py --account-id 2 intraday_execute
    ```bash
    python scripts/sim/account_runner.py create --account-id 5 --name "新策略账户" --cash 100000 --strategy xxx
    ```
+
+**Q: 账户已存在，无法创建？**
+```bash
+# 方法1：使用 --force 强制覆盖
+python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --cash 200000 --force
+
+# 方法2：先手动删除再创建
+sqlite3 data/quant_accounts.db "DELETE FROM holdings WHERE account_id=2; DELETE FROM trade_log WHERE account_id=2; DELETE FROM account WHERE id=2;"
+python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --cash 200000
+```
+
+**Q: 首次运行报 "no such table: account"？**
+账户表会在首次访问时自动创建。如果仍报错，手动初始化：
+```bash
+python -c "from core.db import init_db; init_db()"
+```
+
+**Q: 如何重置所有账户？**
+```bash
+# 重建3个默认账户（清空所有数据）
+python scripts/tools/init_project.py --accounts --force
+```
 
 ---
 

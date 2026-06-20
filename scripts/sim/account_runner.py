@@ -21,6 +21,7 @@ scripts/sim/account_runner.py — 统一模拟盘入口
 
   # 账户管理子命令
   python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000
+  python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --force
   python scripts/sim/account_runner.py switch --account-id 4 --strategy v27
   python scripts/sim/account_runner.py list
 
@@ -602,18 +603,31 @@ def cmd_list_accounts():
     print(f"活跃策略: {', '.join(ACTIVE_STRATEGIES)}")
 
 
-def cmd_create_account(account_id, name, cash, strategy=""):
+def cmd_create_account(account_id, name, cash, strategy="", force=False):
     """创建新账户"""
     if strategy and strategy not in list_strategy_names():
         print(f"❌ 未知策略: {strategy}")
         print(f"可用策略: {', '.join(list_strategy_names())}")
         return
 
+    from core.db import get_conn, clear_holdings
+
+    # 强制覆盖：先清空持仓和交易记录，再删除重建
+    if force:
+        # 清空该账户的持仓和交易记录
+        clear_holdings(account_id)
+        with get_conn("trade_log") as conn:
+            conn.execute("DELETE FROM trade_log WHERE account_id=?", (account_id,))
+        # 删除账户本身（如果存在）
+        with get_conn("account") as conn:
+            conn.execute("DELETE FROM account WHERE id=?", (account_id,))
+        print(f"  ⚠️ 已清空账户 {account_id} 的持仓和交易记录")
+
     ok = create_account(account_id, name=name, cash=cash, initial_capital=cash, strategy=strategy)
     if ok:
         print(f"✅ 账户 {account_id} 创建成功: 名称={name}, 资金=¥{cash:,}, 策略={strategy or '未绑定'}")
     else:
-        print(f"⚠️ 账户 {account_id} 已存在，跳过创建")
+        print(f"⚠️ 账户 {account_id} 已存在，跳过创建（使用 --force 强制覆盖）")
 
 
 def cmd_switch_strategy(account_id, strategy):
@@ -670,6 +684,7 @@ if __name__ == "__main__":
     p_create.add_argument("--name", type=str, default="", help="账户名称")
     p_create.add_argument("--cash", type=float, default=100000, help="初始资金（默认: 100000）")
     p_create.add_argument("--strategy", type=str, default="", help="绑定策略（可选）")
+    p_create.add_argument("--force", action="store_true", help="强制覆盖已有账户（清空持仓和交易记录）")
 
     # switch 子命令
     p_switch = subparsers.add_parser("switch", help="切换账户策略")
@@ -689,7 +704,7 @@ if __name__ == "__main__":
     if args.subcommand == "list":
         cmd_list_accounts()
     elif args.subcommand == "create":
-        cmd_create_account(args.account_id, args.name, args.cash, args.strategy)
+        cmd_create_account(args.account_id, args.name, args.cash, args.strategy, args.force)
     elif args.subcommand == "switch":
         cmd_switch_strategy(args.account_id, args.strategy)
     elif args.subcommand == "run":

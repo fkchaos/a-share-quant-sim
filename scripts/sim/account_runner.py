@@ -265,12 +265,28 @@ def is_trade_day(date_str):
 # ── 主流程 ──────────────────────────────────────────────────────
 def run_signal(account_id, date, strategy_name=None):
     """信号生成：选股 + 风控"""
+    import traceback
     t0 = time.time()
 
-    # 交易日检查
-    if not is_trade_day(date):
-        print(f"⏭️ {date} 非交易日，跳过信号生成")
-        return
+    try:
+        # 交易日检查
+        if not is_trade_day(date):
+            print(f"⏭️ {date} 非交易日，跳过信号生成")
+            return
+
+        _run_signal_impl(account_id, date, strategy_name)
+    except Exception as e:
+        duration = int(time.time() - t0)
+        tb = traceback.format_exc()
+        logger.error(f"run_signal 异常: {e}\n{tb}")
+        print(f"❌ 信号生成失败: {e}")
+        # 写入 CRON_STATUS error 标记，cron_monitor 能检测到
+        print(f"[CRON_STATUS] job_id=signal_{account_id} status=error duration={duration} ts={datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+
+def _run_signal_impl(account_id, date, strategy_name=None):
+    """信号生成实现（被 run_signal 包裹）"""
+    t0 = time.time()
 
     # 如果没指定策略名，从账户表读取
     if strategy_name is None:
@@ -484,6 +500,26 @@ def run_signal(account_id, date, strategy_name=None):
 
 def run_execute(account_id, date, strategy_name=None):
     """执行交易：先卖后买"""
+    import requests, traceback
+    t0 = time.time()
+
+    try:
+        # 交易日检查
+        if not is_trade_day(date):
+            print(f"⏭️ {date} 非交易日，跳过交易执行")
+            return
+
+        _run_execute_impl(account_id, date, strategy_name)
+    except Exception as e:
+        duration = int(time.time() - t0)
+        tb = traceback.format_exc()
+        logger.error(f"run_execute 异常: {e}\n{tb}")
+        print(f"❌ 交易执行失败: {e}")
+        print(f"[CRON_STATUS] job_id=execute_{account_id} status=error duration={duration} ts={datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+
+def _run_execute_impl(account_id, date, strategy_name=None):
+    """交易执行实现（被 run_execute 包裹）"""
     import requests
     t0 = time.time()
 

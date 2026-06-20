@@ -53,6 +53,7 @@ class StrategyAdapter:
             "HOLD_DAYS_EXTEND_PNL": 0.03,
             "MAX_DAILY_BUY": 4,
             "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.05,
         }
         self._regime_params["v27"] = {
             "REGIME_ENABLED": True,

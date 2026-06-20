@@ -13,7 +13,7 @@ import numpy as np
 
 # 默认参数（可被覆盖）
 DEFAULT_PARAMS = {
-    "MOM_THRESHOLD": 0.02,
+    "MOM_THRESHOLD": 0.05,
     "MAX_HOLDINGS": 8,
     "MAX_DAILY_BUY": 8,
     "MAX_POSITION": 0.30,

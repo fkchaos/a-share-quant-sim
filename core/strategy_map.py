@@ -150,4 +150,31 @@ STRATEGY_MAP = {
             "REGIME_BEAR_ALLOC": 0.3,
         },
     },
+
+    # ── v31: 价量共振+动量增强（已归档，与 v27 高度重复）──
+    # mom_20/mom_40 与 mom_5 相关性 0.3-0.5，非独立信息，预期选股重叠度 >70%
+    # 代码保留在 scripts/strategies/v29_select.py，不参与活跃交易
+    "v31": {
+        "mode": "custom",
+        "description": "价量共振+动量增强（v27核心85% + mom_20/mom_40动量15%）— 已归档，与v27高度重复",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v29_select.select_stocks_v29",
+        "calc_factors_fn": "scripts.strategies.v29_select.calc_factors",
+        "archived": True,
+        "archive_reason": "与 v27 因子高度重叠（mom_20/mom_40 与 mom_5 相关性 0.3-0.5），无独立回测价值",
+        "params": {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "MAX_HOLDINGS": 8,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MOM_THRESHOLD": 0.02,
+            "MOM_20_WEIGHT": 0.15,
+            "MOM_40_WEIGHT": 0.15,
+        },
+    },
 }

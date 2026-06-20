@@ -67,6 +67,10 @@ class StrategyAdapter:
         # 面板顺序 bug 修复后策略失效（WF 5/16，全量 -67%，核心因子 IC≈0）
         # 代码保留在 scripts/strategies/v20_tail_pick.py，不注册到适配器
 
+        # ── v31: 已归档（2026-07-25）──
+        # 与 v27 高度重复（mom_20/mom_40 与 mom_5 相关性 0.3-0.5），无独立回测价值
+        # 代码保留在 scripts/strategies/v29_select.py，不注册到适配器
+
     # ── 统一选股接口 ──────────────────────────────────────────────
 
     def select(self, strategy_name, factors, date, close_panel=None,
@@ -110,6 +114,7 @@ class StrategyAdapter:
         return select_stocks_v27(factors, date, current_holdings, merged_params)
 
     # v20c 已退役，_v20c_select 方法移除
+    # v31 已归档，_v29_select 方法移除
 
     # ── 统一风控接口 ──────────────────────────────────────────────
 

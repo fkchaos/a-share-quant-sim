@@ -238,6 +238,10 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v27_select import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v31":
+        from scripts.strategies.v29_select import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
     # v20c 已退役
     else:
         raise ValueError(f"不支持的策略: {strategy_name}")

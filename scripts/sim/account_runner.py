@@ -99,9 +99,14 @@ def load_panel(codes, min_days=60):
 
 
 # ── 账户操作 ──────────────────────────────────────────────────────
-def load_account(account_id):
-    """从 DB 加载账户状态，返回 PortfolioState"""
-    from core.db import get_holdings, upsert_account, get_stock_name_map
+def load_account(account_id, stale_days=30):
+    """从 DB 加载账户状态，返回 PortfolioState
+
+    参数:
+        account_id: 账户ID
+        stale_days: 持仓股票超过多少天无K线数据则视为退市/停牌，自动清理
+    """
+    from core.db import get_holdings, upsert_account, get_stock_name_map, get_kline_latest
     acct = get_account(account_id)
     if not acct:
         raise ValueError(f"账户 {account_id} 不存在")
@@ -109,7 +114,25 @@ def load_account(account_id):
     holdings_raw = get_holdings(account_id)
     name_map = get_stock_name_map()
     holdings = {}
+    stale_codes = []  # 记录退市/停牌持仓
     for code, h in holdings_raw.items():
+        # 检查持仓股票最新交易日
+        latest_kl = get_kline_latest(code)
+        if latest_kl is None:
+            # 完全没有K线数据，跳过
+            stale_codes.append((code, "无K线数据"))
+            continue
+        last_date = latest_kl.get("date", "")
+        if last_date:
+            try:
+                from datetime import datetime as dt
+                gap = (dt.now() - dt.strptime(last_date, "%Y-%m-%d")).days
+                if gap > stale_days:
+                    stale_codes.append((code, f"最后交易日 {last_date}，已 {gap} 天无数据"))
+                    continue
+            except Exception:
+                pass
+
         added = h.get("added_at", "")
         hd = 0
         if added:
@@ -130,6 +153,16 @@ def load_account(account_id):
             "tp_taken": json.loads(h.get("tp_taken", "[]")) if isinstance(h.get("tp_taken"), str) else [],
             "highest_profit": 0.0,
         }
+
+    # 清理退市/停牌持仓
+    if stale_codes:
+        from core.db import delete_holding
+        for code, reason in stale_codes:
+            delete_holding(account_id, code)
+            logger.warning(f"持仓清理: 账户{account_id} {code} 已移除（{reason}）")
+        print(f"⚠️ 持仓清理: 账户{account_id} 移除 {len(stale_codes)} 只退市/停牌股票")
+        for code, reason in stale_codes:
+            print(f"  {code}: {reason}")
 
     state = PortfolioState(
         cash=acct["cash"],

@@ -549,6 +549,8 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
     logger.info(f"计划: 卖 {len(plan['sell_plan'])} 只, 买 {len(plan['buy_plan'])} 只, 耗时 {time.time()-t0:.1f}s")
 
+    return plan
+
     # ── 输出信号摘要（print 到 stdout，cron 捕获）──
     print("=" * 60)
     print(f"账户{account_id} / {strategy_name} 信号 — {date}")

@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-06-21
+
+### 架构
+- **QMT 实盘接入调研**：QMT 不支持 Linux，需 Windows 桥接方案（Socket/REST/Redis）。推荐云 Windows Server + miniQMT 桥接服务。改造点：QMT 执行适配器 + 持仓同步，预计 3-5 天。
+
+---
+
 ## 2026-06-16 ~ 2026-06-20
 
 ### 策略

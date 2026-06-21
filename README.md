@@ -1,132 +1,36 @@
 # A股量化模拟交易系统
 
-> 基于多因子评分的 A 股量化模拟交易系统，使用腾讯行情接口获取数据。
-> 回测引擎与模拟盘共享同一套交易逻辑（`core/`），策略参数集中在各选股模块的 Config 中。
+> 基于多因子评分的 A 股量化模拟交易系统，腾讯行情接口，回测与模拟盘共享交易逻辑。
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## 架构概览
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     cron 调度层（9个任务）                      │
-│  账户1(v11b)  账户2(v27)  账户3(v20c)  收盘报告                 │
-└──────────┬──────────────────────────┬───────────────────────┘
-           │                          │
-           ▼                          ▼
-┌─────────────────────┐   ┌──────────────────────────────────┐
-│ scripts/sim/        │   │ scripts/backtest/                 │
-│ account_runner.py   │   │ run_backtest.py (统一入口)        │
-│ (模拟盘统一入口)     │   │   ├── 内置策略 → 通用回测框架      │
-│                     │   │   └── v27/v20c → wf_runner.py     │
-│                     │   │       └── strategy_adapter.py      │
-└──────────┬──────────┘   └──────────────────────────────────┘
-           │                          │
-           ▼                          ▼
-┌──────────────────────────────────────────────────────────────┐
-│                  core/ (共享引擎)                              │
-│  account.py  ← PortfolioState + buy/sell (回测+模拟盘共用)   │
-│  db.py       ← SQLite 双库 (stocks + accounts)               │
-│  factors.py  ← 51 技术因子计算                               │
-│  strategy_map.py ← 策略注册表                                │
-└──────────────────────────────────────────────────────────────┘
-           ▲                          ▲
-┌──────────┴──────────┐   ┌──────────┴──────────┐
-│ data/quant_stocks.db │   │ data/quant_accounts.db│
-│  stock_pool          │   │  account              │
-│  daily_kline         │   │  holdings             │
-│  indicators          │   │  trade_log            │
-└─────────────────────┘   └───────────────────────┘
-```
-
-## 目录结构
-
-```text
-a-share-quant-sim/
-├── core/                    # 共享引擎（回测+模拟盘共用）
-│   ├── config.py            # 策略配置、交易成本、风控参数
-│   ├── account.py           # PortfolioState + buy/sell 纯函数
-│   ├── db.py                # SQLite 数据库层
-│   ├── strategy_map.py      # 策略注册表
-│   ├── factors.py           # 51个技术因子计算
-│   ├── scoring.py           # Z-score + Ensemble 评分
-│   └── strategy.py          # StrategyEngine
-│
-├── scripts/
-│   ├── sim/                 # 模拟盘执行层
-│   │   ├── account_runner.py    # 统一入口（v11b/v27/v20c）
-│   │   └── sim_account1.py      # v11b legacy（备份，不再被 cron 调用）
-│   ├── strategies/          # 选股逻辑模块
-│   │   ├── v27_select.py        # v27 价量共振选股
-│   │   └── v20_tail_pick.py     # v20c 尾盘缩量选股
-│   ├── backtest/            # 回测脚本
-│   │   ├── run_backtest.py      # 统一回测入口（内置策略 + v27/v20c）
-│   │   ├── strategy_adapter.py  # 策略适配器（选股+风控+市场状态）
-│   │   └── wf_runner.py         # Walk-Forward 通用运行器
-│   ├── tools/               # 工具脚本
-│   │   ├── cli.py                # 数据库 CLI（账户/持仓/买卖）
-│   │   ├── init_project.py       # 一键初始化（建表+股票池+K线+账户）
-│   │   └── update_daily_data_async.py
-│   └── archive/             # 归档旧版本
-│
-└── docs/                    # 文档
-    ├── DEPLOY.md            # 部署指南
-    ├── USER_MANUAL.md       # 用户手册
-    ├── ARCHITECTURE.md      # 架构文档
-    └── STRATEGY_REGISTRY.md # 策略注册表
-```
-
-## 特性
-
-- **零配置**：`pip install pandas numpy requests`，3 个依赖，5 分钟跑通
-- **一键初始化**：`init_project.py` 自动完成建表+股票池+K线+账户，告别CSV
-- **账户-策略解耦**：strategy_map 注册表 + account_runner 统一入口
-- **三账户并行**：v11b(Ensemble) + v27(价量共振) + v20c(尾盘缩量)
-- **共享交易逻辑**：模拟盘和回测共用 `core/`，杜绝不一致
-- **51 个技术因子**：动量/反转/波动率/成交量/RSI/趋势/统计/短线
-- **Walk-Forward 验证**：16 folds 样本外检测过拟合
-- **完整 CLI**：账户管理、持仓调整、手动买卖，不需要写 SQL
-- **中文文档齐全**：部署指南、用户手册、架构文档、策略注册表
-- **MIT 协议**：商用友好
-
 ## 快速开始
 
 ```bash
-# 1. 克隆
 git clone git@github.com:fkchaos/a-share-quant-sim.git
 cd a-share-quant-sim
-
-# 2. 安装依赖
-pip install -e .
-
-# 3. 一键初始化（建表 + 股票池 + K线数据 + 账户，约 2-3 分钟）
-python scripts/tools/init_project.py
-
-# 4. 跑回测
-python scripts/backtest/run_backtest.py --strategy v27
-
-# 5. 跑模拟盘
-python scripts/sim/account_runner.py --strategy v27 intraday_signal
-python scripts/sim/account_runner.py --strategy v27 intraday_execute
-python scripts/sim/account_runner.py --strategy v27 report_only
-
-# 6. 查看账户
-python scripts/tools/cli.py account 2
-
-# 7. 测试
-python -m pytest tests/ -v -k "not slow"
+pip install -e .                  # 安装依赖（pandas/numpy/requests）
+python scripts/tools/init_project.py   # 一键初始化（建表+股票池+K线+账户）
+python scripts/backtest/run_backtest.py --strategy v27  # 跑回测
+python scripts/sim/account_runner.py --account-id 2 intraday_signal  # 模拟盘信号
 ```
 
-## 当前策略
+## 账户
 
-| 账户 | 策略 | 模式 | 资金 | 全量年化 | WF夏普 | 状态 |
-|------|------|------|------|---------|--------|------|
-| 账户1 | v11b | Ensemble 多组选股 | 20万 | ~30% | 0.52 | 继续运行 |
-| 账户2 | v27 | 价量共振 | 10万 | 251% | 8.66 | WF最优 |
-| 账户3 | v20c | 尾盘缩量 | 10万 | 78% | 5.74 | WF通过 |
+| 账户 | ID | 策略 | 资金 | 状态 |
+|------|-----|------|------|------|
+| 账户2 | 2 | v27 价量共振 | 20万 | 运行中 |
 
-> 见 [docs/STRATEGY_REGISTRY.md](docs/STRATEGY_REGISTRY.md) 完整策略列表
+## 文档
+
+- [DEPLOY.md](docs/DEPLOY.md) — 部署指南
+- [USER_MANUAL.md](docs/USER_MANUAL.md) — 用户手册
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — 系统架构
+- [RELEASE_NOTES.md](docs/RELEASE_NOTES.md) — 版本记录
+- [TODO.md](docs/TODO.md) — 待办事项
+- [策略注册表](docs/strategy/STRATEGY_REGISTRY.md) — 策略列表与状态
+- [实验记录](docs/experiments/) — 因子调研与实验日志
 
 ## License
 

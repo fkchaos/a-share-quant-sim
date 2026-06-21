@@ -268,14 +268,16 @@ data/
 
 ---
 
-## 9. 修改策略参数
+## 8. 修改策略参数
 
 策略参数统一在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中管理，修改 `params` 字典即可：
 
-| 策略 | 关键参数（strategy_map.py 中的 params） | 状态 |
-|------|----------------------------------------|------|
-| v11b | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX | ⏸️ 暂停 |
-| v27 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD, REGIME_* | ✅ 运行中 |
+| 策略 | 关键参数 | 状态 |
+|------|---------|------|
+| v11b | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX | ⏸️ |
+| v27 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD, POSITION_SCALE | ✅ |
+
+账户级配置（如 POSITION_SCALE）存在 DB `params_json` 中，通过 `create --position-scale 0.8` 设置。
 
 改完后跑回测验证，再提交代码。
 
@@ -285,8 +287,9 @@ data/
 
 1. 在 `scripts/strategies/` 下新建 `xxx_select.py`，实现 `select_stocks_xxx()` 和 `calc_factors()` 函数
 2. 在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中注册
-3. 写独立 WF 脚本（参考 `v20_walk_forward.py`）+ 跑回测验证
-4. 创建账户并绑定策略：
+3. 在 `scripts/backtest/strategy_adapter.py` 的 `_register_builtin_strategies()` 中注册
+4. 跑回测验证：`python scripts/backtest/run_backtest.py --strategy xxx`
+5. 创建账户并绑定策略：
    ```bash
    python scripts/sim/account_runner.py create --account-id 5 --name "新策略账户" --cash 100000 --strategy xxx
    ```
@@ -371,6 +374,22 @@ python scripts/tools/init_project.py --accounts --force
 
 ---
 
+**Q: 如何控制仓位（不满仓）？**
+
+通过 `POSITION_SCALE` 参数控制，存于账户的 `params_json` 中：
+
+```bash
+# 创建账户时设置 80% 仓位
+python scripts/sim/account_runner.py create --account-id 3 --name "半仓账户" --cash 200000 --strategy v27 --position-scale 0.8
+
+# 查看当前设置
+python scripts/sim/account_runner.py list
+```
+
+`available = cash × POSITION_SCALE - initial_capital × 0.03`，设为 1.0 满仓，0.8 保留 20% 现金。
+
+---
+
 ## 12. 备份
 
 ```bash
@@ -448,10 +467,9 @@ tpl[5] = low_panel     ← 注意：不是 open！
 
 | 指标 | 数值 |
 |------|------|
-| WF 正收益 fold | 15/15 (100%) |
-| 平均年化 | 25.92% |
-| 夏普 | 5.96 |
-| 回撤 | 3.29% |
+| WF 正收益 fold | 13/13 (100%) |
+| 夏普 | 7.15 |
+| 回撤 | 3.5% |
 
 v27 不依赖 high/low 面板，不受上述面板 bug 影响，结果可信。
 

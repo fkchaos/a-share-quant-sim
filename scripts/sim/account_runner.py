@@ -41,7 +41,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
-from core.db import get_kline, get_all_codes, get_tradeable_codes, get_account, list_accounts, create_account, switch_strategy
+from core.db import get_kline, get_all_codes, get_tradeable_codes, get_account, list_accounts, create_account, switch_strategy, upsert_account
 from core.strategy_map import load_strategy, list_strategy_names
 from scripts.backtest.strategy_adapter import get_adapter
 
@@ -244,7 +244,8 @@ def execute_buys(state, cands, date, spot, params):
     max_pos = params["MAX_POSITION"]
     max_hold = params["MAX_HOLDINGS"]
 
-    available = state.cash - state.initial_capital * 0.03
+    position_scale = params.get("POSITION_SCALE", 1.0)
+    available = state.cash * position_scale - state.initial_capital * 0.03
     if available <= 0:
         return state
 
@@ -341,10 +342,16 @@ def _run_signal_impl(account_id, date, strategy_name=None):
         strategy_name = _resolve_strategy(account_id)
 
     strategy = load_strategy(strategy_name)
-    params = strategy.get("params", {})
+    params = dict(strategy.get("params", {}))
     timing = strategy.get("timing", "intraday")
 
-    logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} ===")
+    # 账户级配置覆盖策略参数（如 POSITION_SCALE）
+    _acct_cfg = get_account(account_id)
+    if _acct_cfg:
+        for k, v in _acct_cfg.get("params", {}).items():
+            params[k] = v
+
+    logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} === (POSITION_SCALE={params.get('POSITION_SCALE', 1.0)})")
 
     # 选股池（排除科创板/北交所/老三板/B股）
     codes = get_tradeable_codes()
@@ -396,7 +403,10 @@ def _run_signal_impl(account_id, date, strategy_name=None):
             for c in sell_codes if c in state.holdings and c in price_data.index
         )
     available = state.cash + sell_cash
-    available = available * regime_mult  # 市场状态：熊市多留现金
+    # 静态仓位控制：POSITION_SCALE  default 1.0，可调
+    # 保留现金 = initial_capital * (1 - POSITION_SCALE)，确保不满仓
+    position_scale = params.get("POSITION_SCALE", 1.0)
+    available = available * regime_mult * position_scale
     per_stock_filter = available / max_buy if max_buy > 0 else available  # 资金容量过滤用
 
     # 资金容量过滤：买不起（1手都买不起）的票排除
@@ -698,6 +708,9 @@ def run_report(account_id, date, strategy_name=None):
     print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
     print(f"持仓市值: ¥{total_mv:,.0f}  净值: ¥{nav:,.0f}")
     print(f"总收益: ¥{pnl:+,.0f} ({pnl_pct:+.2f}%)")
+    _acct_cfg = get_account(account_id)
+    _ps = (_acct_cfg or {}).get("params", {}).get("POSITION_SCALE", 1.0)
+    print(f"仓位控制: POSITION_SCALE={_ps:.2f}")
     print("-" * 60)
     if state.holdings:
         print(f"持仓明细:")
@@ -735,9 +748,15 @@ def cmd_list_accounts():
     print("=" * 70)
     print(f"可用策略: {', '.join(list_strategy_names())}")
     print(f"活跃策略: {', '.join(ACTIVE_STRATEGIES)}")
+    print()
+    print("账户级配置:")
+    for acct in accounts:
+        cfg = acct.get("params", {})
+        ps = cfg.get("POSITION_SCALE", 1.0)
+        print(f"  账户{acct['id']}: POSITION_SCALE={ps:.2f}")
 
 
-def cmd_create_account(account_id, name, cash, strategy="", force=False):
+def cmd_create_account(account_id, name, cash, strategy="", force=False, position_scale=1.0):
     """创建新账户"""
     if strategy and strategy not in list_strategy_names():
         print(f"❌ 未知策略: {strategy}")
@@ -759,7 +778,10 @@ def cmd_create_account(account_id, name, cash, strategy="", force=False):
 
     ok = create_account(account_id, name=name, cash=cash, initial_capital=cash, strategy=strategy)
     if ok:
-        print(f"✅ 账户 {account_id} 创建成功: 名称={name}, 资金=¥{cash:,}, 策略={strategy or '未绑定'}")
+        # 保存账户级配置（POSITION_SCALE 等）
+        if position_scale != 1.0:
+            upsert_account(account_id, params={"POSITION_SCALE": position_scale})
+        print(f"✅ 账户 {account_id} 创建成功: 名称={name}, 资金=¥{cash:,}, 策略={strategy or '未绑定'}, POSITION_SCALE={position_scale:.2f}")
     else:
         print(f"⚠️ 账户 {account_id} 已存在，跳过创建（使用 --force 强制覆盖）")
 

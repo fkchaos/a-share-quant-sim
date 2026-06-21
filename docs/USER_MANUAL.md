@@ -381,17 +381,34 @@ STRATEGY_MAP = {
 }
 ```
 
-**第 3 步：回测验证**
+**第 3 步：在 strategy_adapter.py 注册（回测用）**
 
-```bash
-# 先模拟盘试试能不能跑通
-python scripts/sim/account_runner.py \
-  --strategy my_strategy intraday_signal
+```python
+# scripts/backtest/strategy_adapter.py 的 _register_builtin_strategies() 中
+self._select_fns["my_strategy"] = self._my_strategy_select
+self._risk_params["my_strategy"] = {
+    "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.15,
+    "MAX_HOLDINGS": 8, "MAX_DAILY_BUY": 4, "MAX_POSITION": 0.25,
+}
 
-# 没问题再跑回测（需要在 run_backtest.py 或相关脚本中注册全量回测入口）
+def _my_strategy_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                         high_panel, low_panel, open_panel, current_holdings, params):
+    from scripts.strategies.my_strategy import calc_factors, select_stocks_my
+    if factors is None or "my_factor" not in factors:
+        factors = calc_factors(close_panel, volume_panel, amount_panel,
+                               high_panel, low_panel, open_panel, params)
+    merged_params = dict(self._risk_params["my_strategy"])
+    if params:
+        merged_params.update(params)
+    return select_stocks_my(factors, date, close_panel, volume_panel, amount_panel,
+                            high_panel, low_panel, open_panel, current_holdings, merged_params)
 ```
 
-如果选股逻辑不依赖回测引擎，也可以先用独立脚本跑回测。参考 `scripts/strategies/v20_tail_pick.py` 的结构：`calc_tail_pick_factors()` + `select_stocks_tail_pick()` + 自己的回测引擎。
+**第 4 步：回测验证**
+
+```bash
+python scripts/backtest/run_backtest.py --strategy my_strategy
+```
 
 ### 6.2 常见踩坑
 

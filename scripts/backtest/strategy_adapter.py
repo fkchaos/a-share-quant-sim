@@ -55,14 +55,7 @@ class StrategyAdapter:
             "MAX_POSITION": 0.20,
             "MOM_THRESHOLD": 0.05,
         }
-        self._regime_params["v27"] = {
-            "REGIME_ENABLED": True,
-            "REGIME_MA_PERIOD": 20,
-            "REGIME_SLOPE_DAYS": 5,
-            "REGIME_BULL_ALLOC": 1.0,
-            "REGIME_SIDEWAYS_ALLOC": 0.7,
-            "REGIME_BEAR_ALLOC": 0.3,
-        }
+        self._regime_params["v27"] = {}
 
         # ── v20c: 已退役（2026-07-24）──
         # 面板顺序 bug 修复后策略失效（WF 5/16，全量 -67%，核心因子 IC≈0）
@@ -309,6 +302,11 @@ class StrategyAdapter:
         """
         市场状态识别 → 仓位乘数。
 
+        支持两种模式（通过 REGIME_MODE 参数切换）:
+          "3class"  — 三档：牛市/震荡/熊市（原始逻辑 + 斜率阈值）
+          "linear"  — 连续映射：slope 线性映射到 [bear_alloc, bull_alloc]
+          "vol"     — 波动率过滤：极端波动期强制降仓
+
         返回:
             (regime_label, multiplier) — 如 ("牛市", 1.0)
         """
@@ -320,7 +318,7 @@ class StrategyAdapter:
             return ("未启用", 1.0)
 
         from core.db import get_index_kline
-        INDEX_CODE = "sh000001"
+        INDEX_CODE = merged.get("REGIME_INDEX", "sh000001")
         kl = get_index_kline(INDEX_CODE)
         if not kl:
             return ("指数数据缺失", 1.0)
@@ -335,6 +333,7 @@ class StrategyAdapter:
 
         ma_period = merged.get("REGIME_MA_PERIOD", 20)
         slope_days = merged.get("REGIME_SLOPE_DAYS", 5)
+        slope_threshold = merged.get("SLOPE_THRESHOLD", 0.0)
 
         pos = idx_df.index.get_loc(date)
         if isinstance(pos, slice):
@@ -357,9 +356,41 @@ class StrategyAdapter:
         bear_alloc = merged.get("REGIME_BEAR_ALLOC", 0.3)
         sideways_alloc = merged.get("REGIME_SIDEWAYS_ALLOC", 0.7)
 
-        if slope > 0 and price_now > ma60:
+        regime_mode = merged.get("REGIME_MODE", "3class")
+
+        # ── 方案D：波动率过滤 ──
+        if regime_mode == "vol" or merged.get("REGIME_VOL_FILTER", False):
+            vol_window = merged.get("REGIME_VOL_WINDOW", 20)
+            vol_threshold = merged.get("REGIME_VOL_THRESHOLD", 1.5)
+            if pos >= vol_window * 2:
+                vol_recent = close_series.iloc[pos - vol_window + 1:pos + 1].pct_change().std()
+                vol_hist = close_series.iloc[pos - vol_window * 2 + 1:pos + 1].pct_change().std()
+                if vol_hist > 0 and vol_recent / vol_hist > vol_threshold:
+                    return ("高波动", bear_alloc)
+
+        # ── 方案B：连续映射 ──
+        if regime_mode == "linear":
+            slope_cap = merged.get("REGIME_SLOPE_CAP", 0.01)
+            # 将 slope 线性映射到 [bear_alloc, bull_alloc]
+            # slope = -slope_cap → bear_alloc, slope = +slope_cap → bull_alloc
+            normalized = slope / slope_cap  # [-1, 1] 范围
+            normalized = max(-1.0, min(1.0, normalized))
+            mult = bull_alloc + (bear_alloc - bull_alloc) * (1 - normalized) / 2
+            if normalized > 0.5:
+                label = "强牛市"
+            elif normalized > 0:
+                label = "弱牛市"
+            elif normalized > -0.5:
+                label = "弱熊市"
+            else:
+                label = "强熊市"
+            return (label, mult)
+
+        # ── 方案C：多指数（通过 REGIME_INDEX 切换，逻辑不变） ──
+        # 斜率阈值过滤：|slope| < threshold 视为无趋势，归为震荡
+        if slope > slope_threshold and price_now > ma60:
             return ("牛市", bull_alloc)
-        elif slope < 0 and price_now < ma60:
+        elif slope < -slope_threshold and price_now < ma60:
             return ("熊市", bear_alloc)
         else:
             return ("震荡", sideways_alloc)

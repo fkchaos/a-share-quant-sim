@@ -84,12 +84,6 @@ STRATEGY_MAP = {
             "HOLD_DAYS_EXTEND": 5,
             "HOLD_DAYS_EXTEND_PNL": 0.03,
             "MOM_THRESHOLD": 0.05,
-            "REGIME_ENABLED": True,
-            "REGIME_MA_PERIOD": 20,
-            "REGIME_SLOPE_DAYS": 5,
-            "REGIME_BULL_ALLOC": 1.0,
-            "REGIME_SIDEWAYS_ALLOC": 0.7,
-            "REGIME_BEAR_ALLOC": 0.3,
         },
     },
 

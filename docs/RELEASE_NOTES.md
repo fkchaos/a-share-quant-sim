@@ -17,6 +17,11 @@
 - **非交易日简化输出**：只显示标题 + 跳过原因
 - **Cron Prompt 简化**：从 agent 解析格式改为直接调用 run_and_send.py
 
+### 测试
+- **标准用例测试框架**：按工程架构分 5 模块（account/sim/strategies/backtest/integration），69 个用例全通过
+- 合成数据 + 固定 seed，0.2s 跑完，可重复
+- 文档：`docs/TESTING.md`
+
 ---
 
 ## Week 3 (2026-06-08(一) ~ 2026-06-14(日))

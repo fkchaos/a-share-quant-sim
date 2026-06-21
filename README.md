@@ -25,7 +25,6 @@ python scripts/sim/account_runner.py --account-id 2 intraday_signal  # 模拟盘
 - [TODO.md](docs/TODO.md) — 待办事项
 - [策略注册表](docs/strategy/STRATEGY_REGISTRY.md) — 策略列表与状态
 - [实验记录](docs/experiments/) — 因子调研与实验日志
-- [QMT 实盘调研](docs/experiments/2026-06-21_qmt_research.md) — QMT 接入方案与 Linux 兼容性
 
 ## License
 

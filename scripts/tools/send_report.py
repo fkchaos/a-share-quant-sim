@@ -24,17 +24,31 @@ sys.path.insert(0, PROJECT_ROOT)
 def format_signal(data: dict, account_id: int) -> str:
     """格式化信号报告"""
     date = data.get("date", "未知")
+    is_trading = data.get("is_trading_day", True)
+    status = data.get("status", "ok")
     cash = data.get("cash", 0)
-    holdings = data.get("holdings", 0)
+    holdings = data.get("holdings", 0) or data.get("holdings_count", 0)
     buys = data.get("buys", [])
     sells = data.get("sells", [])
+    holds = data.get("holds", [])
     skipped = data.get("skipped", 0)
+    reason = data.get("reason", "")
 
+    trading_tag = "📅" if is_trading else "🚫 非交易日"
     lines = [
-        f"📊 账户{account_id} 信号 — {date}",
-        f"现金: ¥{cash:,.0f}  持仓: {holdings} 只",
-        "─" * 30,
+        f"📊 账户{account_id} 信号 — {date} {trading_tag}",
     ]
+
+    # 非交易日 / skip / empty 状态
+    if status == "skip":
+        lines.append(f"⏭️ 跳过 — {reason}")
+        return "\n".join(lines)
+    if status == "empty":
+        lines.append(f"⚪ 无交易计划")
+        return "\n".join(lines)
+
+    lines.append(f"现金: ¥{cash:,.0f}  持仓: {holdings} 只")
+    lines.append("─" * 30)
 
     if sells:
         lines.append(f"🔴 卖出 {len(sells)} 只:")
@@ -46,10 +60,15 @@ def format_signal(data: dict, account_id: int) -> str:
         for b in buys:
             lines.append(f"  {b['code']} {b.get('name','')} — {b.get('shares','')}股 @ {b.get('price',0):.2f}")
 
+    if holds:
+        lines.append(f"🟡 持有 {len(holds)} 只:")
+        for h in holds:
+            lines.append(f"  {h['code']} {h.get('name','')} — {h.get('shares','')}股 @ {h.get('price',0):.2f}")
+
     if skipped:
         lines.append(f"⏭️ 跳过 {skipped} 只（资金不足/风控）")
 
-    if not buys and not sells:
+    if not buys and not sells and not holds:
         lines.append("⚪ 无操作")
 
     return "\n".join(lines)
@@ -58,30 +77,45 @@ def format_signal(data: dict, account_id: int) -> str:
 def format_execute(data: dict, account_id: int) -> str:
     """格式化执行报告"""
     date = data.get("date", "未知")
+    is_trading = data.get("is_trading_day", True)
+    status = data.get("status", "ok")
     executed = data.get("executed", 0)
     skipped = data.get("skipped", 0)
     details = data.get("details", [])
+    reason = data.get("reason", "")
 
+    trading_tag = "📅" if is_trading else "🚫 非交易日"
     lines = [
-        f"⚡ 账户{account_id} 执行 — {date}",
-        f"执行: {executed} 笔  跳过: {skipped} 笔",
-        "─" * 30,
+        f"⚡ 账户{account_id} 执行 — {date} {trading_tag}",
     ]
 
-    for d in details:
-        action = d.get("action", "")
-        code = d.get("code", "")
-        name = d.get("name", "")
-        shares = d.get("shares", "")
-        price = d.get("price", 0)
-        reason = d.get("reason", "")
+    # 非交易日 / skip 状态
+    if status == "skip":
+        lines.append(f"⏭️ 跳过 — {reason}")
+        return "\n".join(lines)
 
-        if action == "BUY":
-            lines.append(f"🟢 买入 {code} {name} — {shares}股 @ {price:.2f}")
-        elif action == "SELL":
-            lines.append(f"🔴 卖出 {code} {name} — {shares}股 ({reason})")
-        elif action == "SKIP":
-            lines.append(f"⏭️ 跳过 {code} {name} — {reason}")
+    lines.append(f"执行: {executed} 笔  跳过: {skipped} 笔")
+    lines.append("─" * 30)
+
+    # 分类统计
+    buys = [d for d in details if d.get("action") == "BUY"]
+    sells = [d for d in details if d.get("action") == "SELL"]
+    skips = [d for d in details if d.get("action") == "SKIP"]
+
+    if sells:
+        lines.append(f"🔴 卖出 {len(sells)} 笔:")
+        for d in sells:
+            lines.append(f"  {d.get('code','')} {d.get('name','')} — {d.get('shares','')}股 ({d.get('reason','')})")
+
+    if buys:
+        lines.append(f"🟢 买入 {len(buys)} 笔:")
+        for d in buys:
+            lines.append(f"  {d.get('code','')} {d.get('name','')} — {d.get('shares','')}股 @ {d.get('price',0):.2f}")
+
+    if skips:
+        lines.append(f"⏭️ 跳过 {len(skips)} 笔:")
+        for d in skips:
+            lines.append(f"  {d.get('code','')} {d.get('name','')} — {d.get('reason','')}")
 
     if not details:
         lines.append("⚪ 无交易")
@@ -92,6 +126,7 @@ def format_execute(data: dict, account_id: int) -> str:
 def format_report(data: dict, account_id: int) -> str:
     """格式化收盘报告"""
     date = data.get("date", "未知")
+    is_trading = data.get("is_trading_day", True)
     nav = data.get("nav", 0)
     cash = data.get("cash", 0)
     pnl = data.get("pnl", 0)
@@ -99,8 +134,9 @@ def format_report(data: dict, account_id: int) -> str:
     holdings = data.get("holdings", [])
     position_scale = data.get("position_scale", 1.0)
 
+    trading_tag = "📅" if is_trading else "🚫 非交易日"
     lines = [
-        f"📋 账户{account_id} 收盘报告 — {date}",
+        f"📋 账户{account_id} 收盘报告 — {date} {trading_tag}",
         f"现金: ¥{cash:,.0f}  持仓: {len(holdings)} 只",
         f"净值: ¥{nav:,.0f}  总收益: ¥{pnl:+,.0f} ({pnl_pct:+.2f}%)",
         f"仓位控制: POSITION_SCALE={position_scale:.2f}",

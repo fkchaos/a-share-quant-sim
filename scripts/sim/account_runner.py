@@ -320,13 +320,13 @@ def run_signal(account_id, date, strategy_name=None):
     try:
         # 交易日检查
         if not is_trade_day(date):
-            result = {"type": "signal", "account_id": account_id, "date": str(date), "status": "skip", "reason": "非交易日"}
+            result = {"type": "signal", "account_id": account_id, "date": str(date), "is_trading_day": False, "status": "skip", "reason": "非交易日"}
             print(json.dumps(result, ensure_ascii=False))
             return result
 
         plan = _run_signal_impl(account_id, date, strategy_name)
         if plan is None:
-            result = {"type": "signal", "account_id": account_id, "date": str(date), "status": "empty", "reason": "无交易计划"}
+            result = {"type": "signal", "account_id": account_id, "date": str(date), "is_trading_day": True, "status": "empty", "reason": "无交易计划"}
             print(json.dumps(result, ensure_ascii=False))
             return result
 
@@ -336,6 +336,7 @@ def run_signal(account_id, date, strategy_name=None):
             "type": "signal",
             "account_id": account_id,
             "date": str(date),
+            "is_trading_day": True,
             "status": "ok",
             "strategy": plan.get("strategy", ""),
             "regime": plan.get("regime", ""),
@@ -598,7 +599,7 @@ def run_execute(account_id, date, strategy_name=None):
     try:
         # 交易日检查
         if not is_trade_day(date):
-            result = {"type": "execute", "account_id": account_id, "date": str(date), "status": "skip", "reason": "非交易日"}
+            result = {"type": "execute", "account_id": account_id, "date": str(date), "is_trading_day": False, "status": "skip", "reason": "非交易日"}
             print(json.dumps(result, ensure_ascii=False))
             return result
 
@@ -609,6 +610,7 @@ def run_execute(account_id, date, strategy_name=None):
             "type": "execute",
             "account_id": account_id,
             "date": str(date),
+            "is_trading_day": True,
             "status": "ok",
             "cash": state.cash,
             "holdings_count": len(state.holdings),
@@ -770,6 +772,7 @@ def run_report(account_id, date, strategy_name=None):
         "type": "report",
         "account_id": account_id,
         "date": str(date),
+        "is_trading_day": is_trade_day(date),
         "strategy": strategy_name,
         "cash": round(state.cash, 2),
         "nav": round(nav, 2),

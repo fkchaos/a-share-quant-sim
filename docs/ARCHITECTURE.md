@@ -1,6 +1,6 @@
 # 系统架构文档
 
-> 最后更新：2026-06-21（清理 v27 REGIME，新增 POSITION_SCALE 账户级仓位控制，清理死代码）
+> 最后更新：2026-06-21（文档清理：移除 v20c 退役策略、实验脚本、更新 cron 任务清单）
 
 ## 一、整体架构
 
@@ -64,10 +64,6 @@ a-share-quant-sim/
 │   │   ├── run_backtest.py      # 统一回测入口
 │   │   ├── strategy_adapter.py  # 策略适配器（选股+风控）
 │   │   └── wf_runner.py         # Walk-Forward 运行器
-│   │
-│   ├── experiments/         # 实验脚本
-│   │   ├── sweep_v27_regime_slope.py
-│   │   └── sweep_v27_regime_bcde.py
 │   │
 │   └── tools/               # 工具脚本
 │       ├── cli.py                # 数据库 CLI
@@ -183,14 +179,16 @@ account_runner.py ← core/db.py ← quant_stocks.db (K线面板)
 account_runner.py → quant_accounts.db (交易记录)
 ```
 
-## 七、Cron 调度
+## 七、Cron 调度（4 个任务，Hermes cron）
 
 | 任务 | 时间 | 命令 | 备注 |
 |------|------|------|------|
 | 数据更新 | 11:31/15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数 |
-| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v27 |
-| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v27 |
+| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v27 价量共振 |
+| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v27 价量共振 |
 | 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | |
+
+> 账户1(v11b)、账户3(v20c) 已暂停，不参与日常调度。
 
 ## 七、回测与模拟盘一致性
 

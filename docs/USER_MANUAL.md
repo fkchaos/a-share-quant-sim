@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-18（回测框架统一入口 + strategy_adapter 架构）
+> 最后更新：2026-06-21（清理退役策略引用、更新测试命令、移除废弃环境变量）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -101,8 +101,8 @@ sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=500000 WHERE 
 
 ## 三、回测引擎
 
-> **统一入口**：所有策略（内置 + v27/v20c/v11b）都通过 `run_backtest.py` 跑回测。
-> 策略路由自动识别：内置策略走通用回测框架，v27/v20c 走 `wf_runner`。
+> **统一入口**：所有策略（内置 + v27/v32/v35 等）都通过 `run_backtest.py` 跑回测。
+> 策略路由自动识别：内置策略走通用回测框架，v27 走 `wf_runner`。
 
 ### 3.1 快速开始
 
@@ -112,9 +112,6 @@ python scripts/backtest/run_backtest.py --strategy v4_baseline
 
 # 跑 v27 价量共振（WF 回测）
 python scripts/backtest/run_backtest.py --strategy v27
-
-# 跑 v20c 尾盘缩量（WF 回测）
-python scripts/backtest/run_backtest.py --strategy v20c
 
 # 指定回测区间
 python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
@@ -131,10 +128,9 @@ run_backtest.py
 │   ├── core/factors.py (51 因子)
 │   ├── core/scoring.py (Z-score + Ensemble)
 │   └── core/account.py (PortfolioState + buy/sell)
-└── v27/v20c → wf_runner.py
+└── v27 → wf_runner.py
     ├── strategy_adapter.py (统一选股+风控+市场状态)
-    │   ├── v27: v27_select.py (价量共振)
-    │   └── v20c: v20_tail_pick.py (尾盘缩量)
+    │   └── v27: v27_select.py (价量共振)
     └── core/account.py (buy/sell — 与模拟盘完全一致)
 ```
 
@@ -144,11 +140,11 @@ run_backtest.py
 
 | 参数 | 默认值 | 说明 | 示例 |
 |------|--------|------|------|
-| `--strategy` | `all` | 策略名（v4_baseline/v27/v20c 等），或 `all` | `--strategy v27` |
+| `--strategy` | `all` | 策略名（v4_baseline/v27 等），或 `all` | `--strategy v27` |
 | `--start` | `2021-01-01` | 回测起始日期 | `--start 2023-01-01` |
 | `--end` | 今天 | 回测结束日期 | `--end 2025-06-30` |
 | `--exec-timing` | `close` | `close`=收盘价(理想) / `open`=开盘价(接近实盘) | `--exec-timing open` |
-| `--walk-forward` | 关闭 | 启用 Walk-Forward 验证（仅内置策略） | `--walk-forward` |
+| `--walk-forward` | 关闭 | 启用 Walk-Forward 验证 | `--walk-forward` |
 | `--log` | 关闭 | 自动追加结果到 RESULTS_LOG.md | `--log` |
 | `--param` | 无 | 覆盖单个参数（可多次使用，仅内置策略） | `--param top_n=15 rebalance_freq=10` |
 
@@ -180,7 +176,6 @@ python scripts/sim/account_runner.py --strategy all report_only
 
 # 单账户回测
 python scripts/sim/account_runner.py --strategy v27 report_only
-python scripts/sim/account_runner.py --strategy v20c report_only
 python scripts/sim/account_runner.py --strategy v11b report_only
 ```
 
@@ -197,14 +192,11 @@ Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段
 ### 4.2 运行 WF
 
 ```bash
-# v27 价量共振
+# v27 价量共振（默认 step=126，5 folds）
 python scripts/backtest/run_backtest.py --strategy v27
 
 # v27 快速扫描（step=252，更少 fold）
 python scripts/backtest/wf_runner.py --strategy v27 --step 252
-
-# v20c 尾盘缩量
-python scripts/backtest/run_backtest.py --strategy v20c
 ```
 
 ### 4.3 怎么看结果
@@ -240,7 +232,9 @@ cat data/backtest_results/wf_v27_latest.json
 | 策略 | 平均收益率 | 夏普 | 回撤 | 正收益fold | 状态 |
 |------|-----------|------|------|-----------|------|
 | v27 | 121.3% | 4.16 | -8.2% | 4/4 (100%) | ✅ WF通过 |
-| v20c | — | — | — | — | ⚠️ 2021-2022选股范围受限 |
+| v32 | — | — | — | — | 🔬 精简版运行中 |
+| v33 | — | — | — | — | ⚠️ 双因子验证无效 |
+| v35 | — | — | — | — | ⚠️ 相对 v27 无实质提升 |
 
 ---
 
@@ -250,23 +244,16 @@ cat data/backtest_results/wf_v27_latest.json
 
 模拟盘分三步：**信号 → 执行 → 报告**，对应三个命令。每天按顺序跑。
 
-### 5.2 账户1：v11b（independent 模式）
+### 5.2 账户1：v11b（⏸️ 已暂停，统一走 account_runner）
 
 ```bash
-# 上午出信号（11:45 执行）
-
-  python scripts/sim/sim_account1.py intraday_signal
-
-# 下午开盘执行（13:00 执行）
-
-  python scripts/sim/sim_account1.py intraday_execute
-
-# 收盘报告（15:30 执行）
-
-  python scripts/sim/sim_account1.py report_only
+# 与账户2 共用同一入口，只需切换 --strategy
+python scripts/sim/account_runner.py --strategy v11b intraday_signal
+python scripts/sim/account_runner.py --strategy v11b intraday_execute
+python scripts/sim/account_runner.py --strategy v11b report_only
 ```
 
-### 5.3 账户2：v27（统一入口）
+### 5.3 账户2：v27（✅ 运行中，统一入口）
 
 ```bash
 # 上午出信号
@@ -282,7 +269,7 @@ cat data/backtest_results/wf_v27_latest.json
   python scripts/sim/account_runner.py --strategy v27 report_only
 ```
 
-### 5.4 账户3：v20c（尾盘模式）
+### 5.4 账户3：v20c（❌ 已退役，保留供参考）
 
 ```bash
 # 尾盘出信号（14:45 执行）
@@ -303,10 +290,8 @@ cat data/backtest_results/wf_v27_latest.json
 ```bash
 # 查看交易计划（执行后生成）
 cat data/portfolio/trade_plan_v27.json
-cat data/portfolio/trade_plan_v20c.json
 
 # 查看运行日志
-tail -50 data/portfolio/sim_account1.log
 tail -50 data/portfolio/account_runner.log
 
 # 查看账户状态
@@ -449,26 +434,7 @@ python scripts/backtest/run_backtest.py --strategy my_strategy
 | `regime_sideways_alloc` | 震荡市可用资金比例 | 0.5 ~ 0.8 | strategy_map params |
 | `regime_bear_alloc` | 熊市可用资金比例 | 0.1 ~ 0.5 | strategy_map params |
 
-### 7.3 v20c 完整参数参考（strategy_map.py）
-
-```python
-# core/strategy_map.py → STRATEGY_MAP["v20c"]["params"]
-STOP_LOSS      = -0.02    # 止损 -2%
-TAKE_PROFIT   = 0.05     # 止盈 +5%
-MAX_HOLDINGS   = 8        # 最大持仓 8 只
-MAX_DAILY_BUY  = 4        # 每日最多买 4 只
-MAX_POSITION   = 0.20     # 单只最大仓位 20%
-HOLD_DAYS_MAX  = 5        # 最大持仓天数 5
-HOLD_DAYS_MIN  = 1        # 最小持仓天数 1
-REGIME_ENABLED   = True     # 市场状态识别开关
-REGIME_MA_PERIOD = 20       # MA 周期
-REGIME_SLOPE_DAYS = 5      # 斜率回看天数
-REGIME_BULL_ALLOC = 1.0     # 牛市可用资金比例
-REGIME_SIDEWAYS_ALLOC = 0.7 # 震荡市可用资金比例
-REGIME_BEAR_ALLOC = 0.3     # 熊市可用资金比例
-```
-
-### 7.4 v27 完整参数参考（strategy_map.py）
+### 7.3 v27 完整参数参考（strategy_map.py）
 
 ```python
 # core/strategy_map.py → STRATEGY_MAP["v27"]["params"]
@@ -552,12 +518,8 @@ crontab -e
 45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> data/portfolio/account_runner.log 2>&1
 0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> data/portfolio/account_runner.log 2>&1
 
-# 账户3 信号+执行
-45 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_signal >> data/portfolio/account_runner.log 2>&1
-55 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v20c tail_execute >> data/portfolio/account_runner.log 2>&1
-
-# 收盘报告（三账户）
-30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy all report_only >> data/portfolio/account_runner.log 2>&1
+# 收盘报告
+30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 report_only >> data/portfolio/account_runner.log 2>&1
 ```
 
 ### 8.4 验证
@@ -582,8 +544,6 @@ hermes cron list
 ```bash
 
 ```
-
-然后所有命令都是 `python scripts/tools/cli.py <命令> [参数]` 的格式。
 
 ### 9.1 查看账户
 
@@ -709,23 +669,25 @@ python scripts/tools/cli.py stats
 
 ```bash
 # 快速测试（<1s，跳过慢的）
-python -m pytest tests/ -v -k "not slow"
+python -m pytest tests/standard/ -v -k "not slow"
 
-# 全部测试（约 10s）
-python -m pytest tests/ -v
+# 全部测试（约 5s）
+python -m pytest tests/standard/ -v
 
 # 按模块跑
-python -m pytest tests/test_golden.py -v      # 12 个 Golden 测试（核心逻辑）
-python -m pytest tests/test_sim_trading.py -v  # 39 个模拟盘测试
-python -m pytest tests/test_ensemble.py -v     # 19 个 Ensemble 测试
+python -m pytest tests/standard/test_account.py -v      # 19 个账户逻辑测试
+python -m pytest tests/standard/test_sim.py -v          # 18 个模拟盘测试
+python -m pytest tests/standard/test_strategies.py -v   # 14 个策略因子测试
+python -m pytest tests/standard/test_backtest.py -v     # 13 个回测引擎测试
+python -m pytest tests/standard/test_integration.py -v  # 12 个集成测试
 ```
 
 测试通过的标准输出：
 ```
-========================= 70 passed in 2.34s =========================
+========================= 69 passed in 0.21s =========================
 ```
 
-如果有 FAILED，看失败信息排查。常见原因：数据库路径不对、PYTHONPATH 未设置。
+如果有 FAILED，看失败信息排查。
 
 ---
 
@@ -815,7 +777,6 @@ EOF
 # 2. 注册到 strategy_map.py（编辑 core/strategy_map.py）
 
 # 3. 模拟盘试试
- BACKTEST_DATA_DIR=data
 python scripts/sim/account_runner.py --strategy my_strategy intraday_signal
 
 # 4. 跑回测验证（需要写独立回测脚本或接入回测引擎）
@@ -826,13 +787,11 @@ python scripts/sim/account_runner.py --strategy my_strategy intraday_signal
 ### 场景 2：改个参数看效果
 
 ```bash
-# 修改 v20c 的止盈从 15% 改为 10%
-# 编辑 scripts/strategies/v20_tail_pick.py：
-#   stop_profit = 0.15 → stop_profit = 0.10
+# 修改 v27 的止盈从 5% 改为 8%
+# 编辑 core/strategy_map.py → STRATEGY_MAP["v27"]["params"]["TAKE_PROFIT"] = 0.08
 
 # 跑回测
- BACKTEST_DATA_DIR=data
-python scripts/backtest/run_backtest.py --strategy v20c
+python scripts/backtest/run_backtest.py --strategy v27
 
 # 对比结果
 cat data/backtest_results/$(ls -t data/backtest_results/ | head -1)/summary.json

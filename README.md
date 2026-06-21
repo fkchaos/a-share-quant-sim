@@ -16,12 +16,6 @@ python scripts/backtest/run_backtest.py --strategy v27  # 跑回测
 python scripts/sim/account_runner.py --account-id 2 intraday_signal  # 模拟盘信号
 ```
 
-## 账户
-
-| 账户 | ID | 策略 | 资金 | 状态 |
-|------|-----|------|------|------|
-| 账户2 | 2 | v27 价量共振 | 20万 | 运行中 |
-
 ## 文档
 
 - [DEPLOY.md](docs/DEPLOY.md) — 部署指南

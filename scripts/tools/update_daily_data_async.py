@@ -5,7 +5,7 @@ update_daily_data_async.py — 并发数据更新
       CSV 作为可选备份（--csv 开启），默认不写
       从任务调度层控制频率（一天上午+下午两次）
 """
-import os, sys, time, asyncio, argparse
+import os, sys, time, asyncio, argparse, json
 from datetime import datetime, timedelta
 import pandas as pd
 
@@ -152,16 +152,30 @@ async def async_update_all(write_csv=False):
     print(f"  总耗时: {total:.1f}s")
 
     # ── 更新上证指数 ──
+    index_ok = False
     try:
         from fetch_index_data import fetch_index_kline, save_to_db
         print(f"\n📈 更新上证指数...")
         idx_records = fetch_index_kline()
         if idx_records:
             save_to_db(idx_records)
+            index_ok = True
     except Exception as e:
         print(f"  ⚠️ 上证指数更新失败: {e}")
 
-    return total
+    # 输出结构化 JSON
+    result = {
+        "type": "data_update",
+        "updated": db_success,
+        "failed": db_fail + len(skip_codes),
+        "records": len(all_records),
+        "duration": round(total, 1),
+        "index_ok": index_ok,
+    }
+    if skip_codes:
+        result["skipped_codes"] = list(skip_codes.keys())[:20]
+    print(json.dumps(result, ensure_ascii=False))
+    return result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="A股日频数据更新（并发直写DB）")

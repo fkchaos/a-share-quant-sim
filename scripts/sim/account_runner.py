@@ -313,24 +313,59 @@ def is_trade_day(date_str):
 
 # ── 主流程 ──────────────────────────────────────────────────────
 def run_signal(account_id, date, strategy_name=None):
-    """信号生成：选股 + 风控"""
-    import traceback
+    """信号生成：选股 + 风控，输出结构化 JSON"""
+    import traceback, json
     t0 = time.time()
 
     try:
         # 交易日检查
         if not is_trade_day(date):
-            print(f"⏭️ {date} 非交易日，跳过信号生成")
-            return
+            result = {"type": "signal", "account_id": account_id, "date": str(date), "status": "skip", "reason": "非交易日"}
+            print(json.dumps(result, ensure_ascii=False))
+            return result
 
-        _run_signal_impl(account_id, date, strategy_name)
+        plan = _run_signal_impl(account_id, date, strategy_name)
+        if plan is None:
+            result = {"type": "signal", "account_id": account_id, "date": str(date), "status": "empty", "reason": "无交易计划"}
+            print(json.dumps(result, ensure_ascii=False))
+            return result
+
+        # 构建结构化输出
+        state = load_account(account_id)
+        result = {
+            "type": "signal",
+            "account_id": account_id,
+            "date": str(date),
+            "status": "ok",
+            "strategy": plan.get("strategy", ""),
+            "regime": plan.get("regime", ""),
+            "regime_multiplier": plan.get("regime_multiplier", 1.0),
+            "cash": state.cash,
+            "holdings_count": len(state.holdings),
+            "sells": [
+                {"code": s["code"], "name": s.get("name", ""), "shares": s.get("qty", 0), "reason": s.get("reason", ""), "pnl_pct": round(s.get("pnl", 0) * 100, 2)}
+                for s in plan.get("sell_plan", [])
+            ],
+            "buys": [
+                {"code": b["code"], "name": b.get("name", ""), "shares": b.get("qty", 0), "price": b.get("price", 0), "target_amount": b.get("target_amount", 0)}
+                for b in plan.get("buy_plan", [])
+            ],
+            "holds": [
+                {"code": h["code"], "name": h.get("name", ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0)}
+                for h in plan.get("hold_plan", [])
+            ],
+            "duration": round(time.time() - t0, 1),
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        return result
+
     except Exception as e:
         duration = int(time.time() - t0)
         tb = traceback.format_exc()
         logger.error(f"run_signal 异常: {e}\n{tb}")
-        print(f"❌ 信号生成失败: {e}")
-        # 写入 CRON_STATUS error 标记，cron_monitor 能检测到
-        print(f"[CRON_STATUS] job_id=signal_{account_id} status=error duration={duration} ts={datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        result = {"type": "signal", "account_id": account_id, "date": str(date), "status": "error", "error": str(e), "duration": duration}
+        print(json.dumps(result, ensure_ascii=False))
+        return result
 
 
 def _run_signal_impl(account_id, date, strategy_name=None):
@@ -554,42 +589,55 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
 
 def run_execute(account_id, date, strategy_name=None):
-    """执行交易：先卖后买"""
-    import requests, traceback
+    """执行交易：先卖后买，输出结构化 JSON"""
+    import requests, traceback, json
     t0 = time.time()
 
     try:
         # 交易日检查
         if not is_trade_day(date):
-            print(f"⏭️ {date} 非交易日，跳过交易执行")
-            return
+            result = {"type": "execute", "account_id": account_id, "date": str(date), "status": "skip", "reason": "非交易日"}
+            print(json.dumps(result, ensure_ascii=False))
+            return result
 
-        _run_execute_impl(account_id, date, strategy_name)
+        details = _run_execute_impl(account_id, date, strategy_name)
+
+        state = load_account(account_id)
+        result = {
+            "type": "execute",
+            "account_id": account_id,
+            "date": str(date),
+            "status": "ok",
+            "cash": state.cash,
+            "holdings_count": len(state.holdings),
+            "executed": len([d for d in details if d.get("action") in ("BUY", "SELL")]),
+            "skipped": len([d for d in details if d.get("action") == "SKIP"]),
+            "details": details,
+            "duration": round(time.time() - t0, 1),
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        return result
+
     except Exception as e:
         duration = int(time.time() - t0)
         tb = traceback.format_exc()
         logger.error(f"run_execute 异常: {e}\n{tb}")
-        print(f"❌ 交易执行失败: {e}")
-        print(f"[CRON_STATUS] job_id=execute_{account_id} status=error duration={duration} ts={datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        result = {"type": "execute", "account_id": account_id, "date": str(date), "status": "error", "error": str(e), "duration": duration}
+        print(json.dumps(result, ensure_ascii=False))
+        return result
 
 
 def _run_execute_impl(account_id, date, strategy_name=None):
-    """交易执行实现（被 run_execute 包裹）"""
+    """交易执行实现，返回交易详情列表"""
     import requests
     t0 = time.time()
-
-    # 交易日检查
-    if not is_trade_day(date):
-        print(f"⏭️ {date} 非交易日，跳过交易执行")
-        return
+    details = []
 
     if strategy_name is None:
         strategy_name = _resolve_strategy(account_id)
 
     strategy = load_strategy(strategy_name)
     params = strategy.get("params", {})
-
-    logger.info(f"=== 账户{account_id} / {strategy_name} 执行 {date} ===")
 
     state = load_account(account_id)
 
@@ -600,7 +648,7 @@ def _run_execute_impl(account_id, date, strategy_name=None):
             plan = json.load(f)
     except FileNotFoundError:
         logger.warning("无交易计划")
-        return
+        return details
 
     # 拉取实时价格
     codes = list(state.holdings.keys()) + [b['code'] for b in plan.get('buy_plan', [])]
@@ -619,21 +667,26 @@ def _run_execute_impl(account_id, date, strategy_name=None):
                     except: pass
         except: pass
 
-    # 从 plan 读取仓位乘数
     regime_mult = plan.get('regime_multiplier', 1.0)
-    regime_label = plan.get('regime', '未知')
 
     # 先卖
-    sold = []
     for item in plan.get('sell_plan', []):
         code = item['code']
         if code in state.holdings and code in spot:
             h = state.holdings[code]
             state = sell(state, code, spot[code], date, 'plan')
-            sold.append((code, h.get('name', code), h.get('shares', 0), spot[code]))
+            details.append({
+                "action": "SELL",
+                "code": code,
+                "name": h.get('name', code),
+                "shares": h.get('shares', 0),
+                "price": round(spot[code], 2),
+                "reason": item.get("reason", ""),
+            })
+        else:
+            details.append({"action": "SKIP", "code": code, "reason": "价格缺失或持仓不存在"})
 
     # 后买
-    bought = []
     buy_plan_map = {b['code']: b for b in plan.get('buy_plan', [])}
     cands = [(b['code'], b.get('score', 0)) for b in plan.get('buy_plan', [])]
     for code, score in cands:
@@ -644,7 +697,7 @@ def _run_execute_impl(account_id, date, strategy_name=None):
             max_hold = params.get("MAX_HOLDINGS", 12)
             max_buy = params.get("MAX_DAILY_BUY", 5)
             available = state.cash - state.initial_capital * 0.03
-            available = available * regime_mult  # 市场状态：熊市多留现金
+            available = available * regime_mult
             if available <= 0:
                 break
             nb = min(max_buy, max_hold - len(state.holdings))
@@ -653,83 +706,80 @@ def _run_execute_impl(account_id, date, strategy_name=None):
             per_stock = min(available / nb, state.initial_capital * max_pos)
             shares = int(per_stock / adj / 100) * 100
             if shares <= 0 or shares * adj > state.cash:
+                details.append({"action": "SKIP", "code": code, "reason": "资金不足"})
                 continue
             state = buy(state, code, price, date, shares)
             bname = buy_plan_map.get(code, {}).get('name', code)
-            bought.append((code, bname, price, shares))
+            details.append({
+                "action": "BUY",
+                "code": code,
+                "name": bname,
+                "shares": shares,
+                "price": round(price, 2),
+            })
+        else:
+            details.append({"action": "SKIP", "code": code, "reason": "价格缺失或已持仓"})
 
     save_account(state, account_id)
 
-    # ── 输出摘要（print 到 stdout，cron 捕获）──
-    print("=" * 60)
-    print(f"账户{account_id} / {strategy_name} 执行 — {date}")
-    print(f"市场状态: {regime_label} (仓位乘数 {regime_mult})")
-    print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
-    print("-" * 60)
-    if sold:
-        print(f"🔴 卖出 {len(sold)} 只:")
-        for code, name, shares, price in sold:
-            print(f"  {code} {name} — {shares}股 @ {price:.2f}")
-    if bought:
-        print(f"🟢 买入 {len(bought)} 只:")
-        for code, bname, price, shares in bought:
-            print(f"  {code} {bname} — {shares}股 @ {price:.2f}")
-    if not sold and not bought:
-        print("⚪ 无操作")
-    print("=" * 60)
+    logger.info(f"执行完成: 卖 {len([d for d in details if d['action']=='SELL'])} / 买 {len([d for d in details if d['action']=='BUY'])} / 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
 
-    logger.info(f"执行完成: 卖 {len(sold)} / 买 {len(bought)} / 持仓 {len(state.holdings)} 只, 耗时 {time.time()-t0:.1f}s")
+    return details
 
 
 def run_report(account_id, date, strategy_name=None):
-    """收盘报告"""
+    """收盘报告，输出结构化 JSON"""
+    import json
     if strategy_name is None:
         strategy_name = _resolve_strategy(account_id)
 
     state = load_account(account_id)
 
     nav = state.cash
+    holdings_detail = []
     for code, h in state.holdings.items():
         kl = get_kline(code)
+        mv = 0
         if kl:
             df = pd.DataFrame(kl)
             df['date'] = pd.to_datetime(df['date'])
             latest = df[df['date'] <= pd.Timestamp(date)].sort_values('date').iloc[-1]
+            mv = h.get('shares', 0) * latest['close']
             nav += h.get('shares', 0) * latest['close']
+        cost = h.get('cost_price', 0)
+        pnl_i = mv - cost * h.get('shares', 0)
+        pnl_i_pct = pnl_i / (cost * h.get('shares', 0)) * 100 if cost * h.get('shares', 0) > 0 else 0
+        holdings_detail.append({
+            "code": code,
+            "name": h.get('name', ''),
+            "shares": h.get('shares', 0),
+            "cost_price": cost,
+            "market_value": round(mv, 2),
+            "pnl_pct": round(pnl_i_pct, 2),
+        })
 
-    # 计算盈亏
     total_mv = nav - state.cash
     pnl = nav - state.initial_capital
     pnl_pct = pnl / state.initial_capital * 100 if state.initial_capital > 0 else 0
-
-    # ── 输出收盘报告（print 到 stdout，cron 捕获）──
-    print("=" * 60)
-    print(f"账户{account_id} / {strategy_name} 收盘报告 — {date}")
-    print(f"现金: ¥{state.cash:,.0f}  持仓: {len(state.holdings)} 只")
-    print(f"持仓市值: ¥{total_mv:,.0f}  净值: ¥{nav:,.0f}")
-    print(f"总收益: ¥{pnl:+,.0f} ({pnl_pct:+.2f}%)")
     _acct_cfg = get_account(account_id)
     _ps = (_acct_cfg or {}).get("params", {}).get("POSITION_SCALE", 1.0)
-    print(f"仓位控制: POSITION_SCALE={_ps:.2f}")
-    print("-" * 60)
-    if state.holdings:
-        print(f"持仓明细:")
-        for code, h in state.holdings.items():
-            shares = h.get('shares', 0)
-            cost = h.get('cost_price', 0)
-            mv = 0
-            kl = get_kline(code)
-            if kl:
-                df = pd.DataFrame(kl)
-                df['date'] = pd.to_datetime(df['date'])
-                latest = df[df['date'] <= pd.Timestamp(date)].sort_values('date').iloc[-1]
-                mv = shares * latest['close']
-            pnl_i = mv - cost * shares
-            pnl_i_pct = pnl_i / (cost * shares) * 100 if cost * shares > 0 else 0
-            print(f"  {code} {h.get('name', '')} — {shares}股 成本{cost:.2f} 市值¥{mv:,.0f} ({pnl_i_pct:+.1f}%)")
-    print("=" * 60)
 
-    logger.info(f"=== 账户{account_id} / {strategy_name} 收盘报告 {date} === 持仓 {len(state.holdings)} 只 现金 ¥{state.cash:,.0f} 净值 ¥{nav:,.0f} 收益 {pnl_pct:+.2f}%")
+    result = {
+        "type": "report",
+        "account_id": account_id,
+        "date": str(date),
+        "strategy": strategy_name,
+        "cash": round(state.cash, 2),
+        "nav": round(nav, 2),
+        "total_market_value": round(total_mv, 2),
+        "pnl": round(pnl, 2),
+        "pnl_pct": round(pnl_pct, 2),
+        "holdings_count": len(state.holdings),
+        "position_scale": _ps,
+        "holdings": holdings_detail,
+    }
+    print(json.dumps(result, ensure_ascii=False))
+    return result
 
 
 # ── 账户管理子命令 ─────────────────────────────────────────────────

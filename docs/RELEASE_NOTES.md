@@ -8,6 +8,14 @@
 
 ### 架构
 - **QMT 实盘接入调研**：QMT 不支持 Linux，需 Windows 桥接方案（Socket/REST/Redis）。推荐云 Windows Server + miniQMT 桥接服务。改造点：QMT 执行适配器 + 持仓同步，预计 3-5 天。
+- **脚本输出结构化 JSON**：account_runner.py (signal/execute/report) + update_daily_data_async.py 统一输出 JSON
+- **send_report.py 统一格式化**：5 种类型（signal/execute/report/data_update/error）+ 自动发 QQ
+- **run_and_send.py 串联**：执行脚本 → 捕获 JSON → send_report 格式化 → 发 QQ
+
+### 功能
+- **输出格式优化**：日期后加交易日标识（📅/🚫 非交易日）、信号加持有明细、执行加持仓明细
+- **非交易日简化输出**：只显示标题 + 跳过原因
+- **Cron Prompt 简化**：从 agent 解析格式改为直接调用 run_and_send.py
 
 ---
 

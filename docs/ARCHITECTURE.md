@@ -187,13 +187,10 @@ account_runner.py → quant_accounts.db (交易记录)
 
 | 任务 | 时间 | 命令 | 备注 |
 |------|------|------|------|
-| 数据更新 | 11:31/14:40 工作日 | `update_daily_data_async.py` | 含上证指数 |
-| 账户1-上午信号 | 11:45 工作日 | `--strategy v11b intraday_signal` | ⏸️ |
-| 账户1-下午执行 | 13:00 工作日 | `--strategy v11b intraday_execute` | ⏸️ |
-| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` | |
-| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` | |
-| 收盘报告 | 15:30 工作日 | `--account-id 2 report_only` | |
-| Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` | |
+| 数据更新 | 11:31/15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数 |
+| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v27 |
+| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v27 |
+| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | |
 
 ## 七、回测与模拟盘一致性
 

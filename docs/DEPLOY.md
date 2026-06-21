@@ -200,19 +200,17 @@ python scripts/sim/account_runner.py run --account-id 1 --strategy v11b intraday
 
 所有任务通过 `hermes cron` 管理，自动重试、失败告警、QQ 推送。
 
-**当前任务清单：**
+**当前任务清单（已启用）：**
 
 | 任务 | 时间 | 命令 |
 |------|------|------|
-| 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` |
-| 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` |
-| 账户2-上午信号 | 11:45 工作日 | `run --account-id 2 intraday_signal` | ✅ |
-| 账户2-下午执行 | 13:00 工作日 | `run --account-id 2 intraday_execute` | ✅ |
-| 账户1-上午信号 | 11:45 工作日 | `run --account-id 1 intraday_signal` | ⏸️ 暂停 |
-| 账户1-下午执行 | 13:00 工作日 | `run --account-id 1 intraday_execute` | ⏸️ 暂停 |
-| 收盘报告 | 15:30 工作日 | `run --account-id 1 report_only` + `run --account-id 2 report_only` |
-| Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` |
-| Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` |
+| 数据更新-上午 | 11:31 工作日 | `run_and_send.py --task data_update` |
+| 数据更新-下午 | 15:05 工作日 | `run_and_send.py --task data_update` |
+| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` |
+| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` |
+| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` |
+
+**已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
 
 ```bash
 hermes cron list          # 查看所有任务

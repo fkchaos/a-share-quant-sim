@@ -517,19 +517,19 @@ hermes cron pause <job_id>
 hermes cron resume <job_id>
 ```
 
-**当前任务清单：**
+**当前任务清单（已启用）：**
 
 | 任务 | 时间 | 命令 | 备注 |
 |------|------|------|------|
-| 数据更新-上午 | 11:31 工作日 | `update_daily_data_async.py` | 含上证指数更新 |
-| 数据更新-下午 | 14:40 工作日 | `update_daily_data_async.py` | 含上证指数更新 |
-| 账户2-上午信号 | 11:45 工作日 | `--strategy v27 intraday_signal` | |
-| 账户2-下午执行 | 13:00 工作日 | `--strategy v27 intraday_execute` | |
-| 账户3-尾盘信号 | 14:45 工作日 | `--strategy v20c tail_signal` | |
-| 账户3-尾盘执行 | 14:55 工作日 | `--strategy v20c tail_execute` | |
-| 收盘报告 | 15:30 工作日 | `--strategy all report_only` | 三账户统一 |
-| Cron监控-巡检 | */10 11-15 工作日 | `cron_monitor.py` | 漏执行/失败/超时检测 |
-| Cron监控-心跳 | 16:00 工作日 | `cron_monitor.py --heartbeat` | 每日汇总 |
+| 数据更新-上午 | 11:31 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
+| 数据更新-下午 | 15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
+| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v27 |
+| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v27 |
+| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | |
+
+**已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
+
+**输出格式：** 所有任务通过 send_report.py 自动格式化并发送到 QQ，日期后带 📅（交易日）/ 🚫 非交易日 标识，信号含买卖持明细，执行含持仓明细
 
 **Cron Prompt 设计原则：**
 - 脚本做所有工作，agent 只负责格式化输出

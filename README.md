@@ -13,7 +13,7 @@ cd a-share-quant-sim
 pip install -e .                  # 安装依赖（pandas/numpy/requests）
 python scripts/tools/init_project.py   # 一键初始化（建表+股票池+K线+账户）
 python scripts/backtest/run_backtest.py --strategy v27  # 跑回测
-python scripts/sim/account_runner.py --account-id 2 intraday_signal  # 模拟盘信号
+python scripts/sim/account_runner.py --strategy v27 intraday_signal  # 模拟盘信号
 ```
 
 ## 文档

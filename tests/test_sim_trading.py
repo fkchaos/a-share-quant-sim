@@ -27,7 +27,7 @@ from unittest.mock import patch
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
-os.environ.setdefault("BACKTEST_DATA_DIR", "/root/data")
+os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(PROJECT_ROOT, "data"))
 
 from core.account import PortfolioState, buy, sell, portfolio_value
 

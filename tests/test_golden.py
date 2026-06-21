@@ -20,7 +20,7 @@ import pandas as pd
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-os.environ.setdefault("BACKTEST_DATA_DIR", "/root/data")
+os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(PROJECT_ROOT, "data"))
 
 from core.factors import calc_factors_panel
 from core.config import DEFAULT_FACTOR_WEIGHTS

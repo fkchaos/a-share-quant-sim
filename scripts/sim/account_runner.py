@@ -606,17 +606,37 @@ def run_execute(account_id, date, strategy_name=None):
         details = _run_execute_impl(account_id, date, strategy_name)
 
         state = load_account(account_id)
+        # 构建持仓明细
+        holdings_detail = []
+        for code, h in state.holdings.items():
+            cost_price = h.get("cost_price", 0)
+            shares = h.get("shares", 0)
+            # 获取当前价（用收盘价，简化处理）
+            current_price = h.get("current_price", cost_price)
+            mv = shares * current_price
+            pnl_i_pct = (current_price / cost_price - 1) * 100 if cost_price > 0 else 0
+            holdings_detail.append({
+                "code": code,
+                "name": h.get("name", ""),
+                "shares": shares,
+                "cost_price": round(cost_price, 2),
+                "current_price": round(current_price, 2),
+                "market_value": round(mv, 2),
+                "pnl_pct": round(pnl_i_pct, 2),
+            })
+
         result = {
             "type": "execute",
             "account_id": account_id,
             "date": str(date),
             "is_trading_day": True,
             "status": "ok",
-            "cash": state.cash,
+            "cash": round(state.cash, 2),
             "holdings_count": len(state.holdings),
             "executed": len([d for d in details if d.get("action") in ("BUY", "SELL")]),
             "skipped": len([d for d in details if d.get("action") == "SKIP"]),
             "details": details,
+            "holdings": holdings_detail,
             "duration": round(time.time() - t0, 1),
         }
         print(json.dumps(result, ensure_ascii=False))

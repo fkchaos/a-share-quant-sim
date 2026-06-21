@@ -120,6 +120,20 @@ def format_execute(data: dict, account_id: int) -> str:
     if not details:
         lines.append("⚪ 无交易")
 
+    # 执行后持仓明细
+    holdings = data.get("holdings", [])
+    if holdings:
+        lines.append("─" * 30)
+        lines.append(f"📦 执行后持仓 ({len(holdings)} 只):")
+        for h in holdings:
+            code = h.get("code", "")
+            name = h.get("name", "")
+            shares = h.get("shares", 0)
+            cost = h.get("cost_price", 0)
+            mv = h.get("market_value", 0)
+            pnl_i_pct = h.get("pnl_pct", 0)
+            lines.append(f"  {code} {name} — {shares}股 成本{cost:.2f} 市值¥{mv:,.0f} ({pnl_i_pct:+.1f}%)")
+
     return "\n".join(lines)
 
 

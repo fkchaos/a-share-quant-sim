@@ -23,7 +23,7 @@ from datetime import datetime
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-SEND_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "tools", "send_report.py")
+SEND_SCRIPT = os.path.join(PROJECT_ROOT, "tools", "send_report.py")
 
 
 def run_command(cmd: list[str], task: str, account_id: int = 0, dry_run: bool = False) -> dict:

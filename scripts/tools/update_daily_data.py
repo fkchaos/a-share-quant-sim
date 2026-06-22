@@ -28,13 +28,47 @@ HEADERS = {
 # 腾讯接口列顺序: [日期, 开盘, 收盘, 最高, 最低, 成交量(手)]
 TX_COLS = ['date', 'open', 'close', 'high', 'low', 'volume']
 
+def get_db_path():
+    """获取 SQLite 数据库路径"""
+    return os.path.join(_BASE_DIR, "..", "data", "quant_stocks.db")
+
 def get_stock_list():
-    """从本地 CSV 文件获取股票列表"""
+    """从 SQLite DB 获取活跃股票列表（优先），CSV 目录作为 fallback）"""
+    db_path = get_db_path()
+    if os.path.exists(db_path):
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            cursor = conn.execute(
+                "SELECT code FROM stock_pool WHERE is_active=1 ORDER BY code"
+            )
+            codes = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            if codes:
+                return codes
+        except Exception:
+            pass
+    # fallback: CSV 目录
     files = sorted([f for f in os.listdir(DAILY_DIR) if f.endswith('.csv')])
     return [f.replace('.csv', '') for f in files]
 
 def get_local_latest_date(code):
-    """获取本地某只股票的最新日期"""
+    """获取某只股票的最新日期（优先 DB，fallback CSV）"""
+    db_path = get_db_path()
+    if os.path.exists(db_path):
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            cursor = conn.execute(
+                "SELECT MAX(date) FROM daily_kline WHERE code=?", (code,)
+            )
+            row = cursor.fetchone()
+            conn.close()
+            if row and row[0]:
+                return pd.Timestamp(row[0])
+        except Exception:
+            pass
+    # fallback: CSV
     csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
     if not os.path.exists(csv_file):
         return None
@@ -162,13 +196,42 @@ def fetch_tencent_spot(code):
     except:
         return None
 
+def upsert_kline_to_db(df, code):
+    """
+    将K线数据 upsert 到 SQLite DB
+    返回: 新增行数
+    """
+    db_path = get_db_path()
+    if not os.path.exists(db_path):
+        return 0
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    count = 0
+    for date, row in df.iterrows():
+        date_str = str(date.date()) if hasattr(date, 'date') else str(date)[:10]
+        cursor.execute("""
+            INSERT INTO daily_kline (code, date, open, close, high, low, volume, amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(code, date) DO UPDATE SET
+                open=excluded.open, close=excluded.close,
+                high=excluded.high, low=excluded.low,
+                volume=excluded.volume, amount=excluded.amount
+        """, (code, date_str,
+              float(row.get('open', 0)), float(row.get('close', 0)),
+              float(row.get('high', 0)), float(row.get('low', 0)),
+              float(row.get('volume', 0)), float(row.get('amount', 0))))
+        count += 1
+    conn.commit()
+    conn.close()
+    return count
+
 def update_stock(code, days=5):
     """
     更新单只股票的数据
+    优先写 SQLite DB，CSV 作为可选 fallback
     返回: (新增行数, 是否成功)
     """
-    csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
-
     local_latest = get_local_latest_date(code)
 
     # 获取远程数据
@@ -176,25 +239,31 @@ def update_stock(code, days=5):
     if df is None or len(df) == 0:
         return 0, False
 
-    # 如果本地有数据，只保留本地没有的新数据
+    # 只保留新数据
     if local_latest is not None:
         new_data = df[df.index > local_latest]
         if len(new_data) == 0:
-            return 0, True  # 已经是最新
+            return 0, True
     else:
         new_data = df
 
-    if local_latest is not None:
-        # 追加新数据
+    # 写入 SQLite DB（主存储）
+    db_path = get_db_path()
+    if os.path.exists(db_path):
+        count = upsert_kline_to_db(new_data, code)
+        return count, True
+
+    # fallback: 写 CSV
+    csv_file = os.path.join(DAILY_DIR, f"{code}.csv")
+    os.makedirs(DAILY_DIR, exist_ok=True)
+    if local_latest is not None and os.path.exists(csv_file):
         old_df = pd.read_csv(csv_file, index_col='date', parse_dates=True)
         combined = pd.concat([old_df, new_data])
         combined = combined[~combined.index.duplicated(keep='last')]
         combined = combined.sort_index()
         combined.to_csv(csv_file)
     else:
-        # 新文件
         new_data.to_csv(csv_file)
-
     return len(new_data), True
 
 def update_all_stocks(target_date=None):
@@ -202,16 +271,14 @@ def update_all_stocks(target_date=None):
     print("=" * 60)
     print(f"A股日频数据更新 (腾讯行情) - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
-    
-    os.makedirs(DAILY_DIR, exist_ok=True)
-    
+
     stocks = get_stock_list()
     print(f"\n📋 本地股票数量: {len(stocks)}")
-    
+
     if not stocks:
         print("❌ 没有找到本地股票数据，请先初始化")
         return
-    
+
     # 检查当前数据状态
     latest_dates = {}
     for code in stocks:

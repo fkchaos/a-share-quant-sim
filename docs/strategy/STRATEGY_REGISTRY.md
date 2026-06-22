@@ -1,9 +1,7 @@
 # 策略注册表
 
-> 所有策略参数定义在 `core/config.py` 的 `STRATEGY_PROFILES`
-> 回测入口：`scripts/run_backtest.py --strategy <name>`
+> 回测入口：`python scripts/backtest/wf_runner.py --strategy <name>`
 > 模拟盘入口：`scripts/sim/account_runner.py --strategy <name>`（三账户统一入口，2026-07-16 起）
-> 评分引擎：`core/strategy.py` → `StrategyEngine`（factor/ensemble/ml/hybrid/multi 五种模式）
 > 配置参考：[CONFIG_REFERENCE.md](CONFIG_REFERENCE.md)
 
 ---

@@ -305,7 +305,7 @@
 7. **回测是唯一评价标准**：所有策略必须 WF 验证
 8. **因子权重方向必须用 IC 验证**：vol_of_vol IC > 0 但权重设为负，导致全量收益从 +140% 降到 -4%；参数调优前必须先确认因子方向
 9. **波动率因子会选中退市末日轮**：vol_of_vol/high vol 信号会挑到退市整理期股票（如 000937），产生不可持续的高收益；因子 IC 即使为正，选中这类股票的全量回测也不可信
-10. **新策略只需在 config.py 注册 profile**：不需要新建 sim 脚本；run_backtest.py --strategy 直接读取 STRATEGY_PROFILES；只有评分逻辑完全不同时才需要独立脚本（如 v13 评分排序选股）
+10. **新策略只需在 config.py 注册 profile**：不需要新建 sim 脚本；`wf_runner.py --strategy <name>` 直接读取 STRATEGY_PROFILES 跑回测；只有选股逻辑完全不同时才需要独立选择模块（如 v27 → v27_select.py）
 11. **bonus 因子全量提升 ≠ WF 提升**：pvt 因子全量 +3.29pp（49.87%→53.16%），但 WF 仅 +0.7pp（14.9%→15.6%），正收益 fold 从 94% 降至 88%。全量回测的大幅提升可能是过拟合，必须用 WF 验证。最终决定：bonus_factors 恢复为空列表 `[]`
 12. **传参方式：显式传参优于修改类属性**：bonus 因子通过 `select_stocks(bonus_factors=...)` 和 `calc_small_cap_factors(bonus_factors=...)` 的参数显式传入，扫描脚本和 WF 脚本均通过参数传递，不修改 `V13Config.bonus_factors` 类属性。避免多脚本并发运行时互相干扰
 

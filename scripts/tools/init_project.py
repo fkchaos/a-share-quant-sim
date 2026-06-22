@@ -383,7 +383,7 @@ def main():
         print("下一步:")
         print("  1. 绑定策略:")
         print("     python scripts/sim/account_runner.py switch --account-id 1 --strategy v27")
-        print("  2. 跑回测: python scripts/backtest/run_backtest.py --strategy v27")
+        print("  2. 跑回测: python scripts/backtest/wf_runner.py --strategy v27")
         print("  3. 跑模拟盘: python scripts/sim/account_runner.py --account-id 1 intraday_signal")
         print("  4. 查看账户: python scripts/sim/account_runner.py list")
         print("=" * 60)

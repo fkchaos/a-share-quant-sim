@@ -13,9 +13,9 @@
                ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────────────────┐
 │  scripts/sim/        │   │  scripts/backtest/               │
-│  account_runner.py   │   │  run_backtest.py (统一入口)       │
-│  (模拟盘统一入口)     │   │    ├── 内置策略 → 通用回测框架     │
-│                      │   │    └── v27 → wf_runner.py    │
+│  account_runner.py   │   │  wf_runner.py (v27 回测入口)       │
+│                      │   │    └── strategy_adapter.py          │测入口)       │
+│                      │   │    └── strategy_adapter.py          │
 │                      │   │        └── strategy_adapter.py    │
 └──────────┬───────────┘   └──────────────────────────────────┘
            │                          │
@@ -61,9 +61,9 @@ a-share-quant-sim/
 │   │   └── v35_sector_rotation.py
 │   │
 │   ├── backtest/            # 回测框架
-│   │   ├── run_backtest.py      # 统一回测入口
+│   │   ├── wf_runner.py         # Walk-Forward 运行器 + 全量回测（--full）
 │   │   ├── strategy_adapter.py  # 策略适配器（选股+风控）
-│   │   └── wf_runner.py         # Walk-Forward 运行器
+│   │   └── sweep_v27_*.py       # 参数扫描脚本（调参用）
 │   │
 │   └── tools/               # 工具脚本
 │       ├── cli.py                # 数据库 CLI
@@ -192,7 +192,7 @@ account_runner.py → quant_accounts.db (交易记录)
 
 ## 七、回测与模拟盘一致性
 
-- 回测引擎：`scripts/backtest/run_backtest.py`
+- 回测引擎：`scripts/backtest/wf_runner.py`（WF 回测 + `--full` 全量回测）
 - 共享代码：`core/account.py`（PortfolioState + buy/sell）
 - 共享选股：`scripts/strategies/` 下的选股模块可被回测直接调用
 - 数据源：统一从 `core/db.py` 读取（SQLite）

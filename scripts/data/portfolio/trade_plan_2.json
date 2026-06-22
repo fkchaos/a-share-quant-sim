@@ -1,115 +1,131 @@
 {
-  "date": "2026-06-18",
+  "date": "2026-06-22",
   "account_id": 2,
   "strategy": "v27",
   "regime": "未启用",
   "regime_multiplier": 1.0,
   "sell_plan": [
     {
-      "code": "002430",
-      "name": "杭氧股份",
-      "qty": 600,
+      "code": "000034",
+      "name": "神州数码",
+      "qty": 500,
       "reason": "stop_loss",
-      "pnl": -0.0155
+      "pnl": -0.0301
     },
     {
       "code": "002436",
       "name": "兴森科技",
       "qty": 200,
       "reason": "take_profit",
-      "pnl": 0.0651
+      "pnl": 0.0789
     },
     {
-      "code": "301536",
-      "name": "星宸科技",
-      "qty": 100,
+      "code": "300346",
+      "name": "南大光电",
+      "qty": 200,
       "reason": "take_profit",
-      "pnl": 0.0429
+      "pnl": 0.0608
+    },
+    {
+      "code": "300433",
+      "name": "蓝思科技",
+      "qty": 200,
+      "reason": "stop_loss",
+      "pnl": -0.0317
+    },
+    {
+      "code": "600601",
+      "name": "方正科技",
+      "qty": 1000,
+      "reason": "stop_loss",
+      "pnl": -0.0302
     },
     {
       "code": "600688",
       "name": "上海石化",
       "qty": 3000,
       "reason": "take_profit",
-      "pnl": 0.0434
+      "pnl": 0.0332
     },
     {
       "code": "605589",
       "name": "圣泉集团",
       "qty": 100,
       "reason": "take_profit",
-      "pnl": 0.041
+      "pnl": 0.0614
     }
   ],
   "buy_plan": [
     {
-      "code": "301526",
-      "name": "国际复材",
-      "score": 55.89,
-      "price": 40.89,
-      "qty": 1600,
-      "target_amount": 65758.25,
-      "position_ratio": 0.5
+      "code": "300285",
+      "name": "国瓷材料",
+      "score": 74.49,
+      "price": 97.56,
+      "qty": 400,
+      "target_amount": 39077.12,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "300475",
+      "name": "香农芯创",
+      "score": 52.48,
+      "price": 283.47,
+      "qty": 100,
+      "target_amount": 39077.12,
+      "position_ratio": 0.25
     },
     {
       "code": "300570",
       "name": "太辰光",
-      "score": 52.56,
-      "price": 268.6,
-      "qty": 200,
-      "target_amount": 65758.25,
-      "position_ratio": 0.5
+      "score": 51.96,
+      "price": 278.85,
+      "qty": 100,
+      "target_amount": 39077.12,
+      "position_ratio": 0.25
+    },
+    {
+      "code": "600549",
+      "name": "厦门钨业",
+      "score": 46.34,
+      "price": 93.66,
+      "qty": 400,
+      "target_amount": 39077.12,
+      "position_ratio": 0.25
     }
   ],
   "hold_plan": [
     {
-      "code": "000034",
-      "name": "神州数码",
-      "current_shares": 500,
-      "price": 26.58,
-      "cost_price": 26.59,
-      "action": "hold"
-    },
-    {
       "code": "000657",
       "name": "中钨高新",
       "current_shares": 100,
-      "price": 98.48,
+      "price": 108.33,
       "cost_price": 91.01,
       "action": "hold"
     },
     {
-      "code": "300346",
-      "name": "南大光电",
-      "current_shares": 200,
-      "price": 64.9,
-      "cost_price": 64.86,
+      "code": "002430",
+      "name": "杭氧股份",
+      "current_shares": 600,
+      "price": 27.19,
+      "cost_price": 26.41,
       "action": "hold"
     },
     {
-      "code": "300433",
-      "name": "蓝思科技",
-      "current_shares": 200,
-      "price": 55.77,
-      "cost_price": 56.08,
-      "action": "hold"
-    },
-    {
-      "code": "600601",
-      "name": "方正科技",
-      "current_shares": 1000,
-      "price": 14.4,
-      "cost_price": 14.39,
+      "code": "301536",
+      "name": "星宸科技",
+      "current_shares": 100,
+      "price": 110.74,
+      "cost_price": 108.01,
       "action": "hold"
     },
     {
       "code": "603160",
       "name": "汇顶科技",
       "current_shares": 200,
-      "price": 59.04,
+      "price": 58.22,
       "cost_price": 57.6,
       "action": "hold"
     }
   ],
-  "timestamp": "2026-06-21T19:12:11.225854"
+  "timestamp": "2026-06-22T11:50:33.726972"
 }

@@ -236,11 +236,11 @@ PROFILE_MY_STRATEGY = StrategyConfig(
 
 ### 方法三：命令行覆盖（仅回测）
 
-> ⚠️ `run_backtest.py` 只支持内置策略（v4_baseline 等），不支持 v27/v20c/v11b。
+> ⚠️ `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py），v27 回测请用 `wf_runner.py`。
 
 ```bash
-python scripts/backtest/run_backtest.py --strategy v4_baseline \
-    --param top_n=15 --param stop_loss=0.15 --param rebalance_freq=10
+# v27 回测（WF）
+python scripts/backtest/wf_runner.py --strategy v27
 ```
 
 ---

@@ -69,28 +69,33 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 
 ## 4. 跑回测
 
-> ✅ 所有策略（内置 + v27/v20c）都通过 `run_backtest.py` 统一入口。
+> ✅ v27 回测入口：`python scripts/backtest/wf_runner.py --strategy v27`
+> 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py）。
 
 ```bash
-# 跑内置策略（v4_baseline、ic_ir_weighted、markowitz 等）
-python scripts/backtest/run_backtest.py --strategy v4_baseline
+# 全量回测（不做 WF 切分，直接跑全部历史数据）
+python scripts/backtest/wf_runner.py --strategy v27 --full
 
-# 跑 v27 价量共振 — WF 回测
-python scripts/backtest/run_backtest.py --strategy v27
+# WF 回测（默认 4 folds，约 50 秒）
+python scripts/backtest/wf_runner.py --strategy v27
 
-# 跑 v20c 尾盘缩量 — WF 回测（已退役，仅作参考）
-python scripts/backtest/run_backtest.py --strategy v20c
+# 指定训练/测试/滑动窗口
+python scripts/backtest/wf_runner.py --strategy v27 --train 252 --test 126 --step 63
 
 # 指定回测区间
-python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
+python scripts/backtest/wf_runner.py --strategy v27 --start 2023-01-01 --end 2025-12-31
+```
 
-# 跑模拟盘回测
+# 参数扫描（调参用，很慢，日常回测不要用）
+python scripts/backtest/sweep_v27_final.py          # 全组合扫描（48组，约40分钟）
+python scripts/backtest/sweep_v27_mom_threshold.py  # 动量阈值扫描
+python scripts/backtest/sweep_v27_sltp_hold.py      # 止损止盈持仓扫描
+
+# 模拟盘回测
 python scripts/sim/account_runner.py --account-id 2 report_only
 ```
 
-输出在 `data/backtest_results/` 目录下，包含 summary.json、NAV 曲线、交易记录。
-
-> 旧独立 WF 脚本（v27_walk_forward.py、v20c_wf_sl_tp_scan.py 等）仍保留，但推荐使用统一入口。
+输出在 `data/backtest_results/` 目录下，包含 wf_v27_latest.json、NAV 曲线、交易记录。
 
 ---
 

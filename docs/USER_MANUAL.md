@@ -101,70 +101,68 @@ sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=500000 WHERE 
 
 ## 三、回测引擎
 
-> **统一入口**：所有策略（内置 + v27/v32/v35 等）都通过 `run_backtest.py` 跑回测。
-> 策略路由自动识别：内置策略走通用回测框架，v27 走 `wf_runner`。
+> **v27 回测入口**：`python scripts/backtest/wf_runner.py --strategy v27`
+> 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py），统一使用 wf_runner。
 
 ### 3.1 快速开始
 
 ```bash
-# 跑内置策略（v4_baseline 等）
-python scripts/backtest/run_backtest.py --strategy v4_baseline
+# 全量回测（不做 WF 切分，直接跑全部历史数据）
+python scripts/backtest/wf_runner.py --strategy v27 --full
 
-# 跑 v27 价量共振（WF 回测）
-python scripts/backtest/run_backtest.py --strategy v27
+# WF 回测（默认 4 folds，约 50 秒）
+python scripts/backtest/wf_runner.py --strategy v27
+
+# WF 回测（更多 folds）
+python scripts/backtest/wf_runner.py --strategy v27 --step 63
 
 # 指定回测区间
-python scripts/backtest/run_backtest.py --strategy v27 --start 2023-01-01 --end 2025-12-31
+python scripts/backtest/wf_runner.py --strategy v27 --start 2023-01-01 --end 2025-12-31
 
-# 跑所有内置策略
-python scripts/backtest/run_backtest.py
+# 参数扫描（调参用，很慢，日常回测不要用）
+python scripts/backtest/sweep_v27_final.py          # 全组合扫描（48组，约40分钟）
+python scripts/backtest/sweep_v27_mom_threshold.py  # 动量阈值扫描
+python scripts/backtest/sweep_v27_sltp_hold.py      # 止损止盈持仓扫描
 ```
 
 ### 3.2 回测架构
 
 ```
-run_backtest.py
-├── 内置策略 (v4/v5/v6/v7/v8) → 通用回测框架
-│   ├── core/factors.py (51 因子)
-│   ├── core/scoring.py (Z-score + Ensemble)
-│   └── core/account.py (PortfolioState + buy/sell)
-└── v27 → wf_runner.py
-    ├── strategy_adapter.py (统一选股+风控+市场状态)
-    │   └── v27: v27_select.py (价量共振)
-    └── core/account.py (buy/sell — 与模拟盘完全一致)
+wf_runner.py
+├── strategy_adapter.py (统一选股+风控+市场状态)
+│   └── v27: v27_select.py (价量共振)
+└── core/account.py (buy/sell — 与模拟盘完全一致)
 ```
 
 **关键设计**：回测和模拟盘使用**同一套交易逻辑**（`core/account.py` 的 `buy()`/`sell()`），确保结果一致。
 
-### 3.3 参数列表
+### 3.3 wf_runner 参数列表
 
 | 参数 | 默认值 | 说明 | 示例 |
 |------|--------|------|------|
-| `--strategy` | `all` | 策略名（v4_baseline/v27 等），或 `all` | `--strategy v27` |
-| `--start` | `2021-01-01` | 回测起始日期 | `--start 2023-01-01` |
-| `--end` | 今天 | 回测结束日期 | `--end 2025-06-30` |
-| `--exec-timing` | `close` | `close`=收盘价(理想) / `open`=开盘价(接近实盘) | `--exec-timing open` |
-| `--walk-forward` | 关闭 | 启用 Walk-Forward 验证 | `--walk-forward` |
-| `--log` | 关闭 | 自动追加结果到 RESULTS_LOG.md | `--log` |
-| `--param` | 无 | 覆盖单个参数（可多次使用，仅内置策略） | `--param top_n=15 rebalance_freq=10` |
+| `--strategy` | 必填 | 策略名（v27） | `--strategy v27` |
+| `--train` | 252 | 训练期天数 | `--train 252` |
+| `--test` | 252 | 测试期天数 | `--test 126` |
+| `--step` | 252 | 滑动步长 | `--step 63` |
+| `--start` | 2021-01-01 | 回测起始日期 | `--start 2023-01-01` |
+| `--end` | 2026-05-31 | 回测结束日期 | `--end 2025-12-31` |
 
 ### 3.4 输出在哪？
 
-每次回测结果保存在 `data/backtest_results/` 下，按时间戳命名：
+每次回测结果保存在 `data/backtest_results/` 下：
 
 ```bash
-# 查看最新的回测结果目录
-ls -lt data/backtest_results/ | head -5
+# 查看最新的 WF 结果
+cat data/backtest_results/wf_v27_latest.json
 
-# 查看某个回测的绩效摘要
-cat data/backtest_results/20260715_120000/summary.json
+# 查看所有回测结果目录
+ls -lt data/backtest_results/ | head -5
 ```
 
 ### 3.5 单次回测需要多久？
 
-- 内置策略全量回测（2020-2026，800 只股票）：约 **50 秒**，内存约 1GB
 - v27 WF（4 folds, step=252）：约 **50 秒**
-- v11b WF（15 folds）：约 **4 秒**
+- v27 参数扫描（sweep_v27_final，48组）：约 **40 分钟**
 
 ### 3.6 模拟盘回测（account_runner.py）
 

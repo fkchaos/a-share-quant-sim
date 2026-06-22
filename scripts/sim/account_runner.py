@@ -752,10 +752,11 @@ def _run_execute_impl(account_id, date, strategy_name=None):
 
 
 def run_report(account_id, date, strategy_name=None):
-    """收盘报告，输出结构化 JSON"""
+    """收盘报告，输出结构化 JSON（不需要策略信息，仅展示账户状态）"""
     import json
     if strategy_name is None:
-        strategy_name = _resolve_strategy(account_id)
+        acct = get_account(account_id)
+        strategy_name = (acct.get("strategy", "") if acct else "") or "unknown"
 
     state = load_account(account_id)
 

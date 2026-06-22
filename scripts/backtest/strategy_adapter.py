@@ -105,6 +105,85 @@ class StrategyAdapter:
             "REGIME_BEAR_ALLOC": 0.3,
         }
 
+        # ── v38: 价量共振（v27 改进版）──
+        self._select_fns["v38"] = self._v38_select
+        self._risk_params["v38"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.06,
+            "PV_CORR_20_MIN": 0.10,
+            "PV_CORR_10_MIN": -0.2,
+            "BOLL_W_MIN": 0.8,
+            "MIN_AMOUNT_DAYS": 30000000,
+            "COOLDOWN_DAYS": 3,
+            "MAX_SAME_PREFIX": 3,
+        }
+        self._regime_params["v38"] = {}
+
+        # ── v39: 价量共振高频版（v38 放宽门槛）──
+        self._select_fns["v39"] = self._v39_select
+        self._risk_params["v39"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 10,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_20_MIN": 0.05,
+            "TURNOVER_MIN": 0.003,
+            "BOLL_W_MIN": 0.15,
+            "MIN_AMOUNT_DAYS": 3000000,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 10,
+        }
+        self._regime_params["v39"] = {}
+
+        # ── v39b: 价量共振平衡版（v38 门槛 + 收盘价买入 + 提高日买入上限）──
+        self._select_fns["v39b"] = self._v39b_select
+        self._risk_params["v39b"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 10,
+            "MAX_POSITION": 0.15,
+            "MOM_THRESHOLD": 0.05,
+            "PV_CORR_20_MIN": 0.10,
+            "TURNOVER_MIN": 0.005,
+            "BOLL_W_MIN": 0.2,
+            "MIN_AMOUNT_DAYS": 5000000,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 10,
+        }
+        self._regime_params["v39b"] = {}
+
+        # ── v39c: v27 门槛 + v39 多因子评分（验证评分逻辑是否有效）──
+        self._select_fns["v39c"] = self._v39c_select
+        self._risk_params["v39c"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.05,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+        }
+        self._regime_params["v39c"] = {}
+
         # ── v33: 残差动量 ──
         self._select_fns["v33"] = self._v33_select
         self._risk_params["v33"] = {
@@ -130,7 +209,7 @@ class StrategyAdapter:
     def select(self, strategy_name, factors, date, close_panel=None,
                volume_panel=None, amount_panel=None, high_panel=None,
                low_panel=None, open_panel=None, current_holdings=None,
-               params=None):
+               params=None, sold_recently=None):
         """
         统一选股接口。
 
@@ -150,10 +229,12 @@ class StrategyAdapter:
         if fn is None:
             raise ValueError(f"未知策略: {strategy_name}，可用: {list(self._select_fns.keys())}")
         return fn(factors, date, close_panel, volume_panel, amount_panel,
-                   high_panel, low_panel, open_panel, current_holdings, params)
+                   high_panel, low_panel, open_panel, current_holdings, params,
+                   sold_recently=sold_recently)
 
     def _v27_select(self, factors, date, close_panel, volume_panel, amount_panel,
-                    high_panel, low_panel, open_panel, current_holdings, params):
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
         """v27 选股 — 委托给 v27_select.py"""
         from scripts.strategies.v27_select import calc_factors, select_stocks_v27
 
@@ -170,8 +251,73 @@ class StrategyAdapter:
     # v20c 已退役，_v20c_select 方法移除
     # v31 已归档，_v29_select 方法移除
 
+    def _v38_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v38 选股 — 委托给 v38_pv_resonance.py"""
+        from scripts.strategies.v38_pv_resonance import calc_factors, select_stocks_v38
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v38"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v38(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently)
+
+    def _v39_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v39 选股 — 委托给 v39_pv_resonance.py"""
+        from scripts.strategies.v39_pv_resonance import calc_factors, select_stocks_v39
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently)
+
+    def _v39b_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39b 选股 — 委托给 v39b_pv_resonance.py"""
+        from scripts.strategies.v39b_pv_resonance import calc_factors, select_stocks_v39b
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39b"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39b(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v39c_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39c 选股 — v27 门槛 + v39 多因子评分"""
+        from scripts.strategies.v39c_pv_resonance import calc_factors, select_stocks_v39c
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39c"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39c(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
     def _v35_select(self, factors, date, close_panel, volume_panel, amount_panel,
-                    high_panel, low_panel, open_panel, current_holdings, params):
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
         """v35 选股 — 委托给 v35_sector_rotation.py"""
         from scripts.strategies.v35_sector_rotation import (
             calc_factors, select_stocks_v35
@@ -184,17 +330,18 @@ class StrategyAdapter:
         merged_params = dict(self._risk_params["v35"])
         if params:
             merged_params.update(params)
-        
+
         # 环境变量覆盖（用于参数扫描）
         import os
         for key in ['SECTOR_MOM_WEIGHT', 'SECTOR_W_SHORT', 'SECTOR_W_MID', 'SECTOR_W_LONG']:
             if key in os.environ:
                 merged_params[key] = float(os.environ[key])
-        
+
         return select_stocks_v35(factors, date, current_holdings, merged_params)
 
     def _v33_select(self, factors, date, close_panel, volume_panel, amount_panel,
-                    high_panel, low_panel, open_panel, current_holdings, params):
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
         """v33 选股 — 委托给 v33_residual_momentum.py"""
         from scripts.strategies.v33_residual_momentum import (
             calc_factors, select_stocks_v33
@@ -210,7 +357,8 @@ class StrategyAdapter:
         return select_stocks_v33(factors, date, current_holdings, merged_params)
 
     def _v32_select(self, factors, date, close_panel, volume_panel, amount_panel,
-                    high_panel, low_panel, open_panel, current_holdings, params):
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
         """v32 选股 — 委托给 v32_analyst_expectation.py"""
         from scripts.strategies.v32_analyst_expectation import (
             calc_factors, select_stocks_v32
@@ -263,6 +411,9 @@ class StrategyAdapter:
             return 0.099
 
         for code, h in list(state.holdings.items()):
+            # T+1：当天买入的股票不检查（hold_days < 1）
+            if h.get('hold_days', 0) < 1:
+                continue
             if code not in price_data.index:
                 continue
             cp = price_data[code]

@@ -26,15 +26,15 @@ DEFAULT_PARAMS = {
     "COOLDOWN_DAYS": 0,
     "MAX_SAME_PREFIX": 0,
 
-    # ── 选股门槛（与 v27 完全一致）──
-    "MOM_THRESHOLD": 0.05,        # 动量 > 5%（v27 水平）
+    # ── 选股门槛（精调最优）──
+    "MOM_THRESHOLD": 0.03,        # 动量 > 3%（精调最优，粗扫确认）
     "PV_CORR_10_MIN": -0.5,       # 排除量价背离（v27 逻辑）
-    "PV_CORR_20_MIN": 0.0,        # 量价共振 > 0（v27 加分项改为硬筛）
+    "PV_CORR_20_MIN": 0.0,        # 量价共振 > 0（粗扫确认几乎无影响，保持默认）
     "BOLL_W_MIN": 0.0,            # 布林带宽不筛选（v27 只加分）
 
-    # ── 评分权重（v39 多因子评分 + v27 有效因子）──
-    "W_MOM": 0.25,
-    "W_PV_CORR": 0.20,
+    # ── 评分权重（精调最优：W_MOM=0.20, W_PV_CORR=0.05）──
+    "W_MOM": 0.20,
+    "W_PV_CORR": 0.05,
     "W_TURNOVER": 0.10,
     "W_SIZE": 0.10,
     "W_FUND_FLOW": 0.15,

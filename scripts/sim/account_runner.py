@@ -412,6 +412,30 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     to_sell = adapter.risk_check(strategy_name, state, date, price_data,
                                   params, prev_close=prev_close)
 
+    # v40: 因子恶化卖出检查（策略有 factor_exit_fn 时启用）
+    factor_sell = []
+    factor_defer = []
+    sell_penalty_tracker = state._sell_penalty_tracker if hasattr(state, '_sell_penalty_tracker') else {}
+    factor_exit_fn = strategy.get("factor_exit_fn")
+    if factor_exit_fn and date in cp.index:
+        # 计算因子面板（直接 import 策略的 calc_factors，避免 adapter 接口膨胀）
+        from scripts.strategies.v40_factor_exit import calc_factors as v40_calc_factors
+        factors = v40_calc_factors(cp, vp, ap, hp, lp, op, params)
+        factor_sell, factor_defer, sell_penalty_tracker = factor_exit_fn(
+            factors, date, state.holdings, params, sell_penalty_tracker
+        )
+        if factor_sell or factor_defer:
+            logger.info(f"因子恶化: 确认卖出{len(factor_sell)}只, 延迟卖出{len(factor_defer)}只")
+        # 延迟卖出的股票：从 sell_codes 中移除（不卖）
+        factor_defer_codes = set(c for c, _ in factor_defer)
+        to_sell = [(c, r, p) for c, r, p in to_sell if c not in factor_defer_codes]
+        # 因子恶化确认卖出：追加到 to_sell
+        for code, score in factor_sell:
+            if code not in [c for c, _, _ in to_sell]:
+                to_sell.append((code, 'factor_decay', 0.0))
+        # 更新 state tracker
+        state._sell_penalty_tracker = sell_penalty_tracker
+
     # 选股（用 strategy_adapter 统一接口）
     cands = adapter.select(strategy_name, None, date,
                            cp, vp, ap, hp, lp, op,

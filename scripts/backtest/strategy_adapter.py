@@ -184,6 +184,52 @@ class StrategyAdapter:
         }
         self._regime_params["v39c"] = {}
 
+        # ── v40: 因子恶化卖出 + 延迟止盈止损（v39c 评分体系 + 持仓重评分）──
+        self._select_fns["v40"] = self._v40_select
+        self._risk_params["v40"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "SELL_THRESHOLD": 0.35,
+            "BUY_BACK_THRESHOLD": 0.65,
+            "SELL_PENALTY_N": 1,
+            "SELL_MODE": "threshold",
+            "MOMENTUM_DROP_PCT": 0.30,
+        }
+        self._regime_params["v40"] = {}
+
+        # ── v40b: 纯轮动（每日卖最低4只+买最高4只，无硬风控）──
+        self._select_fns["v40b"] = self._v40b_select
+        self._risk_params["v40b"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "SELL_COUNT": 4,
+            "BUY_COUNT": 4,
+            "NO_HARD_RISK": True,
+        }
+        self._regime_params["v40b"] = {}
+
         # ── v33: 残差动量 ──
         self._select_fns["v33"] = self._v33_select
         self._risk_params["v33"] = {
@@ -313,6 +359,38 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v39c(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v40b_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v40b 选股 — 纯轮动（卖最低4只+买最高4只）"""
+        from scripts.strategies.v40_factor_exit import calc_factors, select_stocks_v40b
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v40b"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v40b(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v40_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v40 选股 — 因子恶化卖出 + 延迟止盈止损"""
+        from scripts.strategies.v40_factor_exit import calc_factors, select_stocks_v40
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v40"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v40(factors, date, current_holdings, merged_params,
                                    sold_recently=sold_recently)
 
     def _v35_select(self, factors, date, close_panel, volume_panel, amount_panel,

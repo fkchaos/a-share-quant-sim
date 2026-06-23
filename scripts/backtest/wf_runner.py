@@ -42,6 +42,9 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
         print(f"❌ 未知策略: {strategy_name}，可用: {adapter.list_strategies()}")
         return None
 
+    # v40: 因子恶化卖出追踪器（全局，按 account_id 隔离）
+    sell_penalty_trackers = {}
+
     print("=" * 60)
     print(f"{strategy_name} Walk-Forward 验证")
     print(f"  WF: train={train_days}, test={test_days}, step={step_days}")
@@ -150,6 +153,25 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
             to_sell = adapter.risk_check(strategy_name, state, date, price_data,
                                           risk_params, prev_close=prev_close)
 
+            # v40: 因子恶化卖出检查
+            if strategy_name == "v40":
+                from scripts.strategies.v40_factor_exit import check_factor_exit
+                tracker = sell_penalty_trackers.get("default", {})
+                factor_sell, factor_defer, tracker = check_factor_exit(
+                    win_factors, date, state.holdings, risk_params, tracker
+                )
+                sell_penalty_trackers["default"] = tracker
+                # DEBUG
+                if factor_sell or factor_defer:
+                    print(f"  [DEBUG] {date}: factor_sell={factor_sell}, factor_defer={factor_defer}, tracker={tracker}")
+                # 延迟卖出：从 to_sell 中移除
+                defer_codes = set(c for c, _ in factor_defer)
+                to_sell = [(c, r, p) for c, r, p in to_sell if c not in defer_codes]
+                # 因子恶化确认卖出：追加
+                for code, score in factor_sell:
+                    if code not in [c for c, _, _ in to_sell]:
+                        to_sell.append((code, 'factor_decay', 0.0))
+
             # 执行卖出
             for code, reason, pnl in to_sell:
                 if code in state.holdings and code in price_data.index:
@@ -251,6 +273,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
         state = PortfolioState(cash=initial_capital, initial_capital=initial_capital)
         nav_list = []
         dates = win_close.index
+        print(f"  [DEBUG] WF loop: len(dates)={len(dates)}, start_idx={start_idx}, end_idx={end_idx}")
 
         for i in range(len(dates)):
             if i < 30:
@@ -284,8 +307,51 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
 
             # 风控检查（用 strategy_adapter）
             prev_close = win_close.iloc[i - 1] if i > 0 else None
-            to_sell = adapter.risk_check(strategy_name, state, date, price_data,
-                                          risk_params, prev_close=prev_close)
+            no_hard_risk = risk_params.get("NO_HARD_RISK", False)
+
+            if no_hard_risk:
+                # v40b: 纯轮动，无硬风控
+                from scripts.strategies.v40_factor_exit import select_stocks_v40b
+                sell_list, buy_list = select_stocks_v40b(
+                    win_factors, date, state.holdings, risk_params
+                )
+                to_sell = [(code, 'v40b_rotate', 0.0) for code, _ in sell_list]
+                print(f"  [V40B] {date}: sell {len(sell_list)}: {[c for c,_ in sell_list]}, buy {len(buy_list)}: {[c for c,_ in buy_list]}")
+            else:
+                # 正常风控检查
+                to_sell = adapter.risk_check(strategy_name, state, date, price_data,
+                                              risk_params, prev_close=prev_close)
+
+            # v40: 因子恶化卖出检查（先于风控，确保因子衰减优先触发）
+            factor_sell_codes = set()
+            factor_defer_codes = set()
+            if strategy_name == "v40":
+                from scripts.strategies.v40_factor_exit import check_factor_exit
+                tracker = sell_penalty_trackers.get("default", {})
+                factor_sell, factor_defer, tracker = check_factor_exit(
+                    win_factors, date, state.holdings, risk_params, tracker
+                )
+                sell_penalty_trackers["default"] = tracker
+                factor_sell_codes = set(c for c, _ in factor_sell)
+                factor_defer_codes = set(c for c, _ in factor_defer)
+                if factor_sell or factor_defer:
+                    print(f"  [V40-EXIT] {date}: sell={[(c,f'{s:.3f}') for c,s in factor_sell]}, defer={[(c,f'{s:.3f}') for c,s in factor_defer]}")
+
+            if no_hard_risk:
+                # v40b: to_sell 已由 select_stocks_v40b 提供，不再调用 risk_check
+                pass
+            else:
+                to_sell = adapter.risk_check(strategy_name, state, date, price_data,
+                                              risk_params, prev_close=prev_close)
+
+            # v40: 将因子恶化确认卖出追加到 to_sell
+            if strategy_name == "v40":
+                for code in factor_sell_codes:
+                    if code not in [c for c, _, _ in to_sell]:
+                        to_sell.append((code, 'factor_decay', 0.0))
+                        print(f"  [V40-EXIT] {date}: APPENDED factor_decay {code}")
+                # 延迟卖出：从 to_sell 中移除
+                to_sell = [(c, r, p) for c, r, p in to_sell if c not in factor_defer_codes]
 
             # 执行卖出（含跌停封板跳过，与旧版 v20_walk_forward 一致）
             for code, reason, pnl in to_sell:
@@ -305,44 +371,48 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                     print(f"  SELL {code} @ {sell_price:.2f} reason {reason} cash {state.cash:.2f}")
 
             # 选股（每天调用，和模拟盘一致）
-            if len(state.holdings) < max_holdings:
+            cands = []
+            if no_hard_risk and 'buy_list' in dir() and buy_list:
+                # v40b: 买入列表已由 select_stocks_v40b 提供
+                cands = buy_list
+            elif len(state.holdings) < max_holdings:
                 cands = adapter.select(strategy_name, win_factors, date,
                                        win_close, win_vol, win_amt,
                                        win_hi, win_lo, win_open,
                                        current_holdings=state.holdings,
                                        params=risk_params)
 
-                if cands and state.cash > initial_capital * 0.03:
-                    avail = state.cash - initial_capital * 0.03
-                    nb = min(len(cands), max_daily_buy, max_holdings - len(state.holdings))
-                    per_stock = min(avail / nb, initial_capital * max_position) if nb > 0 else 0
+            if cands and state.cash > initial_capital * 0.03:
+                avail = state.cash - initial_capital * 0.03
+                nb = min(len(cands), max_daily_buy, max_holdings - len(state.holdings))
+                per_stock = min(avail / nb, initial_capital * max_position) if nb > 0 else 0
 
-                    bought = 0
-                    sold = 0
-                    for code, score in cands[:max_daily_buy]:
-                        if len(state.holdings) >= max_holdings or bought >= nb:
-                            break
-                        if code not in price_data.index:
-                            continue
-                        buy_price = price_data[code]
-                        if pd.isna(buy_price) or buy_price <= 0:
-                            print(f"  SKIP {code} invalid buy_price {buy_price}")
-                            continue
-                        # 涨停封板检查：买价 >= 前日收盘×1.10×0.99 → 买不进
-                        if i > 0 and prev_close is not None and code in prev_close.index:
-                            prev_c = prev_close[code]
-                            if not pd.isna(prev_c) and prev_c > 0:
-                                if buy_price >= prev_c * 1.10 * 0.99:
-                                    continue
-                        # 用 core/account.py 的 buy（shares 模式）
-                        adj = buy_price * (1 + TradingCosts().slippage_rate)
-                        shares = int(per_stock / adj / 100) * 100
-                        if shares <= 0:
-                            continue
-                        state = buy(state, code, buy_price, date, shares=shares)
-                        if code in state.holdings:
-                            bought += 1
-                            print(f"  BUY {code} {shares} @ {buy_price:.2f} cash {state.cash:.2f}")
+                bought = 0
+                sold = 0
+                for code, score in cands[:max_daily_buy]:
+                    if len(state.holdings) >= max_holdings or bought >= nb:
+                        break
+                    if code not in price_data.index:
+                        continue
+                    buy_price = price_data[code]
+                    if pd.isna(buy_price) or buy_price <= 0:
+                        print(f"  SKIP {code} invalid buy_price {buy_price}")
+                        continue
+                    # 涨停封板检查：买价 >= 前日收盘×1.10×0.99 → 买不进
+                    if i > 0 and prev_close is not None and code in prev_close.index:
+                        prev_c = prev_close[code]
+                        if not pd.isna(prev_c) and prev_c > 0:
+                            if buy_price >= prev_c * 1.10 * 0.99:
+                                continue
+                    # 用 core/account.py 的 buy（shares 模式）
+                    adj = buy_price * (1 + TradingCosts().slippage_rate)
+                    shares = int(per_stock / adj / 100) * 100
+                    if shares <= 0:
+                        continue
+                    state = buy(state, code, buy_price, date, shares=shares)
+                    if code in state.holdings:
+                        bought += 1
+                        print(f"  BUY {code} {shares} @ {buy_price:.2f} cash {state.cash:.2f}")
 
             # NAV（用 core/account.py 的 portfolio_value）
             pv = portfolio_value(state, date, price_data)
@@ -440,6 +510,14 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
     elif strategy_name == "v39c":
         from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v40":
+        from scripts.strategies.v40_factor_exit import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v40b":
+        from scripts.strategies.v40_factor_exit import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
     # v20c 已退役

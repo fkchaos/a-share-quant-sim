@@ -143,7 +143,7 @@ def load_account(account_id, stale_days=30):
                 # 用中证800指数K线计算交易日天数
                 idx_kl = get_index_kline("sh000001")
                 if idx_kl:
-                    dates = sorted([r["date"] for r in idx_kl if r.get("volume", 0) > 0])
+                    dates = sorted([r["date"] for r in idx_kl if r["volume"] > 0])
                     if buy_date in dates and str(dt.now().date()) in dates:
                         buy_idx = dates.index(buy_date)
                         today_idx = dates.index(str(dt.now().date()))

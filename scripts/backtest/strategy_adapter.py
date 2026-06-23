@@ -230,6 +230,194 @@ class StrategyAdapter:
         }
         self._regime_params["v40b"] = {}
 
+        # ── v41: VWAP 偏离 + 净支撑量因子（v39c 评分体系 + 2个新量价因子）──
+        self._select_fns["v41"] = self._v41_select
+        self._risk_params["v41"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            # v39c 原有权重
+            "W_MOM": 0.20,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER": 0.10,
+            "W_SIZE": 0.10,
+            "W_FUND_FLOW": 0.15,
+            "W_GAP": 0.10,
+            "W_ILLIQ": 0.10,
+            # 新增因子权重
+            "W_VWAP_DEV": 0.15,
+            "W_NET_SUPPORT": 0.10,
+        }
+        self._regime_params["v41"] = {}
+
+        # ── v39d: v39c 参数优化（IC 驱动权重调整 + 松风控 + 低换手）──
+        self._select_fns["v39d"] = self._v39d_select
+        self._risk_params["v39d"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.15,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER": 0.05,
+            "W_SIZE": 0.30,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v39d"] = {}
+
+        # ── v39e: 基于 v39d 交易行为分析进一步优化 ──
+        self._select_fns["v39e"] = self._v39e_select
+        self._risk_params["v39e"] = {
+            "STOP_LOSS": -0.03,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.05,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.15,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.10,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER": 0.05,
+            "W_SIZE": 0.40,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v39e"] = {}
+
+        # ── v39f: 修正 v39e 错误（保持 -5% 止损 + 降低止盈到 5%）──
+        self._select_fns["v39f"] = self._v39f_select
+        self._risk_params["v39f"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.10,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER": 0.05,
+            "W_SIZE": 0.40,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v39f"] = {}
+
+        # ── v39g: 风控参数优化（短持有期 + 低止盈 + 高换手）──
+        self._select_fns["v39g"] = self._v39g_select
+        self._risk_params["v39g"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.10,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER": 0.05,
+            "W_SIZE": 0.40,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v39g"] = {}
+
+        # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
+        self._select_fns["v39h"] = self._v39h_select
+        self._risk_params["v39h"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.03,
+            "MOM_THRESHOLD_BEAR": 0.10,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.15,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER": 0.05,
+            "W_SIZE": 0.30,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v39h"] = {}
+
+        # ── v39i: 最优阈值（BULL=0.05/BEAR=0.08，夏普1.199/回撤16.69%）──
+        self._select_fns["v39i"] = self._v39i_select
+        self._risk_params["v39i"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20,
+            "MOM_THRESHOLD": 0.05,
+            "MOM_THRESHOLD_BEAR": 0.08,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.15,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER": 0.05,
+            "W_SIZE": 0.30,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v39i"] = {}
+
         # ── v33: 残差动量 ──
         self._select_fns["v33"] = self._v33_select
         self._risk_params["v33"] = {
@@ -375,6 +563,122 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v40b(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v39d_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39d 选股 — v39c 参数优化（IC 驱动权重调整 + 松风控 + 低换手）"""
+        from scripts.strategies.v39d_optimized import select_stocks_v39d
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39d"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39d(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v39e_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39e 选股 — 基于 v39d 交易行为分析进一步优化"""
+        from scripts.strategies.v39e_optimized import select_stocks_v39e
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39e"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39e(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v39f_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39f 选股 — 修正 v39e 错误"""
+        from scripts.strategies.v39f_optimized import select_stocks_v39f
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39f"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39f(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v39g_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39g 选股"""
+        from scripts.strategies.v39g_optimized import select_stocks_v39g
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+        merged_params = dict(self._risk_params["v39g"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39g(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v39h_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39h 选股 — 动态 MOM_THRESHOLD（熊市自适应减仓）"""
+        from scripts.strategies.v39h_optimized import select_stocks_v39h
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39h"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39h(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v39i_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v39i 选股 — 最优动态阈值（BULL=0.05/BEAR=0.08）"""
+        from scripts.strategies.v39i_optimized import select_stocks_v39i
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v39i"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39i(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v41_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v41 选股 — VWAP 偏离 + 净支撑量因子"""
+        from scripts.strategies.v41_vwap_deviation import calc_factors_v41, select_stocks_v41
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors_v41(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v41"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v41(factors, date, current_holdings, merged_params,
                                    sold_recently=sold_recently)
 
     def _v40_select(self, factors, date, close_panel, volume_panel, amount_panel,

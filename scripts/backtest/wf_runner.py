@@ -512,6 +512,30 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v39d":
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v39e":
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v39f":
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v39g":
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v39h":
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v39i":
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
     elif strategy_name == "v40":
         from scripts.strategies.v40_factor_exit import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
@@ -520,6 +544,10 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v40_factor_exit import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v41":
+        from scripts.strategies.v41_vwap_deviation import calc_factors_v41
+        return calc_factors_v41(close_panel, volume_panel, amount_panel,
+                                 high_panel, low_panel, open_panel, params=None)
     # v20c 已退役
     else:
         raise ValueError(f"不支持的策略: {strategy_name}")

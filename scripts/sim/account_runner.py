@@ -698,9 +698,10 @@ def _run_execute_impl(account_id, date, strategy_name=None):
         logger.warning("无交易计划")
         return details
 
-    # 拉取实时价格
+    # 拉取实时价格（含前收盘价，用于涨停判断）
     codes = list(state.holdings.keys()) + [b['code'] for b in plan.get('buy_plan', [])]
-    spot = {}
+    spot = {}        # code -> 当前价
+    spot_prev = {}   # code -> 前收盘价
     for i in range(0, len(codes), 50):
         batch = codes[i:i+50]
         syms = ",".join([f"sh{c}" if c.startswith("6") else f"sz{c}" for c in batch])
@@ -711,7 +712,10 @@ def _run_execute_impl(account_id, date, strategy_name=None):
                 if "~" not in line: continue
                 p = line.split("~")
                 if len(p) > 50:
-                    try: spot[p[2]] = float(p[3])
+                    try:
+                        code = p[2]
+                        spot[code] = float(p[3])          # 当前价
+                        spot_prev[code] = float(p[4])      # 前收盘价
                     except: pass
         except: pass
 
@@ -740,6 +744,14 @@ def _run_execute_impl(account_id, date, strategy_name=None):
     for code, score in cands:
         if code in spot and code not in state.holdings and spot[code] > 0:
             price = spot[code]
+
+            # 涨停检查：当前价 >= 前收盘价 * 1.095（主板10%涨停，留一点余量）
+            if code in spot_prev and spot_prev[code] > 0:
+                limit_up_price = spot_prev[code] * 1.095
+                if price >= limit_up_price:
+                    details.append({"action": "SKIP", "code": code, "reason": "涨停跳过"})
+                    continue
+
             adj = price * (1 + COMMISSION_RATE + SLIPPAGE_RATE)
             max_pos = params.get("MAX_POSITION", 0.30)
             max_hold = params.get("MAX_HOLDINGS", 12)

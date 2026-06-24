@@ -499,6 +499,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
             total_value += price * shares
     max_pos = params.get("MAX_POSITION", 0.125)
     per_stock = min(available / n, total_value * max_pos) if n > 0 else 0  # 等权分配，受 MAX_POSITION 约束
+    logger.info(f"DEBUG per_stock: available={available:,.0f}, n={n}, total_value={total_value:,.0f}, max_pos={max_pos}, per_stock={per_stock:,.0f}")
     # 查股票名称（先取 holdings 已有的，再从 DB 补齐新选股的）
     name_map = {}
     for c in state.holdings:

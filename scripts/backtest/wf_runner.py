@@ -512,10 +512,16 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
-    elif strategy_name == "v39d":
+    elif strategy_name in ("v39d", "v39e", "v39f", "v39g", "v39h", "v39i"):
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v42":
+        from scripts.strategies.v42_turnover_research import calc_factors
+        from core.db import get_float_shares_map
+        calc_params = {"float_shares_map": get_float_shares_map()}
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, calc_params)
     elif strategy_name == "v39e":
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,

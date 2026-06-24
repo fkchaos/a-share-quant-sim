@@ -418,6 +418,34 @@ class StrategyAdapter:
         }
         self._regime_params["v39i"] = {}
 
+        # ── v42: 换手率因子研究（真实换手率 vs 量比）──
+        self._select_fns["v42"] = self._v42_select
+        self._risk_params["v42"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.125,
+            "MOM_THRESHOLD": 0.05,
+            "MOM_THRESHOLD_BEAR": 0.08,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.15,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER_RATE": 0.05,
+            "W_TURNOVER_AVG": 0.05,
+            "W_SIZE": 0.30,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v42"] = {}
+
         # ── v33: 残差动量 ──
         self._select_fns["v33"] = self._v33_select
         self._risk_params["v33"] = {
@@ -663,6 +691,26 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v39i(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v42_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v42 选股 — 换手率因子研究（真实换手率 vs 量比）"""
+        from scripts.strategies.v42_turnover_research import select_stocks_v42
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v42_turnover_research import calc_factors
+            float_shares_map = params.get("float_shares_map", {}) if params else {}
+            calc_params = dict(params or {})
+            calc_params["float_shares_map"] = float_shares_map
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, calc_params)
+
+        merged_params = dict(self._risk_params["v42"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v42(factors, date, current_holdings, merged_params,
                                    sold_recently=sold_recently)
 
     def _v41_select(self, factors, date, close_panel, volume_panel, amount_panel,

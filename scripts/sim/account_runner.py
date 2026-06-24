@@ -484,13 +484,14 @@ def _run_signal_impl(account_id, date, strategy_name=None):
             filtered.append((code, score))
         cands = filtered
 
-    # 生成计划：等权分配仓位
+    # 生成计划：等权分配仓位，单只不超过 MAX_POSITION 上限
     remaining_after_sell = len(state.holdings) - len(to_sell)
     max_new_buys = min(params.get("MAX_DAILY_BUY", 6), params.get("MAX_HOLDINGS", 8) - remaining_after_sell)
     max_new_buys = max(max_new_buys, 0)
     buy_list = cands[:max_new_buys]
     n = len(buy_list)
-    per_stock = available / n if n > 0 else available  # 每份仓位金额
+    max_pos = params.get("MAX_POSITION", 0.125)
+    per_stock = min(available / n, state.initial_capital * max_pos) if n > 0 else 0  # 等权分配，受 MAX_POSITION 约束
     # 查股票名称（先取 holdings 已有的，再从 DB 补齐新选股的）
     name_map = {}
     for c in state.holdings:

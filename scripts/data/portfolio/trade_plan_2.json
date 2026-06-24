@@ -1,131 +1,99 @@
 {
-  "date": "2026-06-22",
+  "date": "2026-06-24",
   "account_id": 2,
-  "strategy": "v27",
+  "strategy": "v39i",
   "regime": "未启用",
   "regime_multiplier": 1.0,
   "sell_plan": [
     {
-      "code": "000034",
-      "name": "神州数码",
-      "qty": 500,
-      "reason": "stop_loss",
-      "pnl": -0.0301
-    },
-    {
-      "code": "002436",
-      "name": "兴森科技",
-      "qty": 200,
-      "reason": "take_profit",
-      "pnl": 0.0789
-    },
-    {
-      "code": "300346",
-      "name": "南大光电",
-      "qty": 200,
-      "reason": "take_profit",
-      "pnl": 0.0608
-    },
-    {
-      "code": "300433",
-      "name": "蓝思科技",
-      "qty": 200,
-      "reason": "stop_loss",
-      "pnl": -0.0317
-    },
-    {
-      "code": "600601",
-      "name": "方正科技",
-      "qty": 1000,
-      "reason": "stop_loss",
-      "pnl": -0.0302
-    },
-    {
-      "code": "600688",
-      "name": "上海石化",
-      "qty": 3000,
-      "reason": "take_profit",
-      "pnl": 0.0332
-    },
-    {
-      "code": "605589",
-      "name": "圣泉集团",
-      "qty": 100,
-      "reason": "take_profit",
-      "pnl": 0.0614
-    }
-  ],
-  "buy_plan": [
-    {
-      "code": "300285",
-      "name": "国瓷材料",
-      "score": 74.49,
-      "price": 97.56,
-      "qty": 400,
-      "target_amount": 39077.12,
-      "position_ratio": 0.25
-    },
-    {
-      "code": "300475",
-      "name": "香农芯创",
-      "score": 52.48,
-      "price": 283.47,
-      "qty": 100,
-      "target_amount": 39077.12,
-      "position_ratio": 0.25
-    },
-    {
-      "code": "300570",
-      "name": "太辰光",
-      "score": 51.96,
-      "price": 278.85,
-      "qty": 100,
-      "target_amount": 39077.12,
-      "position_ratio": 0.25
-    },
-    {
-      "code": "600549",
-      "name": "厦门钨业",
-      "score": 46.34,
-      "price": 93.66,
-      "qty": 400,
-      "target_amount": 39077.12,
-      "position_ratio": 0.25
-    }
-  ],
-  "hold_plan": [
-    {
       "code": "000657",
       "name": "中钨高新",
-      "current_shares": 100,
-      "price": 108.33,
-      "cost_price": 91.01,
-      "action": "hold"
+      "qty": 100,
+      "reason": "timeout",
+      "pnl": 0.0827
     },
     {
       "code": "002430",
       "name": "杭氧股份",
-      "current_shares": 600,
-      "price": 27.19,
-      "cost_price": 26.41,
-      "action": "hold"
+      "qty": 600,
+      "reason": "timeout",
+      "pnl": 0.019
+    },
+    {
+      "code": "300285",
+      "name": "国瓷材料",
+      "qty": 300,
+      "reason": "stop_loss",
+      "pnl": -0.0799
     },
     {
       "code": "301536",
       "name": "星宸科技",
-      "current_shares": 100,
-      "price": 110.74,
-      "cost_price": 108.01,
-      "action": "hold"
+      "qty": 100,
+      "reason": "timeout",
+      "pnl": 0.0912
+    },
+    {
+      "code": "600549",
+      "name": "厦门钨业",
+      "qty": 400,
+      "reason": "stop_loss",
+      "pnl": -0.1205
     },
     {
       "code": "603160",
       "name": "汇顶科技",
-      "current_shares": 200,
-      "price": 58.22,
-      "cost_price": 57.6,
+      "qty": 200,
+      "reason": "timeout",
+      "pnl": 0.024
+    }
+  ],
+  "buy_plan": [
+    {
+      "code": "601872",
+      "name": "招商轮船",
+      "score": 0.24,
+      "price": 21.91,
+      "qty": 2100,
+      "target_amount": 47544.34,
+      "position_ratio": 0.3333
+    },
+    {
+      "code": "600026",
+      "name": "中远海能",
+      "score": 0.22,
+      "price": 22.83,
+      "qty": 2000,
+      "target_amount": 47544.34,
+      "position_ratio": 0.3333
+    },
+    {
+      "code": "002821",
+      "name": "凯莱英",
+      "score": 0.21,
+      "price": 141.57,
+      "qty": 300,
+      "target_amount": 47544.34,
+      "position_ratio": 0.3333
+    }
+  ],
+  "hold_plan": [
+    {
+      "code": "300475",
+      "name": "香农芯创",
+      "current_shares": 100,
+      "price": 280.0,
+      "cost_price": 281.75,
+      "action": "hold"
+    },
+    {
+      "code": "300570",
+      "name": "太辰光",
+      "current_shares": 100,
+      "price": 263.83,
+      "cost_price": 277.46,
       "action": "hold"
     }
   ],
-  "timestamp": "2026-06-22T11:50:33.726972"
+  "timestamp": "2026-06-24T11:09:32.051632"
 }

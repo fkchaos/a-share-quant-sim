@@ -490,8 +490,15 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     max_new_buys = max(max_new_buys, 0)
     buy_list = cands[:max_new_buys]
     n = len(buy_list)
+    # 当前总资产 = 现金 + 持仓市值（用前一日收盘价估算）
+    total_value = state.cash
+    if date in cp.index:
+        for code, h in state.holdings.items():
+            shares = h.get('shares', h.get('qty', 0))
+            price = price_data.get(code, 0)
+            total_value += price * shares
     max_pos = params.get("MAX_POSITION", 0.125)
-    per_stock = min(available / n, state.initial_capital * max_pos) if n > 0 else 0  # 等权分配，受 MAX_POSITION 约束
+    per_stock = min(available / n, total_value * max_pos) if n > 0 else 0  # 等权分配，受 MAX_POSITION 约束
     # 查股票名称（先取 holdings 已有的，再从 DB 补齐新选股的）
     name_map = {}
     for c in state.holdings:

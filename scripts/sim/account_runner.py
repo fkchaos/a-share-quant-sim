@@ -745,12 +745,12 @@ def _run_execute_impl(account_id, date, strategy_name=None):
         if code in spot and code not in state.holdings and spot[code] > 0:
             price = spot[code]
 
-            # 涨停检查：当前价 >= 前收盘价 * 1.095（主板10%涨停，留一点余量）
+            # 涨停检测：当前价 >= 前收盘价 * 1.095（主板10%涨停，留一点余量）
+            is_limit_up = False
             if code in spot_prev and spot_prev[code] > 0:
                 limit_up_price = spot_prev[code] * 1.095
                 if price >= limit_up_price:
-                    details.append({"action": "SKIP", "code": code, "reason": "涨停跳过"})
-                    continue
+                    is_limit_up = True
 
             adj = price * (1 + COMMISSION_RATE + SLIPPAGE_RATE)
             max_pos = params.get("MAX_POSITION", 0.30)
@@ -770,12 +770,14 @@ def _run_execute_impl(account_id, date, strategy_name=None):
                 continue
             state = buy(state, code, price, date, shares)
             bname = buy_plan_map.get(code, {}).get('name', code)
+            buy_note = "涨停排队" if is_limit_up else ""
             details.append({
                 "action": "BUY",
                 "code": code,
                 "name": bname,
                 "shares": shares,
                 "price": round(price, 2),
+                "note": buy_note,
             })
         else:
             details.append({"action": "SKIP", "code": code, "reason": "价格缺失或已持仓"})

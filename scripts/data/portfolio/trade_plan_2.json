@@ -10,49 +10,42 @@
       "name": "中钨高新",
       "qty": 100,
       "reason": "timeout",
-      "pnl": 0.0835
+      "pnl": 0.0876
     },
     {
       "code": "002430",
       "name": "杭氧股份",
       "qty": 600,
       "reason": "timeout",
-      "pnl": 0.0201
+      "pnl": 0.0292
     },
     {
       "code": "300285",
       "name": "国瓷材料",
       "qty": 300,
       "reason": "stop_loss",
-      "pnl": -0.0775
-    },
-    {
-      "code": "300570",
-      "name": "太辰光",
-      "qty": 100,
-      "reason": "stop_loss",
-      "pnl": -0.0516
+      "pnl": -0.0693
     },
     {
       "code": "301536",
       "name": "星宸科技",
       "qty": 100,
-      "reason": "timeout",
-      "pnl": 0.0916
+      "reason": "take_profit",
+      "pnl": 0.119
     },
     {
       "code": "600549",
       "name": "厦门钨业",
       "qty": 400,
       "reason": "stop_loss",
-      "pnl": -0.1234
+      "pnl": -0.1139
     },
     {
       "code": "603160",
       "name": "汇顶科技",
       "qty": 200,
       "reason": "timeout",
-      "pnl": 0.0303
+      "pnl": 0.0383
     }
   ],
   "buy_plan": [
@@ -61,26 +54,26 @@
       "name": "招商轮船",
       "score": 0.24,
       "price": 21.91,
-      "qty": 1700,
-      "target_amount": 39409.21,
+      "qty": 1800,
+      "target_amount": 39714.01,
       "position_ratio": 0.3333
     },
     {
       "code": "600026",
       "name": "中远海能",
       "score": 0.22,
-      "price": 22.81,
+      "price": 22.83,
       "qty": 1700,
-      "target_amount": 39409.21,
+      "target_amount": 39714.01,
       "position_ratio": 0.3333
     },
     {
       "code": "002821",
       "name": "凯莱英",
-      "score": 0.22,
+      "score": 0.21,
       "price": 141.57,
       "qty": 200,
-      "target_amount": 39409.21,
+      "target_amount": 39714.01,
       "position_ratio": 0.3333
     }
   ],
@@ -89,10 +82,18 @@
       "code": "300475",
       "name": "香农芯创",
       "current_shares": 100,
-      "price": 280.33,
+      "price": 282.66,
       "cost_price": 281.75,
+      "action": "hold"
+    },
+    {
+      "code": "300570",
+      "name": "太辰光",
+      "current_shares": 100,
+      "price": 264.41,
+      "cost_price": 277.46,
       "action": "hold"
     }
   ],
-  "timestamp": "2026-06-24T11:19:53.802087"
+  "timestamp": "2026-06-24T11:48:21.569338"
 }

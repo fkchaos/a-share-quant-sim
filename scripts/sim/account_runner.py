@@ -387,6 +387,14 @@ def _run_signal_impl(account_id, date, strategy_name=None):
         for k, v in _acct_cfg.get("params", {}).items():
             params[k] = v
 
+    # 为需要 float_shares 的策略加载流通股本数据
+    if "float_shares_map" not in params:
+        try:
+            from core.db import get_float_shares_map
+            params["float_shares_map"] = get_float_shares_map()
+        except Exception:
+            params["float_shares_map"] = {}
+
     logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} === (POSITION_SCALE={params.get('POSITION_SCALE', 1.0)})")
 
     # 选股池（排除科创板/北交所/老三板/B股）
@@ -412,18 +420,30 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     to_sell = adapter.risk_check(strategy_name, state, date, price_data,
                                   params, prev_close=prev_close)
 
-    # v40: 因子恶化卖出检查（策略有 factor_exit_fn 时启用）
+    # 计算因子面板（动态加载策略的 calc_factors）
+    calc_factors_fn = strategy.get("calc_factors_fn")
     factor_sell = []
     factor_defer = []
     sell_penalty_tracker = state._sell_penalty_tracker if hasattr(state, '_sell_penalty_tracker') else {}
     factor_exit_fn = strategy.get("factor_exit_fn")
-    if factor_exit_fn and date in cp.index:
-        # 计算因子面板（直接 import 策略的 calc_factors，避免 adapter 接口膨胀）
+
+    if calc_factors_fn:
+        from core.strategy_map import _load_func
+        calc_factors_func = _load_func(calc_factors_fn)
+        factors = calc_factors_func(cp, vp, ap, hp, lp, op, params)
+        # 如果策略有 factor_exit_fn，用计算好的 factors 执行
+        if factor_exit_fn and date in cp.index:
+            factor_sell, factor_defer, sell_penalty_tracker = factor_exit_fn(
+                factors, date, state.holdings, params, sell_penalty_tracker
+            )
+    else:
+        # 兼容旧策略（如 v40 factor_exit）
         from scripts.strategies.v40_factor_exit import calc_factors as v40_calc_factors
         factors = v40_calc_factors(cp, vp, ap, hp, lp, op, params)
-        factor_sell, factor_defer, sell_penalty_tracker = factor_exit_fn(
-            factors, date, state.holdings, params, sell_penalty_tracker
-        )
+        if factor_exit_fn and date in cp.index:
+            factor_sell, factor_defer, sell_penalty_tracker = factor_exit_fn(
+                factors, date, state.holdings, params, sell_penalty_tracker
+            )
         if factor_sell or factor_defer:
             logger.info(f"因子恶化: 确认卖出{len(factor_sell)}只, 延迟卖出{len(factor_defer)}只")
         # 延迟卖出的股票：从 sell_codes 中移除（不卖）

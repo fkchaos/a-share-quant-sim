@@ -592,5 +592,38 @@ STRATEGY_MAP = {
             "W_ILLIQ": 0.20,
         },
     },
+
+    # ── v42: 换手率因子研究（v39i + turnover_rate）──
+    "v42": {
+        "mode": "custom",
+        "description": "换手率因子研究（真实换手率 vs 量比，W_TURNOVER_RATE=0.05）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v42_turnover_research.select_stocks_v42",
+        "calc_factors_fn": "scripts.strategies.v42_turnover_research.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.125,
+            "MAX_HOLDINGS": 8,
+            "COOLDOWN_DAYS": 0,
+            "MOM_THRESHOLD": 0.05,
+            "MOM_THRESHOLD_BEAR": 0.08,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "W_MOM": 0.15,
+            "W_PV_CORR": 0.05,
+            "W_TURNOVER_RATE": 0.05,
+            "W_TURNOVER_AVG": 0.05,
+            "W_SIZE": 0.30,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        },
+    },
 }
 

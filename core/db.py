@@ -271,6 +271,15 @@ def get_stock_name_map(pool="zz800"):
         return {r["code"]: r["name"] for r in rows}
 
 
+def get_float_shares_map():
+    """返回 {code: float_shares} 映射（流通股本，单位：股）"""
+    with get_conn("stock_pool") as conn:
+        rows = conn.execute(
+            "SELECT code, float_shares FROM stock_pool WHERE float_shares > 0"
+        ).fetchall()
+        return {r["code"]: r["float_shares"] for r in rows}
+
+
 # ── 日K线 ──────────────────────────────────────────────────
 
 def upsert_kline(code, date, open_, high, low, close, volume, amount):

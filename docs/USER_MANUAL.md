@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-21（清理退役策略引用、更新测试命令、移除废弃环境变量）
+> 最后更新：2026-06-25（重写第九章：适配 cmd.py 工具 + 新增 switch/status/signals 命令）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -535,131 +535,147 @@ hermes cron list
 ---
 
 ## 九、数据库操作（账户/持仓/买卖）
+## 九、数据库操作（账户/持仓/买卖）
 
-所有数据库操作通过 `scripts/tools/cli.py` 完成。**不需要写 SQL**，直接命令行操作。
+所有数据库操作通过项目根目录的 `cmd.py` 完成。**不需要写 SQL**，直接命令行操作。
 
-先设置环境变量（只需一次）：
-```bash
+默认操作 `main` 账户（当前唯一账户），其他账户用 `--account <name>` 指定。
 
-```
-
-### 9.1 查看账户
+### 9.1 全局状态一眼览
 
 ```bash
-python scripts/tools/cli.py account              # 查看账户1
-python scripts/tools/cli.py account 2            # 查看账户2
-python scripts/tools/cli.py account 3            # 查看账户3
+python cmd.py status                        # 看当前账户+现金+持仓+收益率+最新信号
+python cmd.py status --account test         # 看指定账户
 ```
 
-输出：
+输出示例：
 ```
-=== 账户 2: v27 ===
-  现金:     ¥100,384.20
-  持仓市值: ¥12,456.80
-  总资产:   ¥112,841.00
-  初始资金: ¥100,000.00
-  收益率:   +12.84%
-  持仓数:   3 只
+┌─────────────────────────────────────────────┐
+│ 账户 2: main            策略:     v39i      │
+├─────────────────────────────────────────────┤
+│ 💰 现金     ¥    197,637.90                │
+│ 📊 市值     ¥          0                   │
+│ 📈 总资产   ¥    197,637.90                │
+│ 📉 收益率           -1.18%                  │
+│ 💰 盈亏             +0.00%                  │
+└─────────────────────────────────────────────┘
+
+📡 无交易信号文件
 ```
 
-### 9.2 新建账户
+> 💡 **日常运维只需跑 `status`**：一眼看到现金、持仓、收益率和是否有待执行信号。
+
+### 9.2 查看账户
 
 ```bash
-# 新建账户4：名称 v28，资金 10 万，关联模拟盘脚本策略名 v28
-python scripts/tools/cli.py new-account --id 4 --name v28 --cash 100000 --strategy v28
-
-# 新建账户5：名称 test，资金 50 万
-python scripts/tools/cli.py new-account --id 5 --name test --cash 500000
+python cmd.py account                   # 列出所有账户
+python cmd.py account main              # 查看指定账户
+python cmd.py account 2                 # 或用 id
 ```
 
-### 9.3 删除账户
+### 9.3 查看持仓
 
 ```bash
-# 删除账户（必须先清仓）
-python scripts/tools/cli.py clear-holdings --account 4    # 先清仓
-python scripts/tools/cli.py del-account --id 4           # 再删除
+python cmd.py holdings                  # main 账户持仓
+python cmd.py holdings --account test   # 指定账户
 ```
 
-### 9.4 调整资金
+输出包含：代码、名称、数量、成本、现价、市值、盈亏百分比。
+
+### 9.4 手动买卖
 
 ```bash
-# 把账户2的现金设为 5 万（直接覆盖，不增不减）
-python scripts/tools/cli.py adjust --account 2 --cash 50000
+# 买入 100 股茅台 @ 1500
+python cmd.py buy --code 600519 --shares 100 --price 1500
 
-# 把账户3的现金设为 20 万
-python scripts/tools/cli.py adjust --account 3 --cash 200000
+# 指定账户买入
+python cmd.py buy --code 600519 --shares 100 --price 1500 --account test
+
+# 卖出 50 股 @ 1600，带原因
+python cmd.py sell --code 600519 --shares 50 --price 1600 --reason 止盈
 ```
 
-### 9.5 查看持仓
+**风控**：
+- 现金不足时拒绝买入（提示可用金额）
+- 持仓不足时拒绝卖出（提示实际持有）
+- 所有写操作需要 `[yes/no]` 确认
+
+### 9.5 调整现金
 
 ```bash
-python scripts/tools/cli.py holdings              # 账户1持仓
-python scripts/tools/cli.py holdings 2            # 账户2持仓
+# 把 main 账户现金设为 20 万（直接覆盖）
+python cmd.py set-cash --amount 200000
+
+# 指定账户
+python cmd.py set-cash --amount 100000 --account test
 ```
 
-输出：
-```
-代码     名称       持仓    成本      现价      市值       盈亏
------------------------------------------------------------------
-600519   贵州茅台    100   1500.00   1680.00   ¥168,000   +12.00%
-601318   中国平安    500     45.00     48.20   ¥24,100   +7.11%
-```
-
-### 9.6 手动加仓/减仓
+### 9.6 切换策略
 
 ```bash
-# 给账户2加 100 股贵州茅台，成本价 1500
-python scripts/tools/cli.py adjust --account 2 --add-stock 600519 100 1500
+# 把 main 账户切换到 v44（下次信号生成时生效）
+python cmd.py switch --strategy v44
 
-# 给账户2加 50 股中国平安，成本价 45
-python scripts/tools/cli.py adjust --account 2 --add-stock 601318 50 45
-
-# 清掉账户2的贵州茅台持仓
-python scripts/tools/cli.py adjust --account 2 --del-stock 600519
+# 切换到 v46（行业ETF轮动）
+python cmd.py switch --strategy v46 --account test
 ```
 
-### 9.7 全部清仓
+> 策略名必须是 `strategies` 中注册的合法名称。切换后**不立即执行**，下次信号生成时自动用新策略。
+
+### 9.7 查看策略列表
 
 ```bash
-python scripts/tools/cli.py clear-holdings --account 2
+python cmd.py strategies
 ```
 
-### 9.8 手动买卖
+输出所有已注册策略，当前正在运行的标 ✅，并显示各账户绑定情况。
+
+### 9.8 查看交易记录
 
 ```bash
-# 买入：账户1买入 100 股 600519，价格 1500
-python scripts/tools/cli.py buy 600519 100 1500.0
-
-# 买入到账户2
-python scripts/tools/cli.py buy 600519 100 1500.0 2
-
-# 卖出：账户1卖出 50 股 600519，价格 1600
-python scripts/tools/cli.py sell 600519 50 1600.0
-
-# 卖出（指定账户2 + 原因）
-python scripts/tools/cli.py sell 600519 50 1600.0 2 "止盈"
+python cmd.py trades                              # 最近30条
+python cmd.py trades --limit 50                   # 最近50条
+python cmd.py trades --code 600519                 # 只看某只股票
+python cmd.py trades --action BUY                 # 只看买入记录
+python cmd.py trades --date-from 2026-06-01       # 从某天开始
+python cmd.py trades --account test --limit 10    # 指定账户
 ```
 
-### 9.9 查看交易记录
+### 9.9 查看交易信号
 
 ```bash
-python scripts/tools/cli.py trades              # 账户1最近30条
-python scripts/tools/cli.py trades 2            # 账户2最近30条
-python scripts/tools/cli.py trades 1 50       # 账户1最近50条
+python cmd.py signals                   # 最新交易计划
+python cmd.py signals --account test    # 指定账户
 ```
+
+输出买入/卖出/持有明细，标注是否是今日信号。
 
 ### 9.10 查看股票行情
 
 ```bash
-python scripts/tools/cli.py kline 600519         # 茅台最近20日K线
-python scripts/tools/cli.py kline 601318 50     # 平安最近50日K线
+python cmd.py kline 600519              # 茅台最近20日K线
+python cmd.py kline 601318 50          # 平安最近50日K线
 ```
 
 ### 9.11 数据库统计
 
 ```bash
-python scripts/tools/cli.py stats
+python cmd.py stats
 ```
+
+### 9.12 命令速查
+
+| 场景 | 命令 |
+|------|------|
+| 看全局状态 | `python cmd.py status` |
+| 看持仓 | `python cmd.py holdings` |
+| 买入 | `python cmd.py buy --code 600519 --shares 100 --price 1500` |
+| 卖出 | `python cmd.py sell --code 600519 --shares 100 --price 1600` |
+| 调现金 | `python cmd.py set-cash --amount 200000` |
+| 切策略 | `python cmd.py switch --strategy v44` |
+| 看信号 | `python cmd.py signals` |
+| 看交易 | `python cmd.py trades` |
+| 看K线 | `python cmd.py kline 600519` |
 
 ---
 

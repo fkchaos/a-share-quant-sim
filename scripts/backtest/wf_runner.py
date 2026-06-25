@@ -22,7 +22,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from core.db import get_kline, load_panel_from_db
+from core.db import get_kline, load_panel_from_db, load_etf_panel_from_db
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
 from scripts.backtest.strategy_adapter import get_adapter
@@ -54,7 +54,9 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     # ── 加载数据 ──
     print("\n[1/4] 加载数据...")
     t0 = time.time()
-    tpl, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True)
+    # v43 使用全A股票池，v44 使用 zz800，其他策略使用 zz800
+    pool = "full_a" if strategy_name == "v43" else "zz800"
+    tpl, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True, pool=pool)
     close_panel, volume_panel, amount_panel = tpl[0], tpl[1], tpl[2]
     open_panel, high_panel, low_panel = tpl[3], tpl[4], tpl[5]
 
@@ -71,11 +73,18 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只 (已排除科创板)")
     print(f"  耗时 {time.time()-t0:.1f}s")
 
+    # ── 加载ETF面板（v46 行业轮动需要）──
+    etf_close_panel = load_etf_panel_from_db(start_date, end_date)
+    if not etf_close_panel.empty:
+        print(f"  ETF面板: {etf_close_panel.shape[0]} 天 × {etf_close_panel.shape[1]} 只")
+    else:
+        print(f"  ETF面板: 空（无ETF数据）")
+
     # ── 计算因子 ──
     print("\n[2/4] 计算因子...")
     t0 = time.time()
     factors = _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
-                            high_panel, low_panel, open_panel)
+                            high_panel, low_panel, open_panel, extra_data=None)
     print(f"  耗时 {time.time()-t0:.1f}s")
 
     # ── 获取策略参数 ──
@@ -174,8 +183,14 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
 
             # 执行卖出
             for code, reason, pnl in to_sell:
-                if code in state.holdings and code in price_data.index:
-                    sell_price = price_data[code]
+                if code in state.holdings:
+                    # ETF fallback: 不在股票面板中时查 ETF 面板
+                    if code in price_data.index:
+                        sell_price = price_data[code]
+                    elif not etf_close_panel.empty and code in etf_close_panel.columns and date in etf_close_panel.index:
+                        sell_price = etf_close_panel.loc[date, code]
+                    else:
+                        continue
                     if not pd.isna(sell_price) and sell_price > 0:
                         if i > 0 and prev_close is not None and code in prev_close.index:
                             prev_c = prev_close[code]
@@ -205,9 +220,14 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                     for code, score in cands[:max_daily_buy]:
                         if len(state.holdings) >= max_holdings or bought >= nb:
                             break
+                        # ETF fallback: 不在股票面板中时查 ETF 面板
                         if code not in price_data.index:
-                            continue
-                        buy_price = price_data[code]  # T日收盘价买入
+                            if not etf_close_panel.empty and code in etf_close_panel.columns and date in etf_close_panel.index:
+                                buy_price = etf_close_panel.loc[date, code]
+                            else:
+                                continue
+                        else:
+                            buy_price = price_data[code]  # T日收盘价买入
                         if pd.isna(buy_price) or buy_price <= 0:
                             continue
                         if i > 0 and prev_close is not None and code in prev_close.index:
@@ -224,8 +244,14 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                             bought += 1
                             print(f"  BUY {code} {shares} @ {buy_price:.2f} cash {state.cash:.2f}")
 
-            # NAV
-            pv = portfolio_value(state, date, price_data)
+            # NAV（用 core/account.py 的 portfolio_value）
+            # 合并 ETF 价格到 price_data，以便对 ETF 持仓估值
+            if not etf_close_panel.empty and date in etf_close_panel.index:
+                etf_prices_today = etf_close_panel.loc[date].dropna()
+                combined_price = pd.concat([price_data, etf_prices_today])
+                pv = portfolio_value(state, date, combined_price)
+            else:
+                pv = portfolio_value(state, date, price_data)
             nav_list.append(pv)
 
         elapsed = time.time() - t0
@@ -318,9 +344,24 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                 to_sell = [(code, 'v40b_rotate', 0.0) for code, _ in sell_list]
                 print(f"  [V40B] {date}: sell {len(sell_list)}: {[c for c,_ in sell_list]}, buy {len(buy_list)}: {[c for c,_ in buy_list]}")
             else:
-                # 正常风控检查
-                to_sell = adapter.risk_check(strategy_name, state, date, price_data,
-                                              risk_params, prev_close=prev_close)
+                # 正常风控检查（合并ETF价格到price_data）
+                import sys
+                print(f"  [WF DBG] {date}: etf_empty={etf_close_panel.empty}, date_in_etf={date in etf_close_panel.index if not etf_close_panel.empty else 'N/A'}", file=sys.stderr)
+                if not etf_close_panel.empty and date in etf_close_panel.index:
+                    etf_prices_today = etf_close_panel.loc[date].dropna()
+                    combined_price = pd.concat([price_data, etf_prices_today])
+                    import sys
+                    codes_in_hold = list(state.holdings.keys())
+                    for _c in codes_in_hold:
+                        if _c not in combined_price.index:
+                            print(f"  [WF DEBUG] {date}: {_c} NOT in combined! price_data has it: {_c in price_data.index}", file=sys.stderr)
+                    import sys
+                    print(f"  [SND DBG] id(combined_price)={id(combined_price)}, len={len(combined_price)}, has ETF={sum(1 for c in combined_price.index if c.startswith('sz51') or c.startswith('sh51'))}", file=sys.stderr)
+                    to_sell = adapter.risk_check(strategy_name, state, date, combined_price,
+                                                  risk_params, prev_close=prev_close)
+                else:
+                    to_sell = adapter.risk_check(strategy_name, state, date, price_data,
+                                                  risk_params, prev_close=prev_close)
 
             # v40: 因子恶化卖出检查（先于风控，确保因子衰减优先触发）
             factor_sell_codes = set()
@@ -392,18 +433,27 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                 for code, score in cands[:max_daily_buy]:
                     if len(state.holdings) >= max_holdings or bought >= nb:
                         break
-                    if code not in price_data.index:
-                        continue
-                    buy_price = price_data[code]
-                    if pd.isna(buy_price) or buy_price <= 0:
-                        print(f"  SKIP {code} invalid buy_price {buy_price}")
-                        continue
-                    # 涨停封板检查：买价 >= 前日收盘×1.10×0.99 → 买不进
-                    if i > 0 and prev_close is not None and code in prev_close.index:
-                        prev_c = prev_close[code]
-                        if not pd.isna(prev_c) and prev_c > 0:
-                            if buy_price >= prev_c * 1.10 * 0.99:
-                                continue
+                    # 判断是否是ETF（不在股票面板中）
+                    is_etf = code not in price_data.index
+                    if is_etf:
+                        # 从ETF K线获取价格
+                        buy_price = _get_etf_price(code, date)
+                        if buy_price is None or buy_price <= 0:
+                            print(f"  SKIP {code} no price")
+                            continue
+                    else:
+                        if code not in price_data.index:
+                            continue
+                        buy_price = price_data[code]
+                        if pd.isna(buy_price) or buy_price <= 0:
+                            print(f"  SKIP {code} invalid buy_price {buy_price}")
+                            continue
+                        # 涨停封板检查
+                        if i > 0 and prev_close is not None and code in prev_close.index:
+                            prev_c = prev_close[code]
+                            if not pd.isna(prev_c) and prev_c > 0:
+                                if buy_price >= prev_c * 1.10 * 0.99:
+                                    continue
                     # 用 core/account.py 的 buy（shares 模式）
                     adj = buy_price * (1 + TradingCosts().slippage_rate)
                     shares = int(per_stock / adj / 100) * 100
@@ -415,7 +465,13 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
                         print(f"  BUY {code} {shares} @ {buy_price:.2f} cash {state.cash:.2f}")
 
             # NAV（用 core/account.py 的 portfolio_value）
-            pv = portfolio_value(state, date, price_data)
+            # 合并 ETF 价格到 price_data，以便对 ETF 持仓估值
+            if not etf_close_panel.empty and date in etf_close_panel.index:
+                etf_prices_today = etf_close_panel.loc[date].dropna()
+                combined_price = pd.concat([price_data, etf_prices_today])
+                pv = portfolio_value(state, date, combined_price)
+            else:
+                pv = portfolio_value(state, date, price_data)
             nav_list.append(pv)
 
         # 分割 train/test
@@ -468,7 +524,7 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
 
 
 def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
-                  high_panel, low_panel, open_panel):
+                  high_panel, low_panel, open_panel, extra_data=None):
     """根据策略名计算因子"""
     if strategy_name == "v27":
         from scripts.strategies.v27_select import calc_factors
@@ -522,6 +578,29 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         calc_params = {"float_shares_map": get_float_shares_map()}
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, calc_params)
+    elif strategy_name == "v43":
+        from scripts.strategies.v43_small_cap_rotation import calc_factors
+        from core.db import get_float_shares_map_full
+        calc_params = {"float_shares_map": get_float_shares_map_full()}
+        extra = {"float_shares_map": get_float_shares_map_full()}
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, calc_params, extra_data=extra)
+    elif strategy_name == "v44":
+        from scripts.strategies.v44_flow_momentum import calc_factors
+        from core.db import get_float_shares_map
+        calc_params = {"float_shares_map": get_float_shares_map()}
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, calc_params)
+    elif strategy_name == "v45a":
+        from scripts.strategies.v45a_contrarian import calc_factors_v45a
+        from core.db import get_float_shares_map
+        calc_params = {"float_shares_map": get_float_shares_map()}
+        return calc_factors_v45a(close_panel, volume_panel,
+                                   calc_params.get("float_shares_map"),
+                                   extra_data=calc_params)
+    elif strategy_name == "v46":
+        from scripts.strategies.v46_etf_rotation import calc_factors_v46
+        return calc_factors_v46(close_panel, volume_panel, None, extra_data=None)
     elif strategy_name == "v39e":
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
@@ -582,3 +661,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_wf(args.strategy, args.train, args.test, args.step, args.start, args.end, full=args.full)
+
+
+def _get_etf_price(code, date):
+    """获取申万行业指数当日收盘价"""
+    try:
+        import akshare as ak
+        # code 格式: '801010'（申万一级行业指数）
+        df = ak.index_hist_sw(symbol=code, period='day')
+        if df is not None and len(df) > 0:
+            date_str = str(date.date()) if hasattr(date, 'date') else str(date)[:10]
+            # 匹配日期
+            day_df = df[df['日期'].astype(str).str.startswith(date_str)]
+            if len(day_df) > 0:
+                price = day_df.iloc[-1]['收盘']
+                return float(price)
+    except Exception:
+        pass
+    return None

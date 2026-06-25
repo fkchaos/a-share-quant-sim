@@ -435,16 +435,79 @@ class StrategyAdapter:
             "BOLL_W_MIN": 0.0,
             "COOLDOWN_DAYS": 0,
             "MAX_HOLDINGS": 8,
-            "W_MOM": 0.15,
+            "W_MOM": 0.075,
             "W_PV_CORR": 0.05,
-            "W_TURNOVER_RATE": 0.05,
-            "W_TURNOVER_AVG": 0.05,
+            "W_TURNOVER_RATE": 0.125,
+            "W_TURNOVER_AVG": 0.0,
             "W_SIZE": 0.30,
             "W_FUND_FLOW": 0.05,
             "W_GAP": 0.05,
             "W_ILLIQ": 0.20,
         }
         self._regime_params["v42"] = {}
+
+        # ── v43: 小市值轮动（周频调仓+质量因子+空仓机制）──
+        self._select_fns["v43"] = self._v43_select
+        self._risk_params["v43"] = {
+            "STOP_LOSS": -0.07,
+            "TAKE_PROFIT": 1.00,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.05,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.125,
+            "MOM_THRESHOLD": 0.05,
+            "MOM_THRESHOLD_BEAR": 0.08,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_MOM": 0.40,
+            "W_ROE": 0.30,
+            "W_TURNOVER_RATE": 0.10,
+            "W_SIZE": 0.20,
+        }
+        self._regime_params["v43"] = {}
+
+        # ── v44: 资金流+动量+低波质量 ──
+        self._select_fns["v44"] = self._v44_select
+        self._select_fns["v45a"] = self._v45a_select
+        self._select_fns["v46"] = self._v46_select
+        self._risk_params["v44"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 8,
+        }
+
+        # ── v45a: 反转策略 ──
+        self._risk_params["v45a"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.08,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 8,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 8,
+        }
+
+        # ── v46: 行业ETF动量轮动 ──
+        self._risk_params["v46"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 8,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.33,
+            "MAX_HOLDINGS": 3,
+        }
 
         # ── v33: 残差动量 ──
         self._select_fns["v33"] = self._v33_select
@@ -713,6 +776,86 @@ class StrategyAdapter:
         return select_stocks_v42(factors, date, current_holdings, merged_params,
                                    sold_recently=sold_recently)
 
+    def _v43_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v43 选股 — 小市值轮动（周频调仓+质量因子+空仓机制）"""
+        from scripts.strategies.v43_small_cap_rotation import select_stocks_v43, calc_factors
+
+        if factors is None or "mom_5" not in factors:
+            from core.db import get_float_shares_map_full
+            calc_params = dict(params or {})
+            calc_params["float_shares_map"] = get_float_shares_map_full()
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, calc_params)
+
+        merged_params = dict(self._risk_params["v43"])
+        if params:
+            merged_params.update(params)
+        # 确保 float_shares_map 传给选股函数
+        if "float_shares_map" not in merged_params:
+            from core.db import get_float_shares_map_full
+            merged_params["float_shares_map"] = get_float_shares_map_full()
+        return select_stocks_v43(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently,
+                                   extra_data=params)
+
+    def _v44_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v44 选股 — 资金流+动量+低波质量"""
+        from scripts.strategies.v44_flow_momentum import select_stocks_v44, calc_factors
+
+        if factors is None or "mom_5" not in factors:
+            from core.db import get_float_shares_map
+            calc_params = dict(params or {})
+            calc_params["float_shares_map"] = get_float_shares_map()
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, calc_params)
+
+        merged_params = dict(self._risk_params["v44"])
+        if params:
+            merged_params.update(params)
+        if "float_shares_map" not in merged_params:
+            from core.db import get_float_shares_map
+            merged_params["float_shares_map"] = get_float_shares_map()
+        return select_stocks_v44(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently,
+                                  extra_data=params)
+
+    def _v45a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v45a 选股 — 反转策略（买超跌放量反弹）"""
+        from scripts.strategies.v45a_contrarian import select_stocks_v45a, calc_factors_v45a
+
+        if factors is None or "mom_5" not in factors:
+            from core.db import get_float_shares_map
+            calc_params = dict(params or {})
+            calc_params["float_shares_map"] = get_float_shares_map()
+            factors = calc_factors_v45a(close_panel, volume_panel,
+                                         calc_params.get("float_shares_map"),
+                                         extra_data=calc_params)
+
+        merged_params = dict(self._risk_params.get("v45a", {}))
+        if params:
+            merged_params.update(params)
+        if "float_shares_map" not in merged_params:
+            from core.db import get_float_shares_map
+            merged_params["float_shares_map"] = get_float_shares_map()
+        return select_stocks_v45a(date, factors, extra_data=merged_params)
+
+    def _v46_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v46 选股 — 行业ETF动量轮动"""
+        from scripts.strategies.v46_etf_rotation import select_stocks_v46
+
+        merged_params = dict(self._risk_params.get("v46", {}))
+        if params:
+            merged_params.update(params)
+        return select_stocks_v46(date, factors, extra_data=merged_params)
+
     def _v41_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,
                     sold_recently=None):
@@ -826,15 +969,24 @@ class StrategyAdapter:
         merged = dict(self._risk_params.get(strategy_name, {}))
         if params:
             merged.update(params)
+        import sys
+        print(f"  [RCV DBG] risk_check: id(price_data)={id(price_data)}, len={len(price_data)}, has ETF={sum(1 for c in price_data.index if c.startswith('sz51') or c.startswith('sh51'))}", file=sys.stderr)
         return self._check_risk_impl(state, date, price_data, merged, prev_close, sell1_vol)
 
-    def _check_risk_impl(self, state, date, price_data, params, prev_close, sell1_vol):
+    def _check_risk_impl(self, state, date, price_data, params, prev_close, sell_1_vol):
         """风控实现 — 与 account_runner.py 的 check_risk() 逻辑一致"""
         to_sell = []
         hold_max = params["HOLD_DAYS_MAX"]
         hold_ext = params.get("HOLD_DAYS_EXTEND", hold_max)
         hold_ext_pnl = params.get("HOLD_DAYS_EXTEND_PNL", 0.03)
 
+        # ETF价格由 wf_runner 注入 price_data（已合并），这里直接查
+        import sys
+        has_etf = any(c.startswith('sz51') or c.startswith('sh51') for c in state.holdings.keys())
+        if has_etf:
+            sample_codes = list(state.holdings.keys())[:3]
+            for _c in sample_codes:
+                print(f"  [ADAPTER DBG] price_data has {_c}: {_c in price_data.index}, len={len(price_data)}", file=sys.stderr)
         def _limit_threshold(code):
             if code.startswith('300') or code.startswith('688'):
                 return 0.199
@@ -845,6 +997,10 @@ class StrategyAdapter:
             if h.get('hold_days', 0) < 1:
                 continue
             if code not in price_data.index:
+                # ETF fallback: wf_runner 已将 etf_close_panel 合入 price_data
+                # 如果还不在里面，说明当天无ETF数据，跳过
+                import sys
+                print(f"  [RISK DEBUG] {date}: {code} NOT in price_data, skipping", file=sys.stderr)
                 continue
             cp = price_data[code]
             if pd.isna(cp) or cp <= 0:
@@ -853,8 +1009,8 @@ class StrategyAdapter:
 
             # 封板判断
             is_limit_up = False
-            if sell1_vol is not None and code in sell1_vol.index:
-                sv = sell1_vol[code]
+            if sell_1_vol is not None and code in sell_1_vol.index:
+                sv = sell_1_vol[code]
                 if not pd.isna(sv) and sv == 0:
                     is_limit_up = True
             if not is_limit_up and prev_close is not None and code in prev_close.index:

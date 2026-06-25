@@ -65,10 +65,10 @@ DEFAULT_PARAMS = {
     "BOLL_W_MIN": 0.0,
 
     # ── 评分权重（研究：换手率 vs 量比）──
-    "W_MOM": 0.15,
+    "W_MOM": 0.08,
     "W_PV_CORR": 0.05,
-    "W_TURNOVER_RATE": 0.05,     # 真实换手率（新因子）
-    "W_TURNOVER_AVG": 0.05,      # 量比（对比基准）
+    "W_TURNOVER_RATE": 0.12,     # 真实换手率（新因子）
+    "W_TURNOVER_AVG": 0.0,       # 量比（去掉）
     "W_SIZE": 0.30,
     "W_FUND_FLOW": 0.05,
     "W_GAP": 0.05,
@@ -140,7 +140,7 @@ def select_stocks_v42(factors, date, current_holdings=None, params=None,
 
     # 真实换手率（turnover_rate = volume / float_shares）
     if p.get("W_TURNOVER_RATE", 0) > 0 and 'turnover_rate' in factors:
-        tr_scores = _score_column(factors, date, 'turnover_rate', clip_min=0, clip_max=0.10)
+        tr_scores = _score_column(factors, date, 'turnover_rate', clip_min=0, clip_max=0.3)
         scores += tr_scores.reindex(candidates).fillna(0) * p["W_TURNOVER_RATE"]
 
     if p.get("W_TURNOVER", 0) > 0:

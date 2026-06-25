@@ -10,11 +10,18 @@
 ```bash
 git clone git@github.com:fkchaos/a-share-quant-sim.git
 cd a-share-quant-sim
-pip install -e .                  # 安装依赖（pandas/numpy/requests）
-python scripts/tools/init_project.py   # 一键初始化（建表+股票池+K线+账户）
-python scripts/backtest/wf_runner.py --strategy v27 --full  # 全量回测
-python scripts/backtest/wf_runner.py --strategy v27           # WF 回测
-python scripts/sim/account_runner.py --strategy v27 intraday_signal  # 模拟盘信号
+pip install -e .                       # 安装依赖
+python3 scripts/tools/init_project.py  # 一键初始化（建表+股票池+K线+账户）
+
+# 回测验证
+python3 scripts/backtest/wf_runner.py --strategy v39i --full  # 全量回测
+python3 scripts/backtest/wf_runner.py --strategy v44           # WF 回测
+
+# 模拟盘信号
+python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
+
+# 全局状态
+python3 cmd.py status
 ```
 
 ## 文档
@@ -25,7 +32,16 @@ python scripts/sim/account_runner.py --strategy v27 intraday_signal  # 模拟盘
 - [RELEASE_NOTES.md](docs/RELEASE_NOTES.md) — 版本记录
 - [TODO.md](docs/TODO.md) — 待办事项
 - [策略注册表](docs/strategy/STRATEGY_REGISTRY.md) — 策略列表与状态
+- [实验结果](docs/strategy/RESULTS_LOG.md) — 各策略回测/WF结果
 - [实验记录](docs/experiments/) — 因子调研与实验日志
+- [归档](archive/) — 废弃脚本与工具
+
+## 当前运行
+
+| 账户 | 策略 | 资金 | 状态 |
+|------|------|------|------|
+| 账户2 | v39i（价量共振+动态MOM_THRESHOLD） | 20万 | ✅ 运行中 |
+| 账户1 | v11b（Ensemble截面因子） | 20万 | ⏸️ 暂停 |
 
 ## License
 

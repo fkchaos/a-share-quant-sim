@@ -101,28 +101,26 @@ sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=500000 WHERE 
 
 ## 三、回测引擎
 
-> **v27 回测入口**：`python scripts/backtest/wf_runner.py --strategy v27`
+> **v39i 回测入口**：`python3 scripts/backtest/wf_runner.py --strategy v39i`
 > 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py），统一使用 wf_runner。
 
 ### 3.1 快速开始
 
 ```bash
 # 全量回测（不做 WF 切分，直接跑全部历史数据）
-python scripts/backtest/wf_runner.py --strategy v27 --full
+python3 scripts/backtest/wf_runner.py --strategy v39i --full
 
 # WF 回测（默认 4 folds，约 50 秒）
-python scripts/backtest/wf_runner.py --strategy v27
+python3 scripts/backtest/wf_runner.py --strategy v39i
 
 # WF 回测（更多 folds）
-python scripts/backtest/wf_runner.py --strategy v27 --step 63
+python3 scripts/backtest/wf_runner.py --strategy v39i --step 63
 
 # 指定回测区间
-python scripts/backtest/wf_runner.py --strategy v27 --start 2023-01-01 --end 2025-12-31
+python3 scripts/backtest/wf_runner.py --strategy v39i --start 2023-01-01 --end 2025-12-31
 
 # 参数扫描（调参用，很慢，日常回测不要用）
-python scripts/backtest/sweep_v27_final.py          # 全组合扫描（48组，约40分钟）
-python scripts/backtest/sweep_v27_mom_threshold.py  # 动量阈值扫描
-python scripts/backtest/sweep_v27_sltp_hold.py      # 止损止盈持仓扫描
+# ⚠️ 以下扫描脚本已归档到 archive/，当前使用 strategy_map.py params 统一管理
 ```
 
 ### 3.2 回测架构
@@ -140,7 +138,7 @@ wf_runner.py
 
 | 参数 | 默认值 | 说明 | 示例 |
 |------|--------|------|------|
-| `--strategy` | 必填 | 策略名（v27） | `--strategy v27` |
+| `--strategy` | 必填 | 策略名（v39i） | `--strategy v39i` |
 | `--train` | 252 | 训练期天数 | `--train 252` |
 | `--test` | 252 | 测试期天数 | `--test 126` |
 | `--step` | 252 | 滑动步长 | `--step 63` |
@@ -153,7 +151,7 @@ wf_runner.py
 
 ```bash
 # 查看最新的 WF 结果
-cat data/backtest_results/wf_v27_latest.json
+cat data/backtest_results/wf_v39i_latest.json
 
 # 查看所有回测结果目录
 ls -lt data/backtest_results/ | head -5
@@ -161,20 +159,18 @@ ls -lt data/backtest_results/ | head -5
 
 ### 3.5 单次回测需要多久？
 
-- v27 WF（4 folds, step=252）：约 **50 秒**
-- v27 参数扫描（sweep_v27_final，48组）：约 **40 分钟**
+- v39i WF（4 folds, step=252）：约 **50 秒**
+- v39i 参数扫描：约 **40 分钟**（通过 strategy_map.py params 调参，无需独立扫描脚本）
 
 ### 3.6 模拟盘回测（account_runner.py）
 
 直接跑模拟盘交易逻辑，验证策略在实盘数据上的表现：
 
 ```bash
-# 三账户统一回测
-python scripts/sim/account_runner.py --strategy all report_only
-
-# 单账户回测
-python scripts/sim/account_runner.py --strategy v27 report_only
-python scripts/sim/account_runner.py --strategy v11b report_only
+# 三账户统一回测（旧格式已废弃）
+# 单账户回测（新格式）
+python3 scripts/sim/account_runner.py run --account-id 2 report_only
+python3 scripts/sim/account_runner.py run --account-id 1 report_only
 ```
 
 ---
@@ -190,26 +186,26 @@ Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段
 ### 4.2 运行 WF
 
 ```bash
-# v27 价量共振（默认 step=126，5 folds）
-python scripts/backtest/run_backtest.py --strategy v27
+# v39i 价量共振（默认 step=126，5 folds）
+python3 scripts/backtest/wf_runner.py --strategy v39i
 
-# v27 快速扫描（step=252，更少 fold）
-python scripts/backtest/wf_runner.py --strategy v27 --step 252
+# v39i 快速扫描（step=252，更少 fold）
+python3 scripts/backtest/wf_runner.py --strategy v39i --step 252
 ```
 
 ### 4.3 怎么看结果
 
 ```bash
-cat data/backtest_results/wf_v27_latest.json
+cat data/backtest_results/wf_v39i_latest.json
 ```
 
 结果示例：
 ```json
 {
   "n_folds": 4,
-  "test_ann_return": "121.31%",
-  "test_sharpe": "4.16",
-  "test_max_dd": "-8.16%",
+  "test_ann_return": "103.51%",
+  "test_sharpe": "1.199",
+  "test_max_dd": "-16.69%",
   "positive_folds": "4/4 (100%)",
   "pass": true
 }
@@ -229,10 +225,8 @@ cat data/backtest_results/wf_v27_latest.json
 
 | 策略 | 平均收益率 | 夏普 | 回撤 | 正收益fold | 状态 |
 |------|-----------|------|------|-----------|------|
-| v27 | 121.3% | 4.16 | -8.2% | 4/4 (100%) | ✅ WF通过 |
-| v32 | — | — | — | — | 🔬 精简版运行中 |
-| v33 | — | — | — | — | ⚠️ 双因子验证无效 |
-| v35 | — | — | — | — | ⚠️ 相对 v27 无实质提升 |
+| v39i | +103.51% | 1.199 | 16.69% | 4/4(100%) | ✅ WF通过 |
+| v44 | +26.32% | 1.252 | 18.71% | 4/4(100%) | ✅ WF通过 |
 
 ---
 
@@ -391,7 +385,7 @@ def _my_strategy_select(self, factors, date, close_panel, volume_panel, amount_p
 **第 4 步：回测验证**
 
 ```bash
-python scripts/backtest/run_backtest.py --strategy my_strategy
+python3 scripts/backtest/wf_runner.py --strategy my_strategy
 ```
 
 ### 6.2 常见踩坑
@@ -411,9 +405,9 @@ python scripts/backtest/run_backtest.py --strategy my_strategy
 
 | 策略 | 账户 | 参数位置 |
 |------|------|---------|
-| v11b | 账户1 | `strategy_map.py` → `STRATEGY_MAP["v11b"]["params"]` |
-| v27 | 账户2 | `strategy_map.py` → `STRATEGY_MAP["v27"]["params"]` |
-| v20c | 账户3 | `strategy_map.py` → `STRATEGY_MAP["v20c"]["params"]` |
+| v39i | 账户2（运行中） | `strategy_map.py` → `STRATEGY_MAP["v39i"]["params"]` |
+| v44 | 参考（高夏普） | `strategy_map.py` → `STRATEGY_MAP["v44"]["params"]` |
+| v11b | 账户1（暂停） | `strategy_map.py` → `STRATEGY_MAP["v11b"]["params"]` |
 | 回测通用 | — | `core/config.py` → `CONFIG` 字典（因子权重、交易成本等） |
 
 ### 7.2 常用参数说明
@@ -433,26 +427,26 @@ python scripts/backtest/run_backtest.py --strategy my_strategy
 | `regime_sideways_alloc` | 震荡市可用资金比例 | 0.5 ~ 0.8 | strategy_map params |
 | `regime_bear_alloc` | 熊市可用资金比例 | 0.1 ~ 0.5 | strategy_map params |
 
-### 7.3 v27 完整参数参考（strategy_map.py）
+### 7.3 v39i 当前默认参数参考（strategy_map.py）
 
 ```python
-# core/strategy_map.py → STRATEGY_MAP["v27"]["params"]
-STOP_LOSS        = -0.02    # 止损 -2%
-TAKE_PROFIT     = 0.05     # 止盈 +5%
-MAX_HOLDINGS     = 8        # 最大持仓 8 只
-MAX_DAILY_BUY    = 4        # 每日最多买 4 只
-MAX_POSITION     = 0.20     # 单只最大仓位 20%
-HOLD_DAYS_MAX    = 5        # 最大持仓天数 5
-HOLD_DAYS_MIN    = 1        # 最小持仓天数 1
-HOLD_DAYS_EXTEND = 7        # 浮盈延长最大天数
-HOLD_DAYS_EXTEND_PNL = 0.03 # 浮盈延长触发阈值 3%
-MOM_THRESHOLD    = 0.02     # 动量阈值 2%
-REGIME_ENABLED   = True     # 市场状态识别开关
-REGIME_MA_PERIOD = 20       # MA 周期
-REGIME_SLOPE_DAYS = 5      # 斜率回看天数
-REGIME_BULL_ALLOC = 1.0     # 牛市可用资金比例
-REGIME_SIDEWAYS_ALLOC = 0.7 # 震荡市可用资金比例
-REGIME_BEAR_ALLOC = 0.3     # 熊市可用资金比例
+# core/strategy_map.py → STRATEGY_MAP["v39i"]["params"]
+STOP_LOSS            = -0.05    # 止损 -5%
+TAKE_PROFIT          = 0.10     # 止盈 +10%
+MAX_HOLDINGS         = 8        # 最大持仓 8 只
+MAX_DAILY_BUY        = 3        # 每日最多买 3 只
+MAX_POSITION         = 0.125    # 单只最大仓位 12.5%
+HOLD_DAYS_MAX        = 5        # 最大持仓天数 5
+HOLD_DAYS_EXTEND     = 10       # 浮盈延长最大天数
+HOLD_DAYS_EXTEND_PNL = 0.03     # 浮盈延长触发阈值 3%
+MOM_THRESHOLD        = 0.05     # 动量阈值 5%
+W_MOM                = 0.15     # 动量因子权重 15%
+W_SIZE               = 0.30     # 规模因子权重 30%
+W_ILLIQ              = 0.20     # 非流动性因子权重 20%
+W_TURNOVER           = 0.15     # 换手率因子权重 15%
+W_VOLATILITY         = 0.10     # 波动率因子权重 10%
+W_PRICE              = 0.05     # 价格因子权重 5%
+W_MOMENTUM_3M        = 0.05     # 3月动量因子权重 5%
 ```
 
 ---
@@ -732,9 +726,7 @@ python -m pytest tests/standard/test_integration.py -v  # 12 个集成测试
 
 ### Q: ModuleNotFoundError: No module named 'scripts' 或 'core'
 
-```bash
-
-```
+先确认执行了 `pip install -e .`。
 
 ### Q: 找不到数据库文件
 
@@ -814,7 +806,7 @@ EOF
 # 2. 注册到 strategy_map.py（编辑 core/strategy_map.py）
 
 # 3. 模拟盘试试
-python scripts/sim/account_runner.py --strategy my_strategy intraday_signal
+python3 scripts/sim/account_runner.py run --account-id <id> --strategy my_strategy intraday_signal
 
 # 4. 跑回测验证（需要写独立回测脚本或接入回测引擎）
 # 5. 跑 Walk-Forward
@@ -824,11 +816,11 @@ python scripts/sim/account_runner.py --strategy my_strategy intraday_signal
 ### 场景 2：改个参数看效果
 
 ```bash
-# 修改 v27 的止盈从 5% 改为 8%
-# 编辑 core/strategy_map.py → STRATEGY_MAP["v27"]["params"]["TAKE_PROFIT"] = 0.08
+# 修改 v39i 的止盈从 5% 改为 8%
+# 编辑 core/strategy_map.py → STRATEGY_MAP["v39i"]["params"]["TAKE_PROFIT"] = 0.08
 
 # 跑回测
-python scripts/backtest/run_backtest.py --strategy v27
+python3 scripts/backtest/wf_runner.py --strategy v39i
 
 # 对比结果
 cat data/backtest_results/$(ls -t data/backtest_results/ | head -1)/summary.json

@@ -24,7 +24,7 @@ python -m pytest tests/standard/ -v --tb=short   # 简短错误信息
 |---------|---------|---------|
 | `test_account.py` | `core/account.py` | 买卖/净值/止损/止盈/交易日志 |
 | `test_sim.py` | `scripts/sim/account_runner.py` | 信号生成/执行/报告 JSON 格式 + 计划执行链路 |
-| `test_strategies.py` | `scripts/strategies/*.py` | v27/v32/v33/v35 因子计算 + plan 格式 |
+| `test_strategies.py` | `scripts/strategies/*.py` | v39i/v44 因子计算 + plan 格式 |
 | `test_backtest.py` | `scripts/backtest/` | 回测引擎/WF 分割/指标公式 |
 | `test_integration.py` | `scripts/tools/` | send_report 格式化 + JSON 序列化 |
 

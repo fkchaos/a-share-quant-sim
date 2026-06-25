@@ -1,6 +1,6 @@
 # 系统架构文档
 
-> 最后更新：2026-06-21（文档清理：移除 v20c 退役策略、实验脚本、更新 cron 任务清单）
+> 最后更新：2026-06-25（cli.py→cmd.py、策略目录更新、pool配置、cron 5任务）
 
 ## 一、整体架构
 
@@ -54,11 +54,11 @@ a-share-quant-sim/
 │   ├── sim/                 # 模拟盘
 │   │   └── account_runner.py    # 统一入口（信号/执行/报告）
 │   │
-│   ├── strategies/          # 选股逻辑
-│   │   ├── v27_select.py        # v27 价量共振
-│   │   ├── v32_analyst_expectation.py
-│   │   ├── v33_residual_momentum.py
-│   │   └── v35_sector_rotation.py
+│   ├── strategies/          # 选股逻辑（活跃）
+│   │   ├── v39i_optimized.py    # v39i 动态MOM_THRESHOLD（⭐ 当前运行）
+│   │   ├── v44_flow_momentum.py # v44 资金流+动量+低波质量（新最优夏普）
+│   │   ├── v27_select.py        # v27 价量共振（已退役）
+│   │   └── ...
 │   │
 │   ├── backtest/            # 回测框架
 │   │   ├── wf_runner.py         # Walk-Forward 运行器 + 全量回测（--full）
@@ -66,7 +66,7 @@ a-share-quant-sim/
 │   │   └── sweep_v27_*.py       # 参数扫描脚本（调参用）
 │   │
 │   └── tools/               # 工具脚本
-│       ├── cli.py                # 数据库 CLI
+│       ├── cmd.py                # 数据库 CLI（替代 cli.py）
 │       ├── init_project.py       # 一键初始化
 │       └── update_daily_data_async.py
 │
@@ -83,15 +83,29 @@ a-share-quant-sim/
     ├── experiments/         # 实验记录
     │   ├── 2026-06-20_factor_survey.md
     │   ├── 2026-06-21_regime_tuning.md
+    │   ├── 2026-06-21_qmt_research.md
+    │   ├── 2026-06-23_v39c_to_v39d.md
+    │   ├── 2026-06-23_v39d_to_v39e.md
+    │   ├── 2026-06-23_v39h_v39i_dynamic_threshold.md
+    │   ├── 2026-06-23_v40_factor_exit.md
+    │   ├── 2026-06-23_v40b_pure_rotation.md
+    │   ├── 2026-06-23_v41_volume_price_factors.md
+    │   ├── 2026-06-24_v42_turnover_rate_research.md
+    │   ├── 2026-06-25_v44_quality_lowvol-DEPRECATED.md
+    │   ├── 2026-06-25_v45_new_directions.md
     │   └── api-notes.md
-    └── archive/             # 归档
-```
+    └── archive/             # 归档（废弃策略脚本/工具）
+    ```
 
 ## 三、策略注册表（strategy_map + strategy_adapter）
 
 ### 3.1 strategy_map（模拟盘入口）
 
-`core/strategy_map.py` 是模拟盘策略的注册中心，策略名 → 选股函数 + 风控参数。
+`core/strategy_map.py` 是模拟盘策略的注册中心，策略名 → 选股函数 + 风控参数 + 股票池（pool字段）。
+
+每个策略通过 `pool` 字段指定股票池：
+- `'zz800'`（默认）— 中证800范围
+- `'full_a'` — 全A范围（如 v43）
 
 ### 3.2 strategy_adapter（回测+模拟盘统一接口）
 
@@ -179,14 +193,14 @@ account_runner.py ← core/db.py ← quant_stocks.db (K线面板)
 account_runner.py → quant_accounts.db (交易记录)
 ```
 
-## 七、Cron 调度（4 个任务，Hermes cron）
+## 七、Cron 调度（5 个活动任务，Hermes cron）
 
 | 任务 | 时间 | 命令 | 备注 |
 |------|------|------|------|
 | 数据更新 | 11:31/15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数 |
-| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v27 价量共振 |
-| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v27 价量共振 |
-| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | |
+| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v39i |
+| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v39i |
+| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | v39i |
 
 > 账户1(v11b)、账户3(v20c) 已暂停，不参与日常调度。
 

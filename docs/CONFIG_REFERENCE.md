@@ -29,18 +29,7 @@
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `stop_loss` | 0.20 | 固定止损比例（亏损 20% 触发） |
-| `stop_loss_atr_k` | 6.0 | ATR 动态止损倍数：止损价 = 成本价 - K × ATR(14) |
-| `top_n` | 12 | 目标持仓数量 |
-| `rebalance_freq` | 20 | 调仓频率（交易日，约每月一次） |
-| `max_single_weight` | 0.15 | 组合层面单只最大仓位（风控上限） |
-| `max_daily_turnover` | 0.30 | 单日最大换手率（30%） |
-| `min_rebalance_interval` | 3 | 最小调仓间隔（交易日，防止频繁调仓） |
-
-**止损逻辑**（`account.py:check_stop_loss`）：
-1. 固定止损：`(成本价 - 现价) / 成本价 ≥ stop_loss` → 全仓卖出
-2. ATR 止损（需开启 `use_atr_stop`）：`(成本价 - 现价) / 成本价 ≥ K × ATR(14) / 现价` → 全仓卖出
-3. 两种模式独立判断，任一触发即卖出
+⚠️ **以下参数来自旧框架。当前策略直接在 `strategy_map.py` 配置止损/止盈/持仓等参数，不在此处管理。**
 
 ### 选股参数
 
@@ -144,23 +133,11 @@ class StrategyConfig:
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `REGIME_ENABLED` | True | 是否启用市场状态识别 |
-| `REGIME_MA_PERIOD` | 20 | MA 周期（用于计算斜率） |
-| `REGIME_SLOPE_DAYS` | 5 | 斜率计算回看天数 |
-| `REGIME_BULL_ALLOC` | 1.0 | 牛市可用资金比例（1.0=全部可用） |
-| `REGIME_SIDEWAYS_ALLOC` | 0.7 | 震荡市可用资金比例（0.7=留30%现金） |
-| `REGIME_BEAR_ALLOC` | 0.3 | 熊市可用资金比例（0.3=留70%现金） |
-
-**逻辑**：用全市场收盘价中位数序列的 MA20 斜率 + 价格相对 MA60 位置判断市场状态：
-- 牛市：MA20 斜率 > 0 且价格 > MA60 → 全部资金可用
-- 熊市：MA20 斜率 < 0 且价格 < MA60 → 仅 30% 资金可用
-- 震荡：其他 → 70% 资金可用
-
-**作用点**：`available = (cash + sell_cash) * regime_alloc`，在 `run_signal` 和 `run_execute` 中统一应用。
+⚠️ **本文档描述的是旧版 V11b/V13 框架的配置系统。当前运行策略（v39i/v44）的参数统一在 `core/strategy_map.py` 管理，不再使用这里的配置。** 具体策略参数见 `docs/strategy/STRATEGY_REGISTRY.md`。
 
 ---
 
-## 三、因子列表
+## 三、因子列表（旧框架参考）
 
 ### 全部 29 个因子（`DEFAULT_FACTOR_WEIGHTS`）
 

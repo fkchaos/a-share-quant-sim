@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-25（重写第九章：适配 cmd.py 工具 + 新增 switch/status/signals 命令；更新第八章：venv 路径 + cron prompt 精简 + 策略 v27→v39i）
+> 最后更新：2026-06-25（更新第五章：新 CLI 格式 + v39i + cmd.py；重写第九章：适配 cmd.py 工具；更新第八章：venv 路径 + cron prompt 精简）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -74,14 +74,14 @@ python scripts/tools/update_daily_data_async.py
 ### 2.3 查看数据库内容
 
 ```bash
-# 查看账户
-python scripts/tools/cli.py account
+# 查看账户（新 CLI 工具）
+python cmd.py account
 
 # 查看持仓
-python scripts/tools/cli.py holdings
+python cmd.py holdings
 
 # 查看交易记录（最近 10 条）
-python scripts/tools/cli.py trades --limit 10
+python cmd.py trades --limit 10
 
 ```bash
 # 查看账户
@@ -242,68 +242,69 @@ cat data/backtest_results/wf_v27_latest.json
 
 模拟盘分三步：**信号 → 执行 → 报告**，对应三个命令。每天按顺序跑。
 
-### 5.2 账户1：v11b（⏸️ 已暂停，统一走 account_runner）
+所有账户统一通过 `account_runner.py run` 操作，策略由 DB 自动读取，不需要每次指定 `--strategy`：
 
 ```bash
-# 与账户2 共用同一入口，只需切换 --strategy
-python scripts/sim/account_runner.py --strategy v11b intraday_signal
-python scripts/sim/account_runner.py --strategy v11b intraday_execute
-python scripts/sim/account_runner.py --strategy v11b report_only
+# 信号生成（自动读取账户绑定的策略）
+python scripts/sim/account_runner.py run --account-id 2 intraday_signal
+
+# 执行交易
+python scripts/sim/account_runner.py run --account-id 2 intraday_execute
+
+# 收盘报告
+python scripts/sim/account_runner.py run --account-id 2 report_only
+
+# 临时指定策略（覆盖绑定，用于测试）
+python scripts/sim/account_runner.py run --account-id 2 --strategy v44 intraday_signal
 ```
 
-### 5.3 账户2：v27（✅ 运行中，统一入口）
+### 5.2 账户1：v11b（⏸️ 已暂停）
+
+```bash
+python scripts/sim/account_runner.py run --account-id 1 intraday_signal
+python scripts/sim/account_runner.py run --account-id 1 report_only
+```
+
+### 5.3 账户2：v39i（✅ 运行中）
+
+当前绑定策略 v39i（价量共振+动态 MOM_THRESHOLD，夏普 1.199）：
 
 ```bash
 # 上午出信号
-
-  python scripts/sim/account_runner.py --strategy v27 intraday_signal
+python scripts/sim/account_runner.py run --account-id 2 intraday_signal
 
 # 下午开盘执行
-
-  python scripts/sim/account_runner.py --strategy v27 intraday_execute
+python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 
 # 收盘报告
-
-  python scripts/sim/account_runner.py --strategy v27 report_only
+python scripts/sim/account_runner.py run --account-id 2 report_only
 ```
 
-### 5.4 账户3：v20c（❌ 已退役，保留供参考）
+### 5.4 账户3：v20c（❌ 已退役）
 
 ```bash
-# 尾盘出信号（14:45 执行）
-
-  python scripts/sim/account_runner.py --strategy v20c tail_signal
-
-# 尾盘执行（14:55 执行）
-
-  python scripts/sim/account_runner.py --strategy v20c tail_execute
-
-# 收盘报告（15:30 执行）
-
-  python scripts/sim/account_runner.py --strategy v20c report_only
+python scripts/sim/account_runner.py run --account-id 3 report_only
 ```
 
 ### 5.5 执行后看结果
 
 ```bash
 # 查看交易计划（执行后生成）
-cat data/portfolio/trade_plan_v27.json
+cat data/portfolio/trade_plan_main.json
 
 # 查看运行日志
 tail -50 data/portfolio/account_runner.log
 
-# 查看账户状态
-python scripts/tools/cli.py account
+# 查看账户状态（新 CLI 工具）
+python cmd.py status
+python cmd.py holdings
 ```
 
-### 5.6 一个账户只用跑一次怎么办？
+### 5.6 一条命令快速测试
 
-如果只想快速测试，不需要完整的三步流程，可以直接：
 ```bash
-# 信号 + 执行一步完成
-python scripts/sim/account_runner.py --strategy v27 intraday_signal
-python scripts/sim/account_runner.py --strategy v27 intraday_execute
-```
+# 信号生成 → 看结果
+python scripts/sim/account_runner.py run --account-id 2 intraday_signal
 
 ---
 
@@ -465,25 +466,24 @@ REGIME_BEAR_ALLOC = 0.3     # 熊市可用资金比例
 | **Hermes cron**（推荐） | 已部署 Hermes Agent | 自动重试、失败告警、QQ 推送、集中管理 | 依赖 Hermes 服务 |
 | **系统 crontab** | 纯 Linux 环境 | 零依赖、稳定 | 无告警、无重试、需手动查日志 |
 
-### 8.2 ⚠️ 环境路径说明
+### 8.2 先确认环境
 
-**必须使用 Hermes venv 的 Python，系统 Python 没有 pandas 等依赖：**
+安装时执行了 `pip install -e .` 的话，`python3` 直接能用：
 
 ```bash
-# ✅ 正确（所有 python3 命令都用这个替代）
-alias py3='/root/.hermes/hermes-agent/venv/bin/python3'
-
-py3 cmd.py status
-py3 scripts/tools/run_and_send.py --task signal --account 2
-py3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
-
-# ❌ 错误（会报 ModuleNotFoundError: No module named 'pandas'）
-python3 cmd.py status
+cd /root/a-share-quant-sim
 python3 scripts/tools/run_and_send.py --task signal --account 2
+python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
 ```
 
-> 💡 **建议**：在 `.bashrc` 加一行 `alias py3='/root/.hermes/hermes-agent/venv/bin/python3'`，
-> 以后所有命令用 `py3` 代替 `python3`。
+> 💡 如果报 `No module named 'pandas'`，说明当前环境的 Python 没装依赖。
+> 回到[第一章](#一环境准备)执行 `pip install -e .` 即可。
+>
+> **特殊部署说明**：如果项目安装在 Hermes Agent 的 venv 内（当前服务器），需要用完整路径：
+> ```
+> alias py3='/root/.hermes/hermes-agent/venv/bin/python3'
+> ```
+> 详见 `docs/DEPLOY.md`。
 
 ### 8.3 Hermes cron 方案（推荐）
 
@@ -557,11 +557,8 @@ hermes cron list
 
 ## 九、数据库操作（账户/持仓/买卖）
 
-> ⚠️ **环境提示**：如果 `python3 cmd.py ...` 报 `No module named 'pandas'`，用 venv 路径：
-> ```bash
-> alias py3='/root/.hermes/hermes-agent/venv/bin/python3'
-> py3 cmd.py status
-> ```
+> ⚠️ **环境提示**：如果 `python3 cmd.py ...` 报 `No module named 'pandas'`，先确认执行了 `pip install -e .`。
+> 特殊部署见[第八章 §8.2](#82-先确认环境) 的说明。
 
 所有数据库操作通过项目根目录的 `cmd.py` 完成。**不需要写 SQL**，直接命令行操作。
 
@@ -844,10 +841,10 @@ cat data/backtest_results/$(ls -t data/backtest_results/ | head -1)/summary.json
 python scripts/tools/update_daily_data_async.py
 
 # 查看账户状态
-python scripts/tools/cli.py account
+python cmd.py account
 
 # 查看持仓
-python scripts/tools/cli.py holdings
+python cmd.py holdings
 
 # 查看最近的回测记录
 ls -lt data/backtest_results/ | head -10

@@ -6,19 +6,22 @@
 
 ---
 
-## 一、⚠️ 环境路径说明（重要）
+## 一、基础环境
 
-当前环境**系统 Python（`/usr/bin/python3`）没有 pandas 等依赖**，所有脚本必须使用 Hermes venv 的 Python：
+项目通过 `pip install -e .` 管理依赖，安装后 `python3` 直接可用：
 
 ```bash
-# ✅ 正确路径
-/root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/run_and_send.py --task signal --account 2
-
-# ❌ 错误路径（会报 No module named 'pandas'）
+cd a-share-quant-sim
+pip install -e .
 python3 scripts/tools/run_and_send.py --task signal --account 2
 ```
 
-**原因**：Hermes cron 运行时 PATH 不带 venv，`python3` 解析到系统 Python。必须写完整路径。
+> **当前服务器特殊说明**：项目安装在 Hermes Agent 的 venv 内，系统 Python 没装依赖。
+> 所有 cron 命令需写完整 venv 路径：
+> ```bash
+> /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/run_and_send.py ...
+> ```
+> 普通部署不需要这个 hack，`python3` 直接能用。
 
 ---
 
@@ -56,8 +59,10 @@ hermes cron create \
   --prompt "执行上午数据更新。
 
 运行命令：
-cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/run_and_send.py --task data_update"
+cd /root/a-share-quant-sim && python3 scripts/tools/run_and_send.py --task data_update"
 ```
+
+> ⚠️ 如果部署在 Hermes Agent venv 内（当前服务器），将 `python3` 替换为 `/root/.hermes/hermes-agent/venv/bin/python3`。以下所有创建命令同理。
 
 ### 3.2 数据更新（下午）
 
@@ -68,7 +73,7 @@ hermes cron create \
   --prompt "执行下午数据更新。
 
 运行命令：
-cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/run_and_send.py --task data_update"
+cd /root/a-share-quant-sim && python3 scripts/tools/run_and_send.py --task data_update"
 ```
 
 ### 3.3 账户2-上午信号
@@ -80,7 +85,7 @@ hermes cron create \
   --prompt "执行账户2上午信号（策略 v39i）。
 
 直接执行一条命令：
-cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/run_and_send.py --task signal --account 2"
+cd /root/a-share-quant-sim && python3 scripts/tools/run_and_send.py --task signal --account 2"
 ```
 
 ### 3.4 账户2-下午执行
@@ -92,7 +97,7 @@ hermes cron create \
   --prompt "执行账户2下午交易（策略 v39i）。
 
 直接执行一条命令：
-cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/run_and_send.py --task execute --account 2"
+cd /root/a-share-quant-sim && python3 scripts/tools/run_and_send.py --task execute --account 2"
 ```
 
 ### 3.5 收盘报告
@@ -104,7 +109,7 @@ hermes cron create \
   --prompt "执行收盘报告（所有活跃账户）。
 
 运行命令：
-cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/run_and_send.py --task report --account 2"
+cd /root/a-share-quant-sim && python3 scripts/tools/run_and_send.py --task report --account 2"
 ```
 
 ---

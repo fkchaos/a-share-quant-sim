@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-25（重写第九章：适配 cmd.py 工具 + 新增 switch/status/signals 命令）
+> 最后更新：2026-06-25（重写第九章：适配 cmd.py 工具 + 新增 switch/status/signals 命令；更新第八章：venv 路径 + cron prompt 精简 + 策略 v27→v39i）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -465,9 +465,29 @@ REGIME_BEAR_ALLOC = 0.3     # 熊市可用资金比例
 | **Hermes cron**（推荐） | 已部署 Hermes Agent | 自动重试、失败告警、QQ 推送、集中管理 | 依赖 Hermes 服务 |
 | **系统 crontab** | 纯 Linux 环境 | 零依赖、稳定 | 无告警、无重试、需手动查日志 |
 
-### 8.2 Hermes cron 方案（推荐）
+### 8.2 ⚠️ 环境路径说明
 
-所有 cron 任务通过 `hermes cron` 管理，每个任务只需一条命令 + 格式化输出：
+**必须使用 Hermes venv 的 Python，系统 Python 没有 pandas 等依赖：**
+
+```bash
+# ✅ 正确（所有 python3 命令都用这个替代）
+alias py3='/root/.hermes/hermes-agent/venv/bin/python3'
+
+py3 cmd.py status
+py3 scripts/tools/run_and_send.py --task signal --account 2
+py3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
+
+# ❌ 错误（会报 ModuleNotFoundError: No module named 'pandas'）
+python3 cmd.py status
+python3 scripts/tools/run_and_send.py --task signal --account 2
+```
+
+> 💡 **建议**：在 `.bashrc` 加一行 `alias py3='/root/.hermes/hermes-agent/venv/bin/python3'`，
+> 以后所有命令用 `py3` 代替 `python3`。
+
+### 8.3 Hermes cron 方案（推荐）
+
+所有 cron 任务通过 `hermes cron` 管理：
 
 ```bash
 # 查看所有 cron 任务
@@ -481,26 +501,26 @@ hermes cron pause <job_id>
 hermes cron resume <job_id>
 ```
 
-**当前任务清单（已启用）：**
+**当前任务清单（已启用 — 策略 v39i）：**
 
 | 任务 | 时间 | 命令 | 备注 |
 |------|------|------|------|
-| 数据更新-上午 | 11:31 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
-| 数据更新-下午 | 15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
-| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v27 |
-| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v27 |
-| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | |
+| 🟢 数据更新-上午 | 11:31 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
+| 🟢 数据更新-下午 | 15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
+| 🟢 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v39i |
+| 🟢 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v39i |
+| 🟢 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | v39i |
 
 **已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
 
 **输出格式：** 所有任务通过 send_report.py 自动格式化并发送到 QQ，日期后带 📅（交易日）/ 🚫 非交易日 标识，信号含买卖持明细，执行含持仓明细
 
 **Cron Prompt 设计原则：**
-- 脚本做所有工作，agent 只负责格式化输出
-- 固定结构：任务说明 → 运行命令 → 整理为报告（含代码+名称）→ CRON_STATUS 标记
-- 极简 prompt 避免多轮 API 调用触发 429 限流
+- **极简 prompt**：一行命令跑完，不要多步操作
+- 不再包含 git pull、数据更新等前置步骤，`run_and_send.py` 一站式处理
+- 所有命令使用 `/root/.hermes/hermes-agent/venv/bin/python3` 完整路径
 
-### 8.3 系统 crontab 方案（备选）
+### 8.4 系统 crontab 方案（备选）
 
 ```bash
 crontab -e
@@ -508,19 +528,20 @@ crontab -e
 
 ```cron
 # ⚠️ 请将 /root/a-share-quant-sim 替换为你的实际项目路径
+# ⚠️ 请将 /root/.hermes/hermes-agent/venv/bin/python3 替换为你的 venv Python 路径
 # 数据更新（上午+下午）
-31 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
-40 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
+31 11 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
+5 15 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
 
-# 账户2 信号+执行
-45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_signal >> data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 intraday_execute >> data/portfolio/account_runner.log 2>&1
+# 账户2 信号+执行（使用新 CLI 格式）
+45 11 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute >> data/portfolio/account_runner.log 2>&1
 
 # 收盘报告
-30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py --strategy v27 report_only >> data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 report_only --date $(date +\%Y-\%m-\%d) >> data/portfolio/account_runner.log 2>&1
 ```
 
-### 8.4 验证
+### 8.5 验证
 
 ```bash
 # crontab 方案
@@ -535,7 +556,12 @@ hermes cron list
 ---
 
 ## 九、数据库操作（账户/持仓/买卖）
-## 九、数据库操作（账户/持仓/买卖）
+
+> ⚠️ **环境提示**：如果 `python3 cmd.py ...` 报 `No module named 'pandas'`，用 venv 路径：
+> ```bash
+> alias py3='/root/.hermes/hermes-agent/venv/bin/python3'
+> py3 cmd.py status
+> ```
 
 所有数据库操作通过项目根目录的 `cmd.py` 完成。**不需要写 SQL**，直接命令行操作。
 

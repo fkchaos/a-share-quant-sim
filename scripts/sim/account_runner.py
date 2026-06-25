@@ -74,28 +74,46 @@ def _resolve_strategy(account_id):
 
 
 # ── 数据加载 ──────────────────────────────────────────────────────
-def load_panel(codes, min_days=60):
-    """从 DB 加载 K 线面板"""
-    code_dfs = {}
-    for code in codes:
-        kl = get_kline(code)
-        if kl and len(kl) > min_days:
-            df = pd.DataFrame(kl)
-            df['date'] = pd.to_datetime(df['date'])
-            df = df.set_index('date').sort_index()
-            df = df[df["volume"] > 0]
-            if len(df) > min_days:
-                code_dfs[code] = df
-    if not code_dfs:
+def load_panel(codes, min_days=60, pool="zz800"):
+    """从 DB 加载 K 线面板（使用 load_panel_from_db 加速）
+
+    替代逐只 get_kline + 逐只 DataFrame 构建的旧方案。
+    旧方案：4918 只 × 逐个 get_kline → 内存峰值 500MB+
+    新方案：单次 SQL 查询 + pivot_table → 约 30MB
+
+    Args:
+        codes: 兼容旧接口，仅用于判定 pool（不再使用全部 codes）
+        min_days: 兼容旧接口
+        pool: 股票池 (zz800 / full_a)
+    """
+    from core.db import load_panel_from_db, get_latest_date
+    from datetime import datetime, timedelta
+
+    latest = get_latest_date()
+    if latest is None:
         return None
-    return (
-        pd.DataFrame({c: code_dfs[c]['close'] for c in code_dfs}),
-        pd.DataFrame({c: code_dfs[c]['volume'] for c in code_dfs}),
-        pd.DataFrame({c: code_dfs[c].get('amount', code_dfs[c]['close'] * code_dfs[c]['volume']) for c in code_dfs}),
-        pd.DataFrame({c: code_dfs[c].get('high', code_dfs[c]['close']) for c in code_dfs}),
-        pd.DataFrame({c: code_dfs[c].get('low', code_dfs[c]['close']) for c in code_dfs}),
-        pd.DataFrame({c: code_dfs[c].get('open', code_dfs[c]['close']) for c in code_dfs}),
-    )
+
+    # 取最近 2 年数据，足够所有因子计算（最长 lookback 约 60 天）
+    start = (datetime.strptime(latest, '%Y-%m-%d') - timedelta(days=730)).strftime('%Y-%m-%d')
+
+    try:
+        panels, _ = load_panel_from_db(
+            start_date=start, end_date=latest,
+            need_open=True, need_hl=True,
+            pool=pool
+        )
+    except Exception as e:
+        print(f"[load_panel] 加载失败: {e}")
+        return None
+
+    if panels[0].empty:
+        print(f"[load_panel] 面板为空")
+        return None
+
+    # load_panel_from_db 返回 (close, vol, amt, open, high, low)
+    # 老接口需要 (close, vol, amt, high, low, open) — 重排
+    cp, vp, ap, op, hp, lp = panels
+    return (cp, vp, ap, hp, lp, op)
 
 
 # ── 账户操作 ──────────────────────────────────────────────────────
@@ -409,9 +427,9 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
     logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} === (POSITION_SCALE={params.get('POSITION_SCALE', 1.0)})")
 
-    # 选股池（排除科创板/北交所/老三板/B股）
-    codes = get_tradeable_codes()
-    panels = load_panel(codes)
+    # 确定股票池并加载面板数据
+    pool = "full_a" if strategy_name == "v43" else "zz800"
+    panels = load_panel(None, pool=pool)
     if not panels:
         logger.error("数据加载失败")
         return

@@ -576,7 +576,7 @@ STRATEGY_MAP = {
             "HOLD_DAYS_MAX": 5,
             "HOLD_DAYS_EXTEND": 5,
             "HOLD_DAYS_EXTEND_PNL": 0.03,
-            "MAX_DAILY_BUY": 3,
+            "MAX_DAILY_BUY": 5,
             "MAX_POSITION": 0.125,
             "MAX_HOLDINGS": 8,
             "COOLDOWN_DAYS": 0,

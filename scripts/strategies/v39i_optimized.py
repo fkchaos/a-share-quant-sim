@@ -17,7 +17,7 @@ scripts/strategies/v39i_optimized.py — v39i 优化版
 风控参数（保持 v39h）：
 - STOP_LOSS: -0.05, TAKE_PROFIT: 0.10
 - HOLD_DAYS_MAX: 5, HOLD_DAYS_EXTEND: 5
-- MAX_DAILY_BUY: 3, MAX_POSITION: 0.20
+- MAX_DAILY_BUY: 5, MAX_POSITION: 0.20
 """
 import pandas as pd
 import numpy as np
@@ -30,7 +30,7 @@ DEFAULT_PARAMS = {
     "HOLD_DAYS_MAX": 5,
     "HOLD_DAYS_EXTEND": 5,
     "HOLD_DAYS_EXTEND_PNL": 0.03,
-    "MAX_DAILY_BUY": 3,
+    "MAX_DAILY_BUY": 5,
     "MAX_POSITION": 0.125,
     "MAX_HOLDINGS": 8,
     "COOLDOWN_DAYS": 0,

@@ -390,10 +390,22 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     # 为需要 float_shares 的策略加载流通股本数据
     if "float_shares_map" not in params:
         try:
-            from core.db import get_float_shares_map
-            params["float_shares_map"] = get_float_shares_map()
+            from core.db import get_float_shares_map, get_float_shares_map_full
+            # v43 使用全A股票池，其他策略使用 zz800
+            if strategy_name == "v43":
+                params["float_shares_map"] = get_float_shares_map_full()
+            else:
+                params["float_shares_map"] = get_float_shares_map()
         except Exception:
             params["float_shares_map"] = {}
+
+    # v43 额外注入全A股票池数据（用于选股过滤）
+    if strategy_name == "v43":
+        try:
+            from core.db import get_stock_pool_full
+            params["stock_pool_full"] = get_stock_pool_full()
+        except Exception:
+            params["stock_pool_full"] = []
 
     logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} === (POSITION_SCALE={params.get('POSITION_SCALE', 1.0)})")
 

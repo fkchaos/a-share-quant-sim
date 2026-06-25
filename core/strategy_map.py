@@ -34,6 +34,8 @@ def load_strategy(name):
         raise ValueError(f"未知策略: {name}，可用: {list(STRATEGY_MAP.keys())}")
     # 动态加载函数（如需）
     result = dict(s)
+    # 默认股票池：zz800（全A策略需显式设置 pool='full_a'）
+    result.setdefault("pool", "zz800")
     if "select_fn" in result:
         result["select_stocks"] = _load_func(result["select_fn"])
     if "calc_factors_fn" in result:

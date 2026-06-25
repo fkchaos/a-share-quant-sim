@@ -54,8 +54,10 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     # ── 加载数据 ──
     print("\n[1/4] 加载数据...")
     t0 = time.time()
-    # v43 使用全A股票池，v44 使用 zz800，其他策略使用 zz800
-    pool = "full_a" if strategy_name == "v43" else "zz800"
+    # 从策略配置读取股票池
+    from core.strategy_map import load_strategy
+    _s = load_strategy(strategy_name)
+    pool = _s.get("pool", "zz800")
     tpl, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True, pool=pool)
     close_panel, volume_panel, amount_panel = tpl[0], tpl[1], tpl[2]
     open_panel, high_panel, low_panel = tpl[3], tpl[4], tpl[5]

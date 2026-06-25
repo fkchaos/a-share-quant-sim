@@ -427,8 +427,8 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
     logger.info(f"=== 账户{account_id} / {strategy_name} 信号 {date} === (POSITION_SCALE={params.get('POSITION_SCALE', 1.0)})")
 
-    # 确定股票池并加载面板数据
-    pool = "full_a" if strategy_name == "v43" else "zz800"
+    # 从策略配置读取股票池
+    pool = strategy.get("pool", "zz800")
     panels = load_panel(None, pool=pool)
     if not panels:
         logger.error("数据加载失败")

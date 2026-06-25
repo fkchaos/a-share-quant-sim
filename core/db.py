@@ -280,6 +280,25 @@ def get_float_shares_map():
         return {r["code"]: r["float_shares"] for r in rows}
 
 
+def get_stock_pool_full(active_only=True):
+    """返回全A股票池（stock_pool_full 表），排除科创/北交所"""
+    with get_conn("stock_pool_full") as conn:
+        sql = "SELECT code, name, board FROM stock_pool_full WHERE 1=1"
+        if active_only:
+            sql += " AND is_active=1"
+        rows = conn.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_float_shares_map_full():
+    """返回全A股票池的 {code: float_shares} 映射"""
+    with get_conn("stock_pool_full") as conn:
+        rows = conn.execute(
+            "SELECT code, float_shares FROM stock_pool_full WHERE float_shares > 0"
+        ).fetchall()
+        return {r["code"]: r["float_shares"] for r in rows}
+
+
 # ── 日K线 ──────────────────────────────────────────────────
 
 def upsert_kline(code, date, open_, high, low, close, volume, amount):
@@ -766,9 +785,14 @@ def load_panel_from_db(start_date=None, end_date=None, need_open=False, need_hl=
     with get_conn("daily_kline") as conn:
         # 获取股票池
         if pool:
-            pool_rows = conn.execute(
-                "SELECT code FROM stock_pool WHERE pool=? AND is_active=1", (pool,)
-            ).fetchall()
+            if pool == "full_a":
+                pool_rows = conn.execute(
+                    "SELECT code FROM stock_pool_full WHERE pool='full_a' AND is_active=1"
+                ).fetchall()
+            else:
+                pool_rows = conn.execute(
+                    "SELECT code FROM stock_pool WHERE pool=? AND is_active=1", (pool,)
+                ).fetchall()
             pool_codes = [r["code"] for r in pool_rows]
         else:
             pool_codes = None
@@ -817,3 +841,34 @@ def load_panel_from_db(start_date=None, end_date=None, need_open=False, need_hl=
 
     codes = sorted(df["code"].unique().tolist())
     return result, codes
+
+
+def load_etf_panel_from_db(start_date=None, end_date=None):
+    """
+    从 index_kline 表加载ETF收盘价面板。
+    返回: close_panel (date × etf_code) 或空 DataFrame。
+    """
+    import pandas as pd
+
+    with get_conn("index_kline") as conn:
+        sql = "SELECT code, date, close FROM index_kline"
+        params = []
+        if start_date:
+            sql += " WHERE date>=?"
+            params.append(start_date)
+        if end_date:
+            if params:
+                sql += " AND date<=?"
+            else:
+                sql += " WHERE date<=?"
+            params.append(end_date)
+        sql += " ORDER BY code, date"
+        rows = conn.execute(sql, params).fetchall()
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["date"] = pd.to_datetime(df["date"])
+    panel = df.pivot(index="date", columns="code", values="close").sort_index()
+    return panel

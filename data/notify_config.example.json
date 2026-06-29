@@ -1,0 +1,3 @@
+{
+  "qq_webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY_HERE"
+}

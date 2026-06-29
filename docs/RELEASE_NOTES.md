@@ -52,13 +52,16 @@
 
 ### 架构
 - **脚本输出结构化 JSON**：account_runner.py (signal/execute/report) + update_daily_data_async.py 统一输出 JSON
-- **send_report.py 统一格式化**：5 种类型（signal/execute/report/data_update/error）+ 自动发 QQ
-- **run_and_send.py 串联**：执行脚本 → 捕获 JSON → send_report 格式化 → 发 QQ
+- **format_report.py 统一格式化**：5 种类型（signal/execute/report/data_update/error）→ 输出格式化文本
+- **run_and_send.py 已废弃**：send 逻辑改为 cron agent prompt 或 Hermes deliver 自动推送
+- **两条执行路径（case by case）**：
+  - 非 Agent 用户：`account_runner.py | format_report.py` → 终端 stdout
+  - Agent 用户：agent 执行脚本 → agent 输出报告 → Hermes deliver 自动推送
 
 ### 功能
 - **输出格式优化**：日期后加交易日标识（📅/🚫 非交易日）、信号加持有明细、执行加持仓明细
 - **非交易日简化输出**：只显示标题 + 跳过原因
-- **Cron Prompt 简化**：从 agent 解析格式改为直接调用 run_and_send.py
+- **Cron Prompt 改为直接执行脚本**：不再通过 run_and_send.py 一站式处理
 
 ### 测试
 - **标准用例测试框架**：按工程架构分 5 模块（account/sim/strategies/backtest/integration），69 个用例全通过

@@ -31,7 +31,7 @@ DEFAULT_PARAMS = {
     "HOLD_DAYS_EXTEND_PNL": 0.08,  # 0.03 → 0.08（提高延长门槛）
     "MAX_DAILY_BUY": 4,            # 3 → 4（增加买入）
     "MAX_POSITION": 0.20,          # 保持
-    "MAX_HOLDINGS": 8,
+    "MAX_HOLDINGS": 5,
     "COOLDOWN_DAYS": 0,
     "MAX_SAME_PREFIX": 0,
 

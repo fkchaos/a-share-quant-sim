@@ -238,9 +238,11 @@ def save_account(state, account_id):
                 action = t.get("action", "")
                 shares = t.get("shares", 0)
                 price = t.get("price", 0)
-                amount = t.get("amount", 0)
+                amount = t.get("cost", t.get("amount", 0))
                 reason = t.get("reason", "")
                 trade_date = t.get("date", "")
+                if not amount:
+                    amount = shares * price
                 conn.execute(
                     "INSERT INTO trade_log(account_id,code,name,action,shares,price,amount,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     (account_id, code, name, action, shares, price, amount, reason, trade_date),
@@ -557,7 +559,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
             name_map[c] = nm
     try:
         from core.db import get_stock_name_map
-        db_names = get_stock_name_map()
+        db_names = get_stock_name_map(pool=pool)
         for c in sell_codes:
             if c not in name_map:
                 name_map[c] = db_names.get(c, c)

@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-25（更新第五章：新 CLI 格式 + v39i + cmd.py；重写第九章：适配 cmd.py 工具；更新第八章：venv 路径 + cron prompt 精简）
+> 最后更新：2026-06-27（v39i→v39g 切换、--pool 参数、WF 结果更新为 16 folds 真实数据）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -101,23 +101,24 @@ sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=500000 WHERE 
 
 ## 三、回测引擎
 
-> **v39i 回测入口**：`python3 scripts/backtest/wf_runner.py --strategy v39i`
+> **回测入口**：`python3 scripts/backtest/wf_runner.py --strategy <策略名>`
+> 当前运行策略：**v39g**（账户2，zz1800 股票池）
 > 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py），统一使用 wf_runner。
 
 ### 3.1 快速开始
 
 ```bash
 # 全量回测（不做 WF 切分，直接跑全部历史数据）
-python3 scripts/backtest/wf_runner.py --strategy v39i --full
+python3 scripts/backtest/wf_runner.py --strategy v39g --full --pool zz1800
 
-# WF 回测（默认 4 folds，约 50 秒）
-python3 scripts/backtest/wf_runner.py --strategy v39i
+# WF 回测（默认 16 folds，约 2-3 分钟）
+python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz1800
 
-# WF 回测（更多 folds）
-python3 scripts/backtest/wf_runner.py --strategy v39i --step 63
+# WF 回测（指定股票池）
+python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz800
 
 # 指定回测区间
-python3 scripts/backtest/wf_runner.py --strategy v39i --start 2023-01-01 --end 2025-12-31
+python3 scripts/backtest/wf_runner.py --strategy v39g --start 2023-01-01 --end 2025-12-31
 
 # 参数扫描（调参用，很慢，日常回测不要用）
 # ⚠️ 以下扫描脚本已归档到 archive/，当前使用 strategy_map.py params 统一管理
@@ -138,12 +139,14 @@ wf_runner.py
 
 | 参数 | 默认值 | 说明 | 示例 |
 |------|--------|------|------|
-| `--strategy` | 必填 | 策略名（v39i） | `--strategy v39i` |
+| `--strategy` | 必填 | 策略名（v39g） | `--strategy v39g` |
+| `--pool` | 策略配置 | 股票池覆盖（zz800/zz1800） | `--pool zz1800` |
 | `--train` | 252 | 训练期天数 | `--train 252` |
 | `--test` | 252 | 测试期天数 | `--test 126` |
 | `--step` | 252 | 滑动步长 | `--step 63` |
 | `--start` | 2021-01-01 | 回测起始日期 | `--start 2023-01-01` |
 | `--end` | 2026-05-31 | 回测结束日期 | `--end 2025-12-31` |
+| `--full` | false | 全量回测模式 | `--full` |
 
 ### 3.4 输出在哪？
 
@@ -186,29 +189,25 @@ Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段
 ### 4.2 运行 WF
 
 ```bash
-# v39i 价量共振（默认 step=126，5 folds）
-python3 scripts/backtest/wf_runner.py --strategy v39i
+# v39g 价量共振（默认 step=252，4 folds）
+python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz1800
 
-# v39i 快速扫描（step=252，更少 fold）
-python3 scripts/backtest/wf_runner.py --strategy v39i --step 252
+# v39g 更多 folds（step=63，16 folds，约 3 分钟）
+python3 scripts/backtest/wf_runner.py --strategy v39g --step 63 --pool zz1800
 ```
 
 ### 4.3 怎么看结果
 
-```bash
-cat data/backtest_results/wf_v39i_latest.json
+WF 结果直接打印在终端，汇总在最后：
 ```
+v39g WF 汇总 (16 folds)
+  测试期平均收益率: 8.31%
+  测试期平均夏普:   1.164
+  测试期平均回撤:   14.00%
+  正收益 fold:      12/16 (75%)
 
-结果示例：
-```json
-{
-  "n_folds": 4,
-  "test_ann_return": "103.51%",
-  "test_sharpe": "1.199",
-  "test_max_dd": "-16.69%",
-  "positive_folds": "4/4 (100%)",
-  "pass": true
-}
+  WF 通过标准: 正收益 fold >= 60%, 夏普 > 0.5
+  ✅ WF 通过 (75% 正收益 fold, 夏普 1.164)
 ```
 
 ### 4.4 判断标准
@@ -221,12 +220,16 @@ cat data/backtest_results/wf_v39i_latest.json
 
 全部满足 = **WF 通过**，策略可以上线模拟盘。
 
-### 4.5 各策略 WF 结果参考（2026-06 数据）
+### 4.5 各策略 WF 结果参考（2026-06-27 数据）
 
-| 策略 | 平均收益率 | 夏普 | 回撤 | 正收益fold | 状态 |
-|------|-----------|------|------|-----------|------|
-| v39i | +103.51% | 1.199 | 16.69% | 4/4(100%) | ✅ WF通过 |
-| v44 | +26.32% | 1.252 | 18.71% | 4/4(100%) | ✅ WF通过 |
+| 策略 | 股票池 | 平均收益率 | 夏普 | 回撤 | 正收益fold | 状态 |
+|------|--------|-----------|------|------|-----------|------|
+| v39g | zz1800 | +8.31% | 1.164 | 14.00% | 12/16(75%) | ✅ WF通过 |
+| v39i | zz800 | — | 0.708 | 22.96% | 14/16(87.5%) | ✅ WF通过 |
+| v39i | zz1800 | — | 0.620 | 23.08% | 10/16(62.5%) | ✅ WF通过 |
+| v39g | zz800 | — | 0.308 | 15.41% | 12/16(75%) | ❌ 夏普不足 |
+
+**当前运行**：账户2 = v39g（zz1800），全量回测 +66.70%/夏普0.818
 
 ---
 
@@ -249,7 +252,7 @@ python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 python scripts/sim/account_runner.py run --account-id 2 report_only
 
 # 临时指定策略（覆盖绑定，用于测试）
-python scripts/sim/account_runner.py run --account-id 2 --strategy v44 intraday_signal
+python scripts/sim/account_runner.py run --account-id 2 --strategy v39g intraday_signal
 ```
 
 ### 5.2 账户1：v11b（⏸️ 已暂停）
@@ -259,9 +262,9 @@ python scripts/sim/account_runner.py run --account-id 1 intraday_signal
 python scripts/sim/account_runner.py run --account-id 1 report_only
 ```
 
-### 5.3 账户2：v39i（✅ 运行中）
+### 5.3 账户2：v39g（✅ 运行中）
 
-当前绑定策略 v39i（价量共振+动态 MOM_THRESHOLD，夏普 1.199）：
+当前绑定策略 **v39g**（价量共振 + 短持快出 + 重小市值，zz1800 股票池，WF 夏普 1.164）：
 
 ```bash
 # 上午出信号
@@ -273,6 +276,8 @@ python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 # 收盘报告
 python scripts/sim/account_runner.py run --account-id 2 report_only
 ```
+
+**v39g 关键参数**：HOLD_DAYS_MAX=3, TAKE_PROFIT=5%, MAX_DAILY_BUY=4, MAX_POSITION=0.20, W_SIZE=0.40
 
 ### 5.4 账户3：v20c（❌ 已退役）
 
@@ -466,8 +471,8 @@ W_MOMENTUM_3M        = 0.05     # 3月动量因子权重 5%
 
 ```bash
 cd /root/a-share-quant-sim
-python3 scripts/tools/run_and_send.py --task signal --account 2
-python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
+python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
 ```
 
 > 💡 如果报 `No module named 'pandas'`，说明当前环境的 Python 没装依赖。
@@ -495,45 +500,55 @@ hermes cron pause <job_id>
 hermes cron resume <job_id>
 ```
 
-**当前任务清单（已启用 — 策略 v39i）：**
+**当前任务清单（已启用 — 策略 v39g）：**
 
-| 任务 | 时间 | 命令 | 备注 |
-|------|------|------|------|
-| 🟢 数据更新-上午 | 11:31 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
-| 🟢 数据更新-下午 | 15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数更新 |
-| 🟢 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v39i |
-| 🟢 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v39i |
-| 🟢 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | v39i |
+| 任务 | 时间 | Job ID | 策略 |
+|------|------|--------|------|
+| 🟢 数据更新-上午 | 11:31 工作日 | `8ebcb1e20cf1` | — |
+| 🟢 数据更新-下午 | 15:05 工作日 | `b530aff8cbb4` | — |
+| 🟢 账户2-上午信号 | 11:45 工作日 | `6ef77c65f34c` | v39g |
+| 🟢 账户2-下午执行 | 13:00 工作日 | `b0ba5f428eb5` | v39g |
+| 🟢 收盘报告 | 15:30 工作日 | `b6e0ef652f31` | — |
 
 **已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
 
-**输出格式：** 所有任务通过 send_report.py 自动格式化并发送到 QQ，日期后带 📅（交易日）/ 🚫 非交易日 标识，信号含买卖持明细，执行含持仓明细
+**执行路径说明（两种环境 Case by Case）：**
+
+| | 非 Agent 用户（本地 crontab） | Agent 用户（Hermes cron） |
+|---|---|---|
+| **执行方式** | `account_runner.py \| format_report.py` → 终端输出 | Agent 执行脚本 → Agent 输出报告 → Hermes deliver 推送 |
+| **看报告方式** | 直接看终端 stdout | Agent 推送到对话（QQ/其他 channel） |
+| **详细文档** | 见 CRON_SETUP.md 路径 A | 见 CRON_SETUP.md 路径 B |
 
 **Cron Prompt 设计原则：**
-- **极简 prompt**：一行命令跑完，不要多步操作
-- 不再包含 git pull、数据更新等前置步骤，`run_and_send.py` 一站式处理
+- **极简 prompt**：直接执行 `account_runner.py`，Agent 解析 JSON 输出报告文本
+- 不要使用 `hermes message` 子命令，由 Hermes deliver 自动推送
+- 非 Agent 用户用管道：`account_runner.py ... 2>/dev/null \| format_report.py --type ...`
 - 所有命令使用 `/root/.hermes/hermes-agent/venv/bin/python3` 完整路径
 
-### 8.4 系统 crontab 方案（备选）
+### 8.4 系统 crontab 方案（非 Agent 用户必选）
+
+> ⚠️ 如果你没有 Hermes Agent 环境，用此方案。报告直接输出到终端 stdout。
 
 ```bash
 crontab -e
 ```
 
 ```cron
-# ⚠️ 请将 /root/a-share-quant-sim 替换为你的实际项目路径
-# ⚠️ 请将 /root/.hermes/hermes-agent/venv/bin/python3 替换为你的 venv Python 路径
-# 数据更新（上午+下午）
-31 11 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
-5 15 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
+# ⚠️ 请将 /path/to/a-share-quant-sim 替换为你的实际项目路径
+# 数据更新（管道：执行 → 格式化 → 终端输出）
+31 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update >> data/portfolio/update.log 2>&1
+5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update >> data/portfolio/update.log 2>&1
 
-# 账户2 信号+执行（使用新 CLI 格式）
-45 11 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal >> data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute >> data/portfolio/account_runner.log 2>&1
+# 账户2 信号+执行
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2 >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2 >> data/portfolio/account_runner.log 2>&1
 
 # 收盘报告
-30 15 * * 1-5 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 report_only --date $(date +\%Y-\%m-\%d) >> data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2 >> data/portfolio/account_runner.log 2>&1
 ```
+
+> 注意：非 Agent 用户不需要 venv 完整路径，`python3` 直接可用（前提是 `pip install -e .` 已安装依赖）。
 
 ### 8.5 验证
 
@@ -816,14 +831,13 @@ python3 scripts/sim/account_runner.py run --account-id <id> --strategy my_strate
 ### 场景 2：改个参数看效果
 
 ```bash
-# 修改 v39i 的止盈从 5% 改为 8%
-# 编辑 core/strategy_map.py → STRATEGY_MAP["v39i"]["params"]["TAKE_PROFIT"] = 0.08
+# 修改 v39g 的止盈从 5% 改为 8%
+# 编辑 core/strategy_map.py → STRATEGY_MAP["v39g"]["params"]["TAKE_PROFIT"] = 0.08
 
 # 跑回测
-python3 scripts/backtest/wf_runner.py --strategy v39i
+python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz1800
 
-# 对比结果
-cat data/backtest_results/$(ls -t data/backtest_results/ | head -1)/summary.json
+# 对比结果（看终端输出汇总行）
 ```
 
 ### 场景 3：日常运维

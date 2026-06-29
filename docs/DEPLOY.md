@@ -1,6 +1,6 @@
 # 部署指南
 
-> 最后更新：2026-06-18（pip install -e . 统一路径管理，告别 sys.path 和 PYTHONPATH）
+> 最后更新：2026-06-29（定时调度重构：两条执行路径 case by case 说明）
 
 零基础部署，5 分钟跑通。
 
@@ -201,47 +201,67 @@ python scripts/sim/account_runner.py run --account-id 1 --strategy v11b intraday
 
 ## 7. 定时调度
 
-### 方案一：Hermes cron（推荐）
+> ⚠️ **两种执行路径，根据部署环境选择（详见 [CRON_SETUP.md](CRON_SETUP.md)）**
 
-所有任务通过 `hermes cron` 管理，自动重试、失败告警、QQ 推送。
+### 方案 A：非 Agent 用户（系统 crontab 直接运行）
 
-**当前任务清单（已启用）：**
+**适用**：从 GitHub clone 到本地机器，无 Hermes Agent 环境。
 
-| 任务 | 时间 | 命令 |
-|------|------|------|
-| 数据更新-上午 | 11:31 工作日 | `run_and_send.py --task data_update` |
-| 数据更新-下午 | 15:05 工作日 | `run_and_send.py --task data_update` |
-| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` |
-| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` |
-| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` |
-
-**已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
-
-```bash
-hermes cron list          # 查看所有任务
-hermes cron run <job_id>  # 手动触发
-hermes cron pause <job_id> # 暂停
-```
-
-### 方案二：系统 crontab（备选）
+**执行方式**：`account_runner.py` 输出 JSON → `format_report.py` 格式化 → 终端 stdout
 
 ```bash
 crontab -e
 ```
 
 ```cron
-# ⚠️ 请将 /root/a-share-quant-sim 替换为你的实际项目路径
-# 数据更新
-31 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
-40 14 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py >> data/portfolio/update.log 2>&1
+# ⚠️ 将 /path/to/a-share-quant-sim 替换为你的实际项目路径
 
-# 账户2（v27 价量共振）
-45 11 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal >> data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute >> data/portfolio/account_runner.log 2>&1
+# 数据更新（上午 + 下午）
+31 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
+5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
+
+# 账户2-上午信号
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+
+# 账户2-下午执行
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
 
 # 收盘报告
-30 15 * * 1-5 cd /root/a-share-quant-sim && python3 scripts/sim/account_runner.py run --account-id 2 report_only >> data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
 ```
+
+**查看报告**：直接看 crontab 输出（`>> data/portfolio/account_runner.log` 或用 `mail` 转发）。
+
+### 方案 B：Agent 用户（Hermes cron）
+
+**适用**：部署在有 Hermes Agent 环境的服务器上。
+
+**执行方式**：Hermes cron 调度 → agent 执行脚本 → agent 输出报告文本 → Hermes deliver 自动推送
+
+```bash
+# 查看所有任务
+hermes cron list
+
+# 手动触发
+hermes cron run <job_id>
+
+# 暂停
+hermes cron pause <job_id>
+```
+
+**当前任务清单（已启用）：**
+
+| 任务 | 时间 | 策略 |
+|------|------|------|
+| 数据更新-上午 | 11:31 工作日 | — |
+| 数据更新-下午 | 15:05 工作日 | — |
+| 账户2-上午信号 | 11:45 工作日 | v39g |
+| 账户2-下午执行 | 13:00 工作日 | v39g |
+| 收盘报告 | 15:30 工作日 | — |
+
+**已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
+
+> 详细配置说明、手动重建命令、设计原则见 [CRON_SETUP.md](CRON_SETUP.md)
 
 ---
 
@@ -262,27 +282,44 @@ data/
 
 | 策略 | 风格 | 特点 | 状态 |
 |------|------|------|------|
+| v39g | 多因子评分（小市值+动量确认） | WF 夏普 1.297，当前最优 | ✅ 运行中（账户2） |
+| v39i | 多因子评分（动量+illiq+size） | WF 夏普 0.732，通过但不如 v39g | 🔬 备选 |
 | v11b | 多因子 Ensemble | 最保守，多组选股并集 | ⏸️ 暂停 |
-| v27 | 价量共振 | 动量最强，WF 夏普 5.96 | ✅ 运行中 |
-| v28 | Kronos AI 增强 | v27 + 预测因子 | 🔬 研发中 |
-| v20c | 尾盘缩量 | 尾盘选股，次日开盘买 | ❌ 已退役 |
+| v27 | 价量共振 | 简单动量，已不如 v39g | 🔬 参考 |
+| v20c | 尾盘缩量 | 面板 bug 修复后失效（-67%） | ❌ 已退役 |
 
-新手建议先用 v27 跑回测看效果。
+### 切换策略
+
+```bash
+# 直接修改 DB 绑定
+sqlite3 data/quant_accounts.db "UPDATE account SET strategy='v39g' WHERE id=2;"
+```
+
+改完后无需重启，下次信号生成时自动生效。
 
 ---
 
-## 8. 修改策略参数
+## 9. 修改策略参数
 
-策略参数统一在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中管理，修改 `params` 字典即可：
+策略参数统一在 `core/strategy_map.py` 的 `STRATEGY_MAP` 中管理。
 
-| 策略 | 关键参数 | 状态 |
-|------|---------|------|
-| v11b | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, MAX_DAILY_BUY, MAX_POSITION, HOLD_DAYS_MAX | ⏸️ |
-| v27 | STOP_LOSS, TAKE_PROFIT, MAX_HOLDINGS, HOLD_DAYS_MAX, MOM_THRESHOLD, POSITION_SCALE | ✅ |
+**⚠️ 必须同步三处**（否则改动不生效）：
+1. `core/strategy_map.py` → `params` 字典
+2. `scripts/backtest/strategy_adapter.py` → `_risk_params`
+3. `scripts/backtest/wf_runner.py` → `_calc_factors()` 中的参数使用
 
-账户级配置（如 POSITION_SCALE）存在 DB `params_json` 中，通过 `create --position-scale 0.8` 设置。
+| 策略 | 关键参数（v39g） | 说明 |
+|------|-----------------|------|
+| STOP_LOSS | -0.05 | 止损 5% |
+| TAKE_PROFIT | 0.05 | 止盈 5% |
+| HOLD_DAYS_MAX | 3 | 最长持有 3 天 |
+| MAX_DAILY_BUY | 4 | 每天最多买 4 只 |
+| MAX_POSITION | 0.20 | 单只最大 20% 仓位 |
+| MAX_HOLDINGS | 5 | 最多持有 5 只 |
 
 改完后跑回测验证，再提交代码。
+
+验证：`python3 -c "from core.strategy_map import load_strategy; s=load_strategy('v39g'); print(s['params']['MAX_POSITION'])"`
 
 ---
 

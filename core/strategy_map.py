@@ -34,8 +34,8 @@ def load_strategy(name):
         raise ValueError(f"未知策略: {name}，可用: {list(STRATEGY_MAP.keys())}")
     # 动态加载函数（如需）
     result = dict(s)
-    # 默认股票池：zz800（全A策略需显式设置 pool='full_a'）
-    result.setdefault("pool", "zz800")
+    # 默认股票池：zz1800（zz800是子集，通过 pool='zz800' 显式指定）
+    result.setdefault("pool", "zz1800")
     if "select_fn" in result:
         result["select_stocks"] = _load_func(result["select_fn"])
     if "calc_factors_fn" in result:
@@ -515,7 +515,7 @@ STRATEGY_MAP = {
             "HOLD_DAYS_EXTEND_PNL": 0.08,
             "MAX_DAILY_BUY": 4,
             "MAX_POSITION": 0.20,
-            "MAX_HOLDINGS": 8,
+            "MAX_HOLDINGS": 5,
             "COOLDOWN_DAYS": 0,
             "MOM_THRESHOLD": 0.03,
             "PV_CORR_10_MIN": -0.5,
@@ -627,7 +627,7 @@ STRATEGY_MAP = {
             "W_ILLIQ": 0.20,
         },
     },
-    # ── v44: 资金流+动量+低波质量（⭐ 新最优夏普策略）──
+    # ── v44: 资金流+动量+低波质量 ──
     "v44": {
         "mode": "custom",
         "description": "资金流+动量质量（W_FLOW=0.35资金流+W_MOM=0.25动量+低波过滤，zz800范围）",
@@ -714,6 +714,97 @@ STRATEGY_MAP = {
             "EXCLUDE_SUSPENDED": True,
             "REBALANCE_DAY": "daily",
             "MONTHS_EMPTY": [],
+        },
+    },
+    # ── v46a: v39i + 行业动量过滤（P0 待验证）──
+    "v46a": {
+        "mode": "custom",
+        "description": "v39i + 行业动量Top10过滤（预期提升夏普，降低回撤）",
+        "timing": "daily",
+        "select_fn": "scripts.strategies.v46_industry_filter.select_stocks_v46",
+        "params": {
+            # v39i 基础参数
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 8,
+            "COOLDOWN_DAYS": 0,
+            "MARKET_CAP_MIN": 0,
+            "MARKET_CAP_MAX": float('inf'),
+            "EXCLUDE_ST": True,
+            # v46 行业过滤参数
+            "INDUSTRY_FILTER": True,
+            "INDUSTRY_TOP_N": 10,
+            "INDUSTRY_MOM_WEIGHTS": [0.4, 0.3, 0.3],
+            # v46 连板因子参数
+            "STREAK_FACTOR": True,
+            "W_STREAK": 0.05,  # 连板因子权重（小权重加分项）
+            # v46 业绩预告因子参数
+            "EARNINGS_FILTER": True,       # 排除负面预告10天内个股
+            "EARNINGS_WINDOW": 10,         # 负面预告规避天数
+            "EARNINGS_POSITIVE_DAYS": 20,  # 正面预告信号窗口
+            "W_EARNINGS": 0.03,            # 正面预告加分权重
+        },
+    },
+    # ── v49: 连板动量策略（连板记忆 + 动量确认）──
+    "v49": {
+        "mode": "custom",
+        "description": "连板动量：连板辨识度前30% + 动量确认 + 多因子评分",
+        "timing": "daily",
+        "select_fn": "scripts.strategies.v49_streak_momentum.select_stocks_v49",
+        "params": {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.125,
+            "MAX_HOLDINGS": 8,
+            "COOLDOWN_DAYS": 0,
+            "STREAK_DECAY_DAYS": 252,
+            "STREAK_PCTILE": 70,
+            "MOM_THRESHOLD": 0.03,
+            "MOM_THRESHOLD_BEAR": 0.05,
+            "W_STREAK": 0.20,
+            "W_MOM": 0.25,
+            "W_PV_CORR": 0.05,
+            "W_SIZE": 0.20,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        },
+    },
+
+    # ── v56a: 多空Alpha双引擎（正向聪明钱+反向散户偏差）──
+    "v56a": {
+        "mode": "custom",
+        "description": "多空Alpha双引擎（聪明钱追踪+散户行为偏差反向，筹码+资金流+质量）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v56a_multialpha.select_stocks_v56a",
+        "calc_factors_fn": "scripts.strategies.v56a_multialpha.calc_factors",
+        "params": {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_HOLDINGS": 8,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20,
+            "COOLDOWN_DAYS": 0,
+            "MAX_SAME_PREFIX": 2,
+            "W_SMART_Q": 0.18,
+            "W_VOLFLOW": 0.18,
+            "W_CHIP": 0.12,
+            "W_RETAIL": 0.12,
+            "W_HERDING": 0.10,
+            "W_REVERSAL": 0.05,
+            "W_QUALITY": 0.25,
         },
     },
 }

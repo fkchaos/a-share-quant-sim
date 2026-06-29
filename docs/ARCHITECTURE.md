@@ -1,19 +1,19 @@
 # 系统架构文档
 
-> 最后更新：2026-06-25（cli.py→cmd.py、策略目录更新、pool配置、cron 5任务）
+> 最后更新：2026-06-27（v39g 切换、--pool 参数、16 folds WF）
 
 ## 一、整体架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     cron 调度层（6个任务）                     │
-│  账户1(v11b)  账户2(v27)  收盘报告                 │
+│  账户1(v11b,暂停)  账户2(v39g,运行中)  收盘报告                 │
 └──────────────┬──────────────────────────┬───────────────────┘
                │                          │
                ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────────────────┐
 │  scripts/sim/        │   │  scripts/backtest/               │
-│  account_runner.py   │   │  wf_runner.py (v27 回测入口)       │
+│  account_runner.py   │   │  wf_runner.py (回测入口，支持 --pool 覆盖股票池)       │
 │                      │   │    └── strategy_adapter.py          │测入口)       │
 │                      │   │    └── strategy_adapter.py          │
 │                      │   │        └── strategy_adapter.py    │
@@ -55,9 +55,9 @@ a-share-quant-sim/
 │   │   └── account_runner.py    # 统一入口（信号/执行/报告）
 │   │
 │   ├── strategies/          # 选股逻辑（活跃）
-│   │   ├── v39i_optimized.py    # v39i 动态MOM_THRESHOLD（⭐ 当前运行）
-│   │   ├── v44_flow_momentum.py # v44 资金流+动量+低波质量（新最优夏普）
-│   │   ├── v27_select.py        # v27 价量共振（已退役）
+│   │   ├── v39c_pv_resonance.py  # v39c-g/i 共用因子计算
+│   │   ├── v39g 参数: HOLD=3, TP=5%, W_SIZE=0.40（⭐ 当前运行）
+│   │   ├── v39i_optimized.py    # v39i 动态MOM_THRESHOLD
 │   │   └── ...
 │   │
 │   ├── backtest/            # 回测框架
@@ -193,16 +193,31 @@ account_runner.py ← core/db.py ← quant_stocks.db (K线面板)
 account_runner.py → quant_accounts.db (交易记录)
 ```
 
-## 七、Cron 调度（5 个活动任务，Hermes cron）
+## 七、定时调度（两条执行路径，case by case）
 
-| 任务 | 时间 | 命令 | 备注 |
-|------|------|------|------|
-| 数据更新 | 11:31/15:05 工作日 | `run_and_send.py --task data_update` | 含上证指数 |
-| 账户2-上午信号 | 11:45 工作日 | `run_and_send.py --task signal --account 2` | v39i |
-| 账户2-下午执行 | 13:00 工作日 | `run_and_send.py --task execute --account 2` | v39i |
-| 收盘报告 | 15:30 工作日 | `run_and_send.py --task report --account 2` | v39i |
+> 详细配置说明见 `docs/CRON_SETUP.md`
 
-> 账户1(v11b)、账户3(v20c) 已暂停，不参与日常调度。
+### 路径 A：非 Agent 用户（系统 crontab）
+
+```cron
+# 管道：执行 → format_report.py 格式化 → 终端 stdout
+45 11 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+0 13 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
+30 15 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
+31 11 * * 1-5 python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
+5 15 * * 1-5 python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
+```
+
+### 路径 B：Agent 用户（Hermes cron）
+
+| 任务 | 时间 | 策略 |
+|------|------|------|
+| 数据更新 | 11:31/15:05 工作日 | — |
+| 账户2-上午信号 | 11:45 工作日 | **v39g** |
+| 账户2-下午执行 | 13:00 工作日 | **v39g** |
+| 收盘报告 | 15:30 工作日 | — |
+
+> 账户1(v11b) 已暂停，不参与日常调度。
 
 ## 七、回测与模拟盘一致性
 

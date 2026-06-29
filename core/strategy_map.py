@@ -896,13 +896,13 @@ STRATEGY_MAP = {
         },
     },
 
-    # ── v61: 换手率+小市值 低流动性溢价策略 ──
-    "v61": {
+    # ── v61a: 换手率+小市值 低流动性溢价策略 ──
+    "v61a": {
         "mode": "custom",
-        "description": "v61 换手率5日均值(负向)+市值(负向) 等权评分, 每5天调仓选前5只",
+        "description": "v61a 换手率5日均值(负向)+市值(负向) 等权评分, 每5天调仓选前5只",
         "timing": "intraday",
-        "select_fn": "scripts.strategies.v61_turnover_size.select_stocks_v61",
-        "calc_factors_fn": "scripts.strategies.v61_turnover_size.calc_factors_v61",
+        "select_fn": "scripts.strategies.v61a_turnover_size.select_stocks_v61a",
+        "calc_factors_fn": "scripts.strategies.v61a_turnover_size.calc_factors_v61a",
         "params": {
             "STOP_LOSS": -0.10,
             "TAKE_PROFIT": 0.20,

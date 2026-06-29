@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v61 因子组合批量测试 — zz1800 内多因子组合"""
+"""v61a 因子组合批量测试 — zz1800 内多因子组合"""
 import sys, os
 sys.path.insert(0, '/root/a-share-quant-sim')
 import sqlite3, numpy as np, pandas as pd

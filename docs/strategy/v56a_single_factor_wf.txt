@@ -1,0 +1,12 @@
+v56a 单因子 WF 验证结果
+时间: 2026-06-28 13:13
+条件: train=252, test=126, step=63, 2021-06-2026, zz1800
+
+   1 reversal_score       DESC Sharpe=5.187 Ret=123.73% DD=11.9% Folds=15/15 PASS | SL=-0.015,TP=0.03,HOLD=5
+   2 reversal_score       DESC Sharpe=3.943 Ret=108.38% DD=15.1% Folds=15/15 PASS | SL=-0.05,TP=0.1,HOLD=5
+   3 mom_5                DESC Sharpe=1.092 Ret=24.69% DD=28.3% Folds=13/15 PASS | SL=-0.015,TP=0.03,HOLD=5
+   4 mom_5                DESC Sharpe=1.026 Ret=25.49% DD=29.4% Folds=12/15 PASS | SL=-0.05,TP=0.1,HOLD=5
+   5 quality_score        DESC Sharpe=-0.588 Ret=-5.47% DD=14.1% Folds=3/15 FAIL | SL=-0.05,TP=0.1,HOLD=5
+   6 reversal_score       ASC  Sharpe=-0.619 Ret=-6.73% DD=19.1% Folds=5/15 FAIL | SL=-0.05,TP=0.1,HOLD=5
+   7 quality_score        DESC Sharpe=-1.021 Ret=-7.92% DD=15.5% Folds=4/15 FAIL | SL=-0.015,TP=0.03,HOLD=5
+   8 reversal_score       ASC  Sharpe=-1.177 Ret=-11.57% DD=20.3% Folds=2/15 FAIL | SL=-0.015,TP=0.03,HOLD=5

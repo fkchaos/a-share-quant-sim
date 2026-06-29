@@ -71,6 +71,7 @@
 8. **execute_code 在 cron 模式下被禁止**
 9. **wf_runner.py 默认 test=252**，需要手动指定 test=126 step=63 才是标准 16 folds
 10. **strategy_adapter.get_risk_params() 返回副本**，直接改 adapter._risk_params['v39g']
+11. **⚠️ 腾讯K线API volume 单位是手（1手=100股），不是股！** 计算换手率需 `volume * 100 / float_shares`，否则偏差100倍
 
 ---
 

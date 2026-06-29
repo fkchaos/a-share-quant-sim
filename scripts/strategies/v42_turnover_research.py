@@ -12,7 +12,7 @@ scripts/strategies/v42_turnover_research.py — v42 换手率因子研究
 
 因子定义：
 - mom_5: 5日动量（已有）
-- turnover_rate: 真实换手率 = volume / float_shares（新增）
+- turnover_rate: 真实换手率 = volume(手)*100 / float_shares(股)（新增）
 - turnover_avg: 量比 = volume / (amount/close) 5日均值（已有，对比用）
 
 选股逻辑与 v39i 一致，只是评分时加入换手率因子。
@@ -31,7 +31,7 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
     """
     factors = _calc_factors_base(close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel, params)
 
-    # 真实换手率 = volume / float_shares
+    # 真实换手率 = volume(手)*100 / float_shares(股)
     float_shares_map = (params or {}).get('float_shares_map', {})
     if float_shares_map:
         eps = 1e-10
@@ -40,7 +40,7 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
             {code: float_shares_map.get(code, np.nan) for code in close_panel.columns},
             index=close_panel.index,
         )
-        factors['turnover_rate'] = volume_panel / (fs_panel + eps)
+        factors["turnover_rate"] = volume_panel.mul(100) / (fs_panel + eps)  # volume是手, *100
 
     return factors
 

@@ -21,7 +21,7 @@ conn.close()
 df['date'] = pd.to_datetime(df['date'])
 df['ret'] = df.groupby('code')['close'].pct_change()
 df['float_shares'] = df['code'].map(fs_map)
-df['turnover'] = df['volume'] / df['float_shares']
+df['turnover'] = df['volume'] * 100 / df['float_shares']  # volume是手, 需要*100
 df['market_cap'] = df['close'] * df['float_shares']
 
 close = df.pivot(index='date', columns='code', values='close')

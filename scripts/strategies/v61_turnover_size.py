@@ -27,8 +27,9 @@ def calc_factors_v61(close_panel, volume_panel, amount_panel, high_panel, low_pa
     codes = close_panel.columns.tolist()
     fs_arr = fs.reindex(codes).fillna(fs.median())
 
-    # 换手率 = volume / float_shares
-    turnover = volume_panel.div(fs_arr, axis=1)
+    # 换手率 = volume(手) * 100 / float_shares(股)
+    # 注意: 腾讯K线API返回的volume单位是"手", 不是"股"
+    turnover = volume_panel.mul(100).div(fs_arr, axis=1)
 
     # 5日均换手率 (负向)
     turn_5 = turnover.rolling(5, min_periods=3).mean()

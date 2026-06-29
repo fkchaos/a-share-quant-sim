@@ -102,8 +102,8 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         if float_shares_map:
             # 用 Series 直接对齐 close_panel 的列（代码）
             float_series = pd.Series(float_shares_map).reindex(volume_panel.columns).fillna(0)
-            # 腾讯 volume 单位是股，float_shares 单位也是股
-            turnover = volume_panel / float_series.replace(0, np.nan)
+            # 腾讯 volume 单位是手, 需要*100转换为股
+            turnover = volume_panel.mul(100) / float_series.replace(0, np.nan)  # volume是手, *100
             factors['turnover_rate'] = turnover
         else:
             # 无 float_shares：用近似换手率 = volume * close / amount

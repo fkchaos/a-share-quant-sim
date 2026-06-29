@@ -641,6 +641,18 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v58a":
+        from scripts.strategies.v58a_breakout import calc_breakout_factors
+        return calc_breakout_factors(close_panel, volume_panel, amount_panel,
+                                    high_panel, low_panel, open_panel)
+    elif strategy_name == "v58b":
+        from scripts.strategies.v58b_bounce_recovery import calc_bounce_factors
+        return calc_bounce_factors(close_panel, volume_panel, amount_panel,
+                                    high_panel, low_panel, open_panel)
+    elif strategy_name == "v60a":
+        from scripts.strategies.v60a_industry_neutral import calc_factors_v60a
+        return calc_factors_v60a(close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel)
     elif strategy_name == "v40":
         from scripts.strategies.v40_factor_exit import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,

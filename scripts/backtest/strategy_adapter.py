@@ -364,6 +364,69 @@ class StrategyAdapter:
         }
         self._regime_params["v39g"] = {}
 
+        # ── v58a: 窄震出趋势（波动率压缩+放量突破）──
+        self._select_fns["v58a"] = self._v58a_select
+        self._risk_params["v58a"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.15,
+            "HOLD_DAYS_MAX": 10,
+            "HOLD_DAYS_MIN": 3,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.10,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "COOLDOWN_DAYS": 0,
+            "ATR_COMPRESSION_MAX": 0.6,
+            "AMPLITUDE_MAX": 0.15,
+            "VOLUME_SURGE_MIN": 2.0,
+            "MA_BAND_MAX": 0.02,
+            "W_ATR_COMP": 1.0,
+            "W_AMP": 1.0,
+            "W_VOL_SURGE": 0.5,
+            "W_MA_CONV": 0.5,
+        }
+        self._regime_params["v58a"] = {}
+
+        # ── v58b: 超跌+资金承接 ──
+        self._select_fns["v58b"] = self._v58b_select
+        self._risk_params["v58b"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MIN": 2,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.05,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "COOLDOWN_DAYS": 0,
+            "DROP_10D_MIN": -0.15,
+            "DROP_10D_MAX": -0.05,
+            "DROP_5D_MAX": -0.03,
+            "RSI_14_MAX": 35,
+            "FUND_FLOW_MIN": 1.0,
+            "VOL_SURGE_MIN": 1.3,
+            "W_DROP": 1.0,
+            "W_RSI": 0.5,
+            "W_FUND_FLOW": 1.0,
+            "W_VOL": 0.5,
+        }
+        self._regime_params["v58b"] = {}
+
+        # ── v60a: v39g + 行业中性化评分 ──
+        self._select_fns["v60a"] = self._v60a_select
+        self._risk_params["v60a"] = {
+            "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3, "HOLD_DAYS_EXTEND": 3, "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "MAX_DAILY_BUY": 4, "MAX_POSITION": 0.20, "MAX_HOLDINGS": 5,
+            "COOLDOWN_DAYS": 0, "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5, "PV_CORR_20_MIN": 0.0, "BOLL_W_MIN": 0.0,
+            "W_MOM": 0.10, "W_PV_CORR": 0.05, "W_TURNOVER": 0.05,
+            "W_SIZE": 0.40, "W_FUND_FLOW": 0.05, "W_GAP": 0.05, "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v60a"] = {}
+
         # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
         self._select_fns["v39h"] = self._v39h_select
         self._risk_params["v39h"] = {
@@ -795,6 +858,48 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v39g(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v58a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v58a 选股: 窄震出趋势（波动率压缩+放量突破）"""
+        from scripts.strategies.v58a_breakout import select_stocks_v58a, calc_breakout_factors
+        if factors is None or "atr_compression" not in factors:
+            factors = calc_breakout_factors(close_panel, volume_panel, amount_panel,
+                                            high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v58a"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v58a(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v58b_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v58b 选股: 超跌+资金承接"""
+        from scripts.strategies.v58b_bounce_recovery import select_stocks_v58b, calc_bounce_factors
+        if factors is None or "drop_10d" not in factors:
+            factors = calc_bounce_factors(close_panel, volume_panel, amount_panel,
+                                           high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v58b"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v58b(factors, date, current_holdings, merged_params,
+                                   sold_recently=sold_recently)
+
+    def _v60a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v60a 选股: v39g + 行业中性化"""
+        from scripts.strategies.v60a_industry_neutral import select_stocks_v60a, calc_factors_v60a
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors_v60a(close_panel, volume_panel, amount_panel,
+                                         high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v60a"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v60a(factors, date, current_holdings, merged_params,
                                    sold_recently=sold_recently)
 
     def _v39h_select(self, factors, date, close_panel, volume_panel, amount_panel,

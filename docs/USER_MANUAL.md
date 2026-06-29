@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-27（v39i→v39g 切换、--pool 参数、WF 结果更新为 16 folds 真实数据）
+> 最后更新：2026-06-29（第六章重写：新策略开发完整流程示例 + 回测上线步骤）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -15,7 +15,7 @@
 - [三、回测引擎](#三回测引擎)
 - [四、Walk-Forward 验证](#四walk-forward-验证)
 - [五、模拟盘](#五模拟盘)
-- [六、添加新策略](#六添加新策略)
+- [六、添加新策略（完整开发流程）](#六添加新策略完整开发流程)
 - [七、参数配置](#七参数配置)
 - [八、定时调度](#八定时调度)
 - [九、数据库操作（账户/持仓/买卖）](#九数据库操作账户持仓买卖)
@@ -307,98 +307,273 @@ python scripts/sim/account_runner.py run --account-id 2 intraday_signal
 
 ---
 
-## 六、添加新策略
+## 六、添加新策略（完整开发流程）
 
-### 6.1 三步走
+> 从零开始写一个策略到上线，共 5 步。以下用 **v57a（示例策略）** 做实战演示。
 
-**第 1 步：写选股模块**
+### 6.1 第 1 步：写选股模块
 
-在 `scripts/strategies/` 下创建 `xxx_select.py`，实现两个函数：
+在 `scripts/strategies/` 下创建 `v57a_my_strategy.py`：
 
 ```python
-# scripts/strategies/my_strategy.py
+# scripts/strategies/v57a_my_strategy.py
+"""
+v57a 示例策略 — 5日动量 + 成交量确认
+选股逻辑：5日动量 > 5%，且成交量放大（量比 > 1.5）
+"""
+import pandas as pd
+import numpy as np
 
-def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel):
-    """计算因子"""
-    import pandas as pd
+DEFAULT_PARAMS = {
+    # ── 风控参数 ──
+    "STOP_LOSS": -0.05,          # 止损线 -5%
+    "TAKE_PROFIT": 0.10,         # 止盈线 +10%
+    "HOLD_DAYS_MAX": 5,          # 最长持有天数
+    "MAX_DAILY_BUY": 4,          # 每天最多买几只
+    "MAX_POSITION": 0.20,        # 单只仓位上限 20%
+    "MAX_HOLDINGS": 5,           # 最多持仓只数
+    # ── 选股参数 ──
+    "MOM_DAYS": 5,               # 动量回看天数
+    "MOM_THRESHOLD": 0.05,       # 动量门槛 5%
+    "VOL_RATIO_THRESHOLD": 1.5,  # 量比门槛
+}
+
+
+def calc_factors(close_panel, volume_panel, amount_panel,
+                 high_panel, low_panel, open_panel, params=None):
+    """
+    计算因子面板。
+
+    参数:
+      close_panel: DataFrame（日期 × 股票）收盘价
+      volume_panel: DataFrame 成交量
+      ... 其他 panel 结构相同
+
+    返回:
+      dict[str, DataFrame]，key 是因子名，value 是因子面板
+    """
+    p = {**DEFAULT_PARAMS, **(params or {})}
+
     factors = {}
-    factors['my_factor'] = close_panel.pct_change(5)  # 示例：5日动量
+    # 5日动量
+    factors['mom_5'] = close_panel.pct_change(p['MOM_DAYS'])
+    # 量比 = 今日成交量 / 5日均量
+    vol_ma5 = volume_panel.rolling(5).mean()
+    factors['vol_ratio'] = volume_panel / vol_ma5
+
     return factors
 
-def select_stocks_my(factors, date, close_panel, volume_panel, amount_panel,
-                     high_panel, low_panel, current_holdings=None):
-    """选股：返回股票代码列表"""
-    if date not in factors['my_factor'].index:
+
+def select_stocks_v57a(factors, date, current_holdings=None, params=None,
+                       sold_recently=None, panels=None):
+    """
+    选股主函数。
+
+    参数:
+      factors: calc_factors() 返回的 dict
+      date: 当前交易日期（str 或 Timestamp）
+      current_holdings: dict {code: {shares, cost_price, ...}} 当前持仓
+      params: 覆盖参数
+      sold_recently: 近期卖出过的股票（冷却期用）
+      panels: tuple (close, volume, amount, open, high, low) 原始面板
+
+    返回:
+      list[str] 股票代码列表，如 ['600519', '000858', ...]
+    """
+    p = {**DEFAULT_PARAMS, **(params or {})}
+
+    # 检查因子是否覆盖该日期
+    if date not in factors['mom_5'].index:
         return []
 
-    # 获取当日因子
-    f = factors['my_factor'].loc[date].dropna()
-    # 排除当前持仓
+    # ── Step 1: 动量筛选 ──
+    mom = factors['mom_5'].loc[date].dropna()
+    candidates = mom[mom > p['MOM_THRESHOLD']].index.tolist()
+
+    if not candidates:
+        return []
+
+    # ── Step 2: 量比确认 ──
+    vol_ratio = factors['vol_ratio'].loc[date].dropna()
+    candidates = [c for c in candidates
+                  if vol_ratio.get(c, 0) > p['VOL_RATIO_THRESHOLD']]
+
+    # ── Step 3: 排除当前持仓 ──
     if current_holdings:
-        f = f.drop(index=current_holdings.keys(), errors='ignore')
-    # 取 top 8
-    return f.nlargest(8).index.tolist()
+        candidates = [c for c in candidates if c not in current_holdings]
+
+    # ── Step 4: 排除近期卖出（冷却期）──
+    if sold_recently:
+        candidates = [c for c in candidates if c not in sold_recently]
+
+    # ── Step 5: 按动量排序，取 top N ──
+    candidates.sort(key=lambda c: mom[c], reverse=True)
+    return candidates[:p['MAX_DAILY_BUY']]
 ```
 
-**第 2 步：在 strategy_map.py 注册**
+**关键约定**：
+- 文件名格式：`v{版本号}_{描述}.py`
+- 必须导出 `DEFAULT_PARAMS`、`calc_factors()`、`select_stocks_v{版本号}()`
+- `select_stocks` 返回 `list[str]`，只返回代码列表，不处理买卖逻辑
+- 风控（止损/止盈/仓位）由 `strategy_adapter.py` 统一处理，选股函数不用管
+
+### 6.2 第 2 步：注册到 strategy_map.py（模拟盘用）
+
+编辑 `core/strategy_map.py`，在 `STRATEGY_MAP` 字典中新增条目：
 
 ```python
 # core/strategy_map.py
 STRATEGY_MAP = {
     # ... 已有条目 ...
-    "my_strategy": {
+
+    "v57a": {
         "mode": "custom",
-        "description": "我的策略",
-        "account_id": 2,
-        "timing": "intraday",
-        "select_fn": "scripts.strategies.my_strategy.select_stocks_my",
-        "calc_factors_fn": "scripts.strategies.my_strategy.calc_factors",
+        "description": "示例策略：5日动量+量比确认",
+        "timing": "intraday",                      # intraday=日内信号 daily=日线
+        "select_fn": "scripts.strategies.v57a_my_strategy.select_stocks_v57a",
+        "calc_factors_fn": "scripts.strategies.v57a_my_strategy.calc_factors",
         "params": {
+            # 风控参数（与 DEFAULT_PARAMS 保持一致）
             "STOP_LOSS": -0.05,
-            "TAKE_PROFIT": 0.15,
-            "MAX_HOLDINGS": 8,
-            "MAX_DAILY_BUY": 6,
-            "MAX_POSITION": 0.25,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            # 选股参数
+            "MOM_DAYS": 5,
+            "MOM_THRESHOLD": 0.05,
+            "VOL_RATIO_THRESHOLD": 1.5,
         },
     },
 }
 ```
 
-**第 3 步：在 strategy_adapter.py 注册（回测用）**
+**字段说明**：
+
+| 字段 | 说明 |
+|------|------|
+| `mode` | `"custom"` = 自定义策略（vs `"legacy"` = 旧版） |
+| `description` | 一句话描述，会显示在策略列表里 |
+| `timing` | `"intraday"` 盘中信号 / `"daily"` 日线收盘信号 |
+| `select_fn` | 选股函数路径，格式 `模块路径.函数名` |
+| `calc_factors_fn` | 计算因子函数路径（可选，有则预计算） |
+| `params` | 策略参数，回测和模拟盘都从这里读 |
+
+### 6.3 第 3 步：注册到 strategy_adapter.py（回测用）
+
+编辑 `scripts/backtest/strategy_adapter.py`，在 `_register_builtin_strategies()` 方法中注册：
 
 ```python
-# scripts/backtest/strategy_adapter.py 的 _register_builtin_strategies() 中
-self._select_fns["my_strategy"] = self._my_strategy_select
-self._risk_params["my_strategy"] = {
-    "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.15,
-    "MAX_HOLDINGS": 8, "MAX_DAILY_BUY": 4, "MAX_POSITION": 0.25,
-}
+# scripts/backtest/strategy_adapter.py  _register_builtin_strategies() 方法内
 
-def _my_strategy_select(self, factors, date, close_panel, volume_panel, amount_panel,
-                         high_panel, low_panel, open_panel, current_holdings, params):
-    from scripts.strategies.my_strategy import calc_factors, select_stocks_my
-    if factors is None or "my_factor" not in factors:
+# ── v57a: 示例策略 ──
+self._select_fns["v57a"] = self._v57a_select
+self._risk_params["v57a"] = {
+    "STOP_LOSS": -0.05,
+    "TAKE_PROFIT": 0.10,
+    "HOLD_DAYS_MAX": 5,
+    "HOLD_DAYS_EXTEND": 5,
+    "HOLD_DAYS_EXTEND_PNL": 0.03,
+    "MAX_DAILY_BUY": 4,
+    "MAX_POSITION": 0.20,
+    "MAX_HOLDINGS": 5,
+    "COOLDOWN_DAYS": 0,
+    "MOM_DAYS": 5,
+    "MOM_THRESHOLD": 0.05,
+    "VOL_RATIO_THRESHOLD": 1.5,
+}
+self._regime_params["v57a"] = {}  # 不需要市场状态择时
+```
+
+然后在同一个文件中添加选股包装方法（放在其他 `_xxx_select` 方法旁边）：
+
+```python
+def _v57a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                  high_panel, low_panel, open_panel, current_holdings, params,
+                  sold_recently=None):
+    """v57a 选股 — 5日动量+量比确认"""
+    from scripts.strategies.v57a_my_strategy import calc_factors, select_stocks_v57a
+
+    # 如果因子还没算，先算
+    if factors is None or "mom_5" not in factors:
         factors = calc_factors(close_panel, volume_panel, amount_panel,
                                high_panel, low_panel, open_panel, params)
-    merged_params = dict(self._risk_params["my_strategy"])
+
+    # 合并参数：默认值 < strategy_map < 命令行覆盖
+    merged_params = dict(self._risk_params["v57a"])
     if params:
         merged_params.update(params)
-    return select_stocks_my(factors, date, close_panel, volume_panel, amount_panel,
-                            high_panel, low_panel, open_panel, current_holdings, merged_params)
+
+    panels = (close_panel, volume_panel, amount_panel, open_panel, high_panel, low_panel)
+
+    return select_stocks_v57a(factors, date, current_holdings, merged_params,
+                               sold_recently=sold_recently, panels=panels)
 ```
 
-**第 4 步：回测验证**
+### 6.4 第 4 步：回测验证
 
 ```bash
-python3 scripts/backtest/wf_runner.py --strategy my_strategy
+# 快速验证（4 folds，约 30 秒）
+python3 scripts/backtest/wf_runner.py --strategy v57a --pool zz1800 --folds 4
+
+# 标准 WF 回测（16 folds，约 2-3 分钟）
+python3 scripts/backtest/wf_runner.py --strategy v57a --pool zz1800
+
+# 全量回测（不做 WF 切分，直接跑全部历史）
+python3 scripts/backtest/wf_runner.py --strategy v57a --pool zz1800 --full
+
+# 指定回测区间
+python3 scripts/backtest/wf_runner.py --strategy v57a --pool zz1800 --start 2023-01-01 --end 2025-12-31
 ```
 
-### 6.2 常见踩坑
+**判断标准**（来自第四章）：
 
-1. **Config 类属性 vs 实例属性**：如果选股函数从 `XxxConfig` 类读取参数，修改参数时直接改类属性 `XxxConfig.xxx = value`，不要创建实例再修改。
-2. **factor 必须是 DataFrame**：索引是日期，列是股票代码。
-3. **select_stocks 返回 list[str]**：股票代码字符串列表。
-4. **`current_holdings` 参数**：是 dict `{code: {...}}` 或 None，选股时要排除。
+| 指标 | 通过线 | 说明 |
+|------|--------|------|
+| 总收益 | > 0 | 整体赚钱 |
+| 夏普比率 | > 0.5 | 风险调整后收益 |
+| 正 fold 比例 | ≥ 10/16 | 大多数时间段都赚钱 |
+| 最大回撤 | < 30% | 最惨的时候不崩 |
+
+### 6.5 第 5 步：模拟盘上线
+
+```bash
+# 1. 创建新账户并绑定策略
+python3 scripts/sim/account_runner.py create --account-id 4 --name "v57a测试" --cash 200000 --strategy v57a
+
+# 2. 或者给已有账户切换策略
+python3 scripts/sim/account_runner.py switch --account-id 4 --strategy v57a
+
+# 3. 手动跑一次信号看看
+python3 scripts/sim/account_runner.py run --account-id 4 intraday_signal
+
+# 4. 模拟执行（不真的买，看计划）
+python3 scripts/sim/account_runner.py run --account-id 4 intraday_execute
+
+# 5. 确认无误后，接入 cron（参考第八章）
+```
+
+### 6.6 完整开发流程速查表
+
+```
+写选股模块              注册模拟盘入口         注册回测入口            验证上线
+──────────────────────────────────────────────────────────────────────────────
+v57a_my_strategy.py  →  strategy_map.py   →  strategy_adapter.py  →  wf_runner.py
+  DEFAULT_PARAMS         STRATEGY_MAP          _risk_params           → account_runner.py
+  calc_factors()         select_fn             _select_fns            → cron 接入
+  select_stocks_v57a()   params                _v57a_select()
+```
+
+### 6.7 常见踩坑
+
+1. **参数不一致**：`strategy_map.py` 和 `strategy_adapter.py` 的参数必须完全一致，否则回测和模拟盘行为不同。
+2. **factor 必须是 DataFrame**：索引是日期（Timestamp），列是股票代码（str）。
+3. **select_stocks 返回 list[str]**：只返回代码列表，不要返回 DataFrame 或 Series。
+4. **current_holdings 是 dict**：格式 `{code: {"shares": 500, "cost_price": 10.5, ...}}`，不是 list。
+5. **日期不在 index 时返回空**：`if date not in factors['xxx'].index: return []`，不要报错。
+6. **量价数据 panel 可能含 NaN**：选股前 `.dropna()` 或 `.fillna(0)` 处理。
+7. **策略名冲突**：新策略的版本号（v57a）不要和已有的重复，先 `account_runner.py list` 确认。
 
 ---
 

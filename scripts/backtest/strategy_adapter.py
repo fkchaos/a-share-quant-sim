@@ -427,6 +427,16 @@ class StrategyAdapter:
         }
         self._regime_params["v60a"] = {}
 
+        # ── v61: 换手率+小市值 低流动性溢价策略 ──
+        self._select_fns["v61"] = self._v61_select
+        self._risk_params["v61"] = {
+            "STOP_LOSS": -0.10, "TAKE_PROFIT": 0.20,
+            "HOLD_DAYS_MAX": 5, "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.25, "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+        }
+        self._regime_params["v61"] = {}
+
         # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
         self._select_fns["v39h"] = self._v39h_select
         self._risk_params["v39h"] = {
@@ -901,6 +911,21 @@ class StrategyAdapter:
             merged_params.update(params)
         return select_stocks_v60a(factors, date, current_holdings, merged_params,
                                    sold_recently=sold_recently)
+
+    def _v61_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v61 选股: 换手率+小市值 低流动性溢价"""
+        from scripts.strategies.v61_turnover_size import select_stocks_v61, calc_factors_v61
+        if factors is None:
+            factors = calc_factors_v61(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v61"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v61(factors, date, close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel, current_holdings,
+                                  merged_params, sold_recently=sold_recently)
 
     def _v39h_select(self, factors, date, close_panel, volume_panel, amount_panel,
                      high_panel, low_panel, open_panel, current_holdings, params,

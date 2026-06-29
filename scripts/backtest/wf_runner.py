@@ -29,7 +29,7 @@ from scripts.backtest.strategy_adapter import get_adapter
 
 
 def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
-           start_date='2021-01-01', end_date='2026-05-31', full=False):
+           start_date='2021-01-01', end_date='2026-05-31', full=False, pool_override=None):
     """
     运行 Walk-Forward 验证，或全量回测。
     交易逻辑使用 core/account.py 的 buy/sell，与模拟盘完全一致。
@@ -54,10 +54,12 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     # ── 加载数据 ──
     print("\n[1/4] 加载数据...")
     t0 = time.time()
-    # 从策略配置读取股票池
+    # 从策略配置读取股票池（命令行 --pool 可覆盖）
     from core.strategy_map import load_strategy
     _s = load_strategy(strategy_name)
-    pool = _s.get("pool", "zz800")
+    pool = pool_override if pool_override else _s.get("pool", "zz800")
+    if pool_override:
+        print(f"  [pool覆盖] {strategy_name}.pool = '{pool_override}' (命令行指定)")
     tpl, codes = load_panel_from_db(start_date, end_date, need_open=True, need_hl=True, pool=pool)
     close_panel, volume_panel, amount_panel = tpl[0], tpl[1], tpl[2]
     open_panel, high_panel, low_panel = tpl[3], tpl[4], tpl[5]
@@ -600,6 +602,12 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         return calc_factors_v45a(close_panel, volume_panel,
                                    calc_params.get("float_shares_map"),
                                    extra_data=calc_params)
+    elif strategy_name == "v56a":
+        from scripts.strategies.v56a_multialpha import calc_factors as v56a_calc
+        from core.db import get_float_shares_map
+        calc_params = {"float_shares_map": get_float_shares_map()}
+        return v56a_calc(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, calc_params, extra_data=calc_params)
     elif strategy_name == "v46":
         from scripts.strategies.v46_etf_rotation import calc_factors_v46
         return calc_factors_v46(close_panel, volume_panel, None, extra_data=None)
@@ -620,6 +628,16 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
     elif strategy_name == "v39i":
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v46a":
+        # v46a 复用 v39i 的因子面板（行业动量/连板/业绩预告在 select 阶段计算）
+        from scripts.strategies.v39c_pv_resonance import calc_factors
+        return calc_factors(close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, params=None)
+    elif strategy_name == "v49":
+        # v49 复用 v39i 的因子面板（连板因子在 select 阶段计算）
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
@@ -660,9 +678,10 @@ if __name__ == "__main__":
     parser.add_argument("--start", default="2021-01-01", help="回测起始日期")
     parser.add_argument("--end", default="2026-05-31", help="回测结束日期")
     parser.add_argument("--full", action="store_true", help="全量回测模式（不做 WF 切分，跑全部数据）")
+    parser.add_argument("--pool", default=None, help="覆盖策略股票池 (zz800/zz1800/full_a)")
     args = parser.parse_args()
 
-    run_wf(args.strategy, args.train, args.test, args.step, args.start, args.end, full=args.full)
+    run_wf(args.strategy, args.train, args.test, args.step, args.start, args.end, full=args.full, pool_override=args.pool)
 
 
 def _get_etf_price(code, date):

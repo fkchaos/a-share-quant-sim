@@ -252,30 +252,39 @@ def upsert_stock(code, name="", board="", pool="zz800"):
         )
 
 
-def get_stock_pool(pool="zz800", active_only=True):
+def get_stock_pool(pool="zz1800", active_only=True):
     with get_conn("stock_pool") as conn:
-        sql = "SELECT code, name, board FROM stock_pool WHERE pool=?"
-        params = [pool]
+        if pool == "zz800":
+            sql = "SELECT code, name, board FROM stock_pool WHERE pool=?"
+            params = [pool]
+        else:
+            sql = "SELECT code, name, board FROM stock_pool_zz1800 WHERE 1=1"
+            params = []
         if active_only:
             sql += " AND is_active=1"
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 
 
-def get_stock_name_map(pool="zz800"):
-    """返回 {code: name} 映射"""
+def get_stock_name_map(pool="zz1800"):
+    """返回 {code: name} 映射（默认 zz1800 池）"""
     with get_conn("stock_pool") as conn:
-        rows = conn.execute(
-            "SELECT code, name FROM stock_pool WHERE pool=?", (pool,)
-        ).fetchall()
+        if pool == "zz800":
+            rows = conn.execute(
+                "SELECT code, name FROM stock_pool WHERE pool=?", (pool,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT code, name FROM stock_pool_zz1800 WHERE is_active=1"
+            ).fetchall()
         return {r["code"]: r["name"] for r in rows}
 
 
 def get_float_shares_map():
     """返回 {code: float_shares} 映射（流通股本，单位：股）"""
-    with get_conn("stock_pool") as conn:
+    with get_conn("stock_pool_zz1800") as conn:
         rows = conn.execute(
-            "SELECT code, float_shares FROM stock_pool WHERE float_shares > 0"
+            "SELECT code, float_shares FROM stock_pool_zz1800 WHERE float_shares > 0"
         ).fetchall()
         return {r["code"]: r["float_shares"] for r in rows}
 
@@ -291,10 +300,10 @@ def get_stock_pool_full(active_only=True):
 
 
 def get_float_shares_map_full():
-    """返回全A股票池的 {code: float_shares} 映射"""
-    with get_conn("stock_pool_full") as conn:
+    """返回全A股票池的 {code: float_shares} 映射（使用 zz1800 池）"""
+    with get_conn("stock_pool_zz1800") as conn:
         rows = conn.execute(
-            "SELECT code, float_shares FROM stock_pool_full WHERE float_shares > 0"
+            "SELECT code, float_shares FROM stock_pool_zz1800 WHERE float_shares > 0"
         ).fetchall()
         return {r["code"]: r["float_shares"] for r in rows}
 
@@ -788,6 +797,10 @@ def load_panel_from_db(start_date=None, end_date=None, need_open=False, need_hl=
             if pool == "full_a":
                 pool_rows = conn.execute(
                     "SELECT code FROM stock_pool_full WHERE pool='full_a' AND is_active=1"
+                ).fetchall()
+            elif pool == "zz1800":
+                pool_rows = conn.execute(
+                    "SELECT code FROM stock_pool_zz1800 WHERE is_active=1"
                 ).fetchall()
             else:
                 pool_rows = conn.execute(

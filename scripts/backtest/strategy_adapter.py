@@ -418,6 +418,81 @@ class StrategyAdapter:
         }
         self._regime_params["v39i"] = {}
 
+        # ── v49: 连板动量策略 ──
+        self._select_fns["v49"] = self._v49_select
+        self._risk_params["v49"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.125,
+            "MAX_HOLDINGS": 8,
+            "COOLDOWN_DAYS": 0,
+            "STREAK_DECAY_DAYS": 252,
+            "STREAK_PCTILE": 70,
+            "MOM_THRESHOLD": 0.03,
+            "MOM_THRESHOLD_BEAR": 0.05,
+            "W_STREAK": 0.20,
+            "W_MOM": 0.25,
+            "W_PV_CORR": 0.05,
+            "W_SIZE": 0.20,
+            "W_FUND_FLOW": 0.05,
+            "W_GAP": 0.05,
+            "W_ILLIQ": 0.20,
+        }
+        self._regime_params["v49"] = {}
+
+        # ── v56a: 多空Alpha双引擎 ──
+        self._select_fns["v56a"] = self._v56a_select
+        self._risk_params["v56a"] = {
+            "STOP_LOSS": -0.015,
+            "TAKE_PROFIT": 0.03,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20,
+            "COOLDOWN_DAYS": 0,
+            "MAX_HOLDINGS": 8,
+            "W_SMART_Q": 0.18,
+            "W_VOLFLOW": 0.18,
+            "W_CHIP": 0.12,
+            "W_RETAIL": 0.12,
+            "W_HERDING": 0.10,
+            "W_REVERSAL": 0.05,
+            "W_QUALITY": 0.25,
+        }
+        self._regime_params["v56a"] = {}
+
+        # ── v46a: v39i + 行业动量过滤 ──
+        self._select_fns["v46a"] = self._v46a_select
+        self._risk_params["v46a"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.10,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 8,
+            "COOLDOWN_DAYS": 0,
+            "MARKET_CAP_MIN": 0,
+            "MARKET_CAP_MAX": float('inf'),
+            "EXCLUDE_ST": True,
+            "INDUSTRY_FILTER": True,
+            "INDUSTRY_TOP_N": 10,
+            # v46a 连板因子参数
+            "STREAK_FACTOR": True,
+            "W_STREAK": 0.05,
+            # v46a 业绩预告因子参数
+            "EARNINGS_FILTER": True,
+            "EARNINGS_WINDOW": 10,
+            "W_EARNINGS": 0.03,
+        }
+        self._regime_params["v46a"] = {}
+
         # ── v42: 换手率因子研究（真实换手率 vs 量比）──
         self._select_fns["v42"] = self._v42_select
         self._risk_params["v42"] = {
@@ -755,6 +830,58 @@ class StrategyAdapter:
             merged_params.update(params)
         return select_stocks_v39i(factors, date, current_holdings, merged_params,
                                    sold_recently=sold_recently)
+
+    def _v46a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                      high_panel, low_panel, open_panel, current_holdings, params,
+                      sold_recently=None):
+        """v46a 选股 — v39i + 行业动量Top10过滤"""
+        from scripts.strategies.v46_industry_filter import select_stocks_v46
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v46a"])
+        if params:
+            merged_params.update(params)
+
+        # 获取行业映射
+        industry_map = merged_params.get("industry_map", None)
+        if not industry_map:
+            import json, os
+            map_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "stock_industry_map.json")
+            if os.path.exists(map_path):
+                with open(map_path) as f:
+                    industry_map = json.load(f)
+
+        return select_stocks_v46(factors, date, close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel,
+                                  current_holdings, merged_params,
+                                  sold_recently=sold_recently,
+                                  industry_map=industry_map)
+
+    def _v49_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v49 选股 — 连板动量策略（连板记忆 + 动量确认）"""
+        from scripts.strategies.v49_streak_momentum import select_stocks_v49
+
+        if factors is None or "mom_5" not in factors:
+            from scripts.strategies.v39c_pv_resonance import calc_factors
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, params)
+
+        merged_params = dict(self._risk_params["v49"])
+        if params:
+            merged_params.update(params)
+
+        # 打包 panels 供 compute_streak_factor 使用
+        panels = (close_panel, volume_panel, amount_panel, open_panel, high_panel, low_panel)
+
+        return select_stocks_v49(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently,
+                                  panels=panels)
 
     def _v42_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,
@@ -1148,6 +1275,23 @@ class StrategyAdapter:
 
 
 # ── 模块级便捷函数 ────────────────────────────────────────────────
+
+    def _v56a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v56a 选股 — 委托给 v56a_multialpha.py"""
+        from scripts.strategies.v56a_multialpha import calc_factors, select_stocks_v56a
+
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors(close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel)
+
+        merged_params = dict(self._risk_params["v56a"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v56a(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently, extra_data=None)
+
 
 _adapter = None
 

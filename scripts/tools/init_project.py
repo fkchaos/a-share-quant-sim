@@ -31,9 +31,9 @@ def step_init_db():
     print()
 
 def step_init_pool():
-    """从内置 CSV 获取中证800成分股并写入 stock_pool"""
+    """从内置 CSV 获取中证800成分股并写入 stock_pool + industry_map"""
     import pandas as pd
-    from core.db import upsert_stock
+    from core.db import upsert_stock, get_conn
 
     csv_path = os.path.join(PROJECT_ROOT, "data", "zz800_constituents.csv")
     if not os.path.exists(csv_path):
@@ -59,11 +59,32 @@ def step_init_pool():
 
     df['board'] = df['code'].apply(_board)
 
-    # 写入 DB
+    # 写入 stock_pool
     for _, row in df.iterrows():
         upsert_stock(str(row['code']), name=str(row['name']), board=str(row['board']), pool="zz800")
 
     print(f"  ✅ stock_pool 已写入 {len(df)} 只股票")
+
+    # 写入 industry_map（如果有 industry 列）
+    if 'industry' in df.columns:
+        import datetime
+        industry_df = df[df['industry'].notna()][['code', 'industry']].copy()
+        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        with get_conn() as conn:
+            conn.execute("DELETE FROM industry_map")
+            conn.commit()
+            records = [(str(row['code']), str(row['industry']), '', '', now) for _, row in industry_df.iterrows()]
+            conn.executemany(
+                "INSERT INTO industry_map (code, industry, industry_m, industry_s, updated_at) VALUES (?, ?, ?, ?, ?)",
+                records
+            )
+            conn.commit()
+
+        print(f"  ✅ industry_map 已写入 {len(industry_df)} 只股票的行业分类")
+    else:
+        print(f"  ⚠️ CSV无industry列，跳过行业分类导入")
+
     return True
 
 def step_init_kline(start_year=2020):
@@ -357,6 +378,93 @@ def main():
             print(f"  已清空旧股票池")
         step_init_pool()
 
+    if full_init or args.pool_only:
+        print("📦 Step 2b: 构建 stock_pool_zz1800 (zz800 + zz1000 = 1800只)...")
+        step_init_zz1800_pool()
+
+def step_init_zz1800_pool():
+    """从 zz800 + zz1000 CSV 合并构建 stock_pool_zz1800 (1800只)"""
+    import pandas as pd
+    from core.db import get_conn, init_db
+
+    init_db()  # 确保表存在
+
+    csv_zz800 = os.path.join(PROJECT_ROOT, "data", "zz800_constituents.csv")
+    csv_zz1000 = os.path.join(PROJECT_ROOT, "data", "zz1000_constituents.csv")
+
+    if not os.path.exists(csv_zz800):
+        print(f"  ❌ 找不到: {csv_zz800}")
+        return False
+
+    if not os.path.exists(csv_zz1000):
+        print(f"  ❌ 找不到: {csv_zz1000}")
+        df_pool = pd.read_csv(csv_zz800)
+        print(f"  ⚠️ 仅使用 zz800 ({len(df_pool)} 只)")
+    else:
+        df_zz800 = pd.read_csv(csv_zz800)
+        df_zz1000 = pd.read_csv(csv_zz1000)
+        df_pool = pd.concat([df_zz800, df_zz1000], ignore_index=True)
+        df_pool = df_pool.drop_duplicates(subset='code', keep='first')
+        print(f"  zz800: {len(df_zz800)} + zz1000: {len(df_zz1000)} → 去重后: {len(df_pool)} 只")
+
+    # 统一code格式
+    df_pool['code'] = df_pool['code'].astype(str).str.zfill(6)
+
+    # 写入 DB
+    with get_conn() as conn:
+        conn.execute("DELETE FROM stock_pool_zz1800")
+        conn.commit()
+
+        for _, row in df_pool.iterrows():
+            industry_val = row['industry'] if pd.notna(row.get('industry')) else ''
+            conn.execute(
+                "INSERT INTO stock_pool_zz1800 (code, name, board, pool, is_active, industry) VALUES (?, ?, ?, ?, 1, ?)",
+                (str(row['code']), str(row['name']), str(row['board']), 'zz1800', industry_val)
+            )
+        conn.commit()
+
+        cursor = conn.execute("SELECT COUNT(*) FROM stock_pool_zz1800")
+        count = cursor.fetchone()[0]
+
+    print(f"  ✅ stock_pool_zz1800 已写入 {count} 只 (zz800+zz1000)")
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description="项目初始化")
+    parser.add_argument("--db-only", action="store_true", help="只建表")
+    parser.add_argument("--pool-only", action="store_true", help="只更新股票池")
+    parser.add_argument("--kline-only", action="store_true", help="只下载K线")
+    parser.add_argument("--indices", action="store_true", help="只下载指数K线（可与 --kline-only 同时使用）")
+    parser.add_argument("--accounts", action="store_true", help="只初始化账户")
+    parser.add_argument("--force", action="store_true", help="强制重建（清空已有数据，仅与 --accounts 配合使用）")
+    parser.add_argument("--start-year", type=int, default=2020, help="K线数据起始年份 (默认: 2020)")
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print(f"🚀 项目初始化 — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print("=" * 60)
+    print()
+
+    # 如果没有指定特定步骤，执行完整初始化
+    full_init = not (args.db_only or args.pool_only or args.kline_only or args.indices or args.accounts)
+
+    if full_init or args.db_only:
+        print("📦 Step 1: 建表...")
+        step_init_db()
+
+    if full_init or args.pool_only:
+        print("📦 Step 2: 更新股票池 (zz800)...")
+        from core.db import get_conn
+        with get_conn() as conn:
+            conn.execute("DELETE FROM stock_pool WHERE pool='zz800'")
+            print(f"  已清空旧股票池")
+        step_init_pool()
+
+    if full_init or args.pool_only:
+        print("📦 Step 2b: 构建 stock_pool_zz1800 (zz800 + zz1000 = 1800只)...")
+        step_init_zz1800_pool()
+
     if full_init or args.kline_only:
         print(f"📦 Step 3: 下载日K线 (起始年份: {args.start_year})...")
         step_init_kline(start_year=args.start_year)
@@ -367,7 +475,6 @@ def main():
 
     if args.indices:
         print(f"📦 Step 指数: 下载指数K线 (起始年份: {args.start_year})...")
-        # 先确保表存在
         from core.db import init_db
         init_db()
         step_init_indices(start_year=args.start_year)
@@ -387,6 +494,7 @@ def main():
         print("  3. 跑模拟盘: python scripts/sim/account_runner.py --account-id 1 intraday_signal")
         print("  4. 查看账户: python scripts/sim/account_runner.py list")
         print("=" * 60)
+
 
 if __name__ == "__main__":
     main()

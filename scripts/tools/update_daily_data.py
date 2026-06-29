@@ -33,9 +33,23 @@ def get_db_path():
     return os.path.join(_BASE_DIR, "..", "data", "quant_stocks.db")
 
 def get_stock_list():
-    """从 SQLite DB 获取活跃股票列表（优先），CSV 目录作为 fallback）"""
+    """从 SQLite DB 获取活跃股票列表（优先 stock_pool_zz1800），CSV 目录作为 fallback）"""
     db_path = get_db_path()
     if os.path.exists(db_path):
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            # 优先从 stock_pool_zz1800 取（1800只，zz800是它的子集）
+            cursor = conn.execute(
+                "SELECT code FROM stock_pool_zz1800 WHERE is_active=1 ORDER BY code"
+            )
+            codes = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            if codes:
+                return codes
+        except Exception:
+            pass
+        # fallback: stock_pool（旧表）
         try:
             import sqlite3
             conn = sqlite3.connect(db_path)

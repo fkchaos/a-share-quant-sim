@@ -1,0 +1,192 @@
+{
+  "-0.08_0.15_3": {
+    "stop_loss": -0.08,
+    "take_profit": 0.15,
+    "hold_days": 3,
+    "ret": 22.67,
+    "sharpe": 1.813,
+    "dd": -17.7,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.08_0.2_3": {
+    "stop_loss": -0.08,
+    "take_profit": 0.2,
+    "hold_days": 3,
+    "ret": 22.47,
+    "sharpe": 1.801,
+    "dd": -17.7,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.08_0.15_5": {
+    "stop_loss": -0.08,
+    "take_profit": 0.15,
+    "hold_days": 5,
+    "ret": 34.95,
+    "sharpe": 2.299,
+    "dd": -16.8,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.08_0.2_5": {
+    "stop_loss": -0.08,
+    "take_profit": 0.2,
+    "hold_days": 5,
+    "ret": 35.08,
+    "sharpe": 2.287,
+    "dd": -16.7,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.08_0.25_5": {
+    "stop_loss": -0.08,
+    "take_profit": 0.25,
+    "hold_days": 5,
+    "ret": 35.58,
+    "sharpe": 2.3,
+    "dd": -16.8,
+    "pos_rate": 93.8,
+    "n_folds": 16
+  },
+  "-0.08_0.3_5": {
+    "stop_loss": -0.08,
+    "take_profit": 0.3,
+    "hold_days": 5,
+    "ret": 34.06,
+    "sharpe": 2.273,
+    "dd": -16.9,
+    "pos_rate": 93.8,
+    "n_folds": 16
+  },
+  "-0.08_0.15_7": {
+    "stop_loss": -0.08,
+    "take_profit": 0.15,
+    "hold_days": 7,
+    "ret": 29.17,
+    "sharpe": 1.927,
+    "dd": -19.2,
+    "pos_rate": 93.8,
+    "n_folds": 16
+  },
+  "-0.08_0.2_7": {
+    "stop_loss": -0.08,
+    "take_profit": 0.2,
+    "hold_days": 7,
+    "ret": 27.53,
+    "sharpe": 1.886,
+    "dd": -19.2,
+    "pos_rate": 93.8,
+    "n_folds": 16
+  },
+  "-0.08_0.25_7": {
+    "stop_loss": -0.08,
+    "take_profit": 0.25,
+    "hold_days": 7,
+    "ret": 29.27,
+    "sharpe": 1.961,
+    "dd": -19.2,
+    "pos_rate": 93.8,
+    "n_folds": 16
+  },
+  "-0.08_0.15_10": {
+    "stop_loss": -0.08,
+    "take_profit": 0.15,
+    "hold_days": 10,
+    "ret": 32.58,
+    "sharpe": 2.209,
+    "dd": -17.9,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.08_0.2_10": {
+    "stop_loss": -0.08,
+    "take_profit": 0.2,
+    "hold_days": 10,
+    "ret": 30.43,
+    "sharpe": 2.1,
+    "dd": -17.9,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.08_0.25_10": {
+    "stop_loss": -0.08,
+    "take_profit": 0.25,
+    "hold_days": 10,
+    "ret": 32.7,
+    "sharpe": 2.221,
+    "dd": -17.8,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.08_0.3_10": {
+    "stop_loss": -0.08,
+    "take_profit": 0.3,
+    "hold_days": 10,
+    "ret": 33.08,
+    "sharpe": 2.248,
+    "dd": -17.6,
+    "pos_rate": 93.8,
+    "n_folds": 16
+  },
+  "-0.1_0.15_10": {
+    "stop_loss": -0.1,
+    "take_profit": 0.15,
+    "hold_days": 10,
+    "ret": 36.88,
+    "sharpe": 2.224,
+    "dd": -17.9,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.1_0.2_10": {
+    "stop_loss": -0.1,
+    "take_profit": 0.2,
+    "hold_days": 10,
+    "ret": 35.3,
+    "sharpe": 2.149,
+    "dd": -17.9,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.1_0.25_10": {
+    "stop_loss": -0.1,
+    "take_profit": 0.25,
+    "hold_days": 10,
+    "ret": 37.42,
+    "sharpe": 2.238,
+    "dd": -17.8,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.1_0.3_10": {
+    "stop_loss": -0.1,
+    "take_profit": 0.3,
+    "hold_days": 10,
+    "ret": 37.25,
+    "sharpe": 2.254,
+    "dd": -17.5,
+    "pos_rate": 93.8,
+    "n_folds": 16
+  },
+  "-0.12_0.15_10": {
+    "stop_loss": -0.12,
+    "take_profit": 0.15,
+    "hold_days": 10,
+    "ret": 36.26,
+    "sharpe": 2.213,
+    "dd": -17.9,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  },
+  "-0.12_0.2_10": {
+    "stop_loss": -0.12,
+    "take_profit": 0.2,
+    "hold_days": 10,
+    "ret": 33.79,
+    "sharpe": 2.112,
+    "dd": -17.9,
+    "pos_rate": 87.5,
+    "n_folds": 16
+  }
+}

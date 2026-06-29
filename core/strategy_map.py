@@ -913,5 +913,23 @@ STRATEGY_MAP = {
             "REBALANCE_DAYS": 5,
         },
     },
+
+    # ── v61b: 换手率+小市值 优化版（止损-8%/止盈+25%/卖出即买） ──
+    "v61b": {
+        "mode": "custom",
+        "description": "v61b 优化风控: 止损-8%/止盈+25%, 卖出即买, WF夏普2.300",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v61b_turnover_size.select_stocks_v61b",
+        "calc_factors_fn": "scripts.strategies.v61b_turnover_size.calc_factors_v61b",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 5,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.25,
+            "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+        },
+    },
 }
 

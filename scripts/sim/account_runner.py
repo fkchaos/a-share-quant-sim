@@ -397,6 +397,64 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     if strategy_name is None:
         strategy_name = _resolve_strategy(account_id)
 
+    # ── 检查overlay模式 ──
+    # 如果策略配置了overlay脚本，调用外部脚本的信号生成函数
+    adapter = get_adapter()
+    if hasattr(adapter, '_overlay_scripts') and strategy_name in adapter._overlay_scripts:
+        overlay = adapter._overlay_scripts[strategy_name]
+        signal_func_name = overlay.get('signal_func')
+        
+        if signal_func_name:
+            logger.info(f"[overlay] 检测到外部脚本: {overlay['module']}.{signal_func_name}")
+            
+            # 动态导入模块
+            import importlib
+            try:
+                module = importlib.import_module(overlay['module'])
+                signal_func = getattr(module, signal_func_name)
+            except (ImportError, AttributeError) as e:
+                logger.error(f"加载overlay脚本失败: {e}")
+                return None
+            
+            # 加载数据
+            strategy = load_strategy(strategy_name)
+            pool = strategy.get("pool", "zz1800")
+            panels = load_panel(None, pool=pool)
+            if not panels:
+                logger.error("数据加载失败")
+                return None
+            
+            # 加载账户状态
+            state = load_account(account_id)
+            
+            # 合并参数
+            overlay_params = overlay.get('params', {})
+            params = dict(strategy.get("params", {}))
+            _acct_cfg = get_account(account_id)
+            if _acct_cfg:
+                for k, v in _acct_cfg.get("params", {}).items():
+                    params[k] = v
+            overlay_params.update(params)
+            
+            # 调用外部脚本的信号生成函数
+            plan = signal_func(
+                account_id=account_id,
+                date=date,
+                params=overlay_params,
+                state=state,
+                panels=panels
+            )
+            
+            # 保存交易计划
+            if plan:
+                plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{account_id}.json")
+                with open(plan_file, 'w') as f:
+                    json.dump(plan, f, ensure_ascii=False, indent=2)
+                logger.info(f"[overlay] 计划已保存: {plan_file}")
+            
+            return plan
+    
+    # ── 标准信号生成逻辑 ──
     strategy = load_strategy(strategy_name)
     params = dict(strategy.get("params", {}))
     timing = strategy.get("timing", "intraday")
@@ -493,7 +551,6 @@ def _run_signal_impl(account_id, date, strategy_name=None):
                            cp, vp, ap, hp, lp, op,
                            current_holdings=state.holdings,
                            params=params)
-
     # 市场状态识别 → 仓位乘数（用 strategy_adapter 统一接口）
     regime_label, regime_mult = adapter.calc_regime(strategy_name, cp, date, params)
     logger.info(f"市场状态: {regime_label}, 仓位乘数: {regime_mult}")

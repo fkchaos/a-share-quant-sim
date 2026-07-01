@@ -49,6 +49,9 @@ class StrategyAdapter:
         self._overlay_scripts["v61b"] = {
             "module": "scripts.backtest.v61b_risk_scan",
             "entry_func": "run_wf_overlay",
+            "select_func": "select_stocks",
+            "check_risk_func": "check_risk",
+            "signal_func": "run_signal",
             "params": {
                 "REBALANCE_DAYS": 5,
                 "TOP_N": 5,
@@ -1069,7 +1072,7 @@ class StrategyAdapter:
     def _v61b_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,
                     sold_recently=None):
-        """v61b 选股: 换手率+小市值 优化版"""
+        """v61b 选股: 换手率+小市值 优化版（含调仓日判断和卖出即买逻辑）"""
         from scripts.strategies.v61b_turnover_size import select_stocks_v61b, calc_factors_v61b
         if factors is None:
             factors = calc_factors_v61b(close_panel, volume_panel, amount_panel,
@@ -1077,9 +1080,13 @@ class StrategyAdapter:
         merged_params = dict(self._risk_params["v61b"])
         if params:
             merged_params.update(params)
-        return select_stocks_v61b(factors, date, close_panel, volume_panel, amount_panel,
-                                  high_panel, low_panel, open_panel, current_holdings,
-                                  merged_params, sold_recently=sold_recently)
+        
+        # 调用选股函数（选股逻辑本身已包含筛选）
+        candidates = select_stocks_v61b(factors, date, close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel, current_holdings,
+                                       merged_params, sold_recently=sold_recently)
+        
+        return candidates
 
     def _v70_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,

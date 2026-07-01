@@ -214,8 +214,253 @@ def run_wf_overlay(train_days=252, test_days=126, step_days=63,
         "dd": round(avg_dd, 1),
         "pos_rate": round(pos / nf * 100, 1),
         "n_folds": nf,
-        "fold_results": fold_results,
     }
+
+def select_stocks(date, state, panels, params):
+    """
+    v61b 选股函数（供overlay调用）
+    
+    Args:
+        date: 当前日期
+        state: 当前持仓 (dict: {code: {shares, cost, days}})
+        panels: 数据面板 (cp, vp, ap, hp, lp, op)
+        params: 策略参数
+    
+    Returns:
+        候选股列表 [(code, score), ...]
+    """
+    import logging
+    logger = logging.getLogger("v61b_overlay")
+    
+    cp, vp, ap, hp, lp, op = panels
+    rebalance_days = params.get("REBALANCE_DAYS", 5)
+    top_n = params.get("TOP_N", 5)
+    
+    # ── 调仓日判断 ──
+    # state可能是dict或PortfolioState对象
+    if state is None:
+        last_rebal_date = None
+    elif hasattr(state, 'last_rebalance_date'):
+        last_rebal_date = state.last_rebalance_date
+    elif isinstance(state, dict) and '_last_rebalance_date' in state:
+        last_rebal_date = state['_last_rebalance_date']
+    else:
+        last_rebal_date = None
+    
+    if last_rebal_date is None:
+        # 首次运行，强制调仓
+        days_since_rebal = rebalance_days
+    else:
+        days_since_rebal = (date - last_rebal_date).days
+    
+    is_rebalance_day = (days_since_rebal >= rebalance_days)
+    
+    # ── 非调仓日不选股 ──
+    if not is_rebalance_day:
+        logger.info(f"v61b: 非调仓日(第{days_since_rebal}天)，跳过选股")
+        return []
+    
+    # ── 调仓日，执行选股 ──
+    logger.info(f"v61b: 调仓日(第{days_since_rebal}天)，执行选股")
+    
+    # 更新上次调仓日期
+    if hasattr(state, 'last_rebalance_date'):
+        state.last_rebalance_date = date
+    elif isinstance(state, dict):
+        state['_last_rebalance_date'] = date
+    
+    # 加载数据
+    data = load_data_with_range(
+        (date - pd.Timedelta(days=365)).strftime('%Y-%m-%d'),
+        date.strftime('%Y-%m-%d')
+    )
+    
+    # 计算选股分数
+    scores = calc_scores(date, data)
+    
+    # 选股：选前N只
+    candidates = scores.head(top_n).index.tolist()
+    
+    # 排除已持有
+    if state:
+        held = set(state.keys())
+        candidates = [c for c in candidates if c not in held]
+    
+    result = [(code, scores[code]) for code in candidates[:top_n]]
+    logger.info(f"v61b: 选出{len(result)}只股票")
+    
+    return result
+def run_signal(account_id, date, params, state, panels):
+    """
+    v61b 信号生成函数（供account_runner overlay调用）
+    
+    Args:
+        account_id: 账户ID
+        date: 当前日期
+        params: 策略参数
+        state: PortfolioState对象
+        panels: 数据面板 (cp, vp, ap, hp, lp, op)
+    
+    Returns:
+        交易计划字典（与account_runner._run_signal_impl格式一致）
+    """
+    import logging
+    from datetime import datetime
+    logger = logging.getLogger("v61b_overlay")
+    
+    cp, vp, ap, hp, lp, op = panels
+    rebalance_days = params.get("REBALANCE_DAYS", 5)
+    top_n = params.get("TOP_N", 5)
+    stop_loss = params.get("STOP_LOSS", -0.08)
+    take_profit = params.get("TAKE_PROFIT", 0.25)
+    hold_days_max = params.get("HOLD_DAYS_MAX", 5)
+    max_holdings = params.get("MAX_HOLDINGS", 5)
+    max_daily_buy = params.get("MAX_DAILY_BUY", 5)
+    
+    # ── 1. 风控检查：止损/止盈/最长持有 ──
+    to_sell = []
+    if date in cp.index:
+        price_data = cp.loc[date]
+        for code, h in list(state.holdings.items()):
+            if code not in price_data.index:
+                continue
+            p = price_data[code]
+            if pd.isna(p) or p <= 0:
+                continue
+            
+            # T+1：当天买入的不检查
+            if h.get('hold_days', 0) < 1:
+                continue
+            
+            cost = h.get('cost_price', 0)
+            if cost <= 0:
+                continue
+            
+            pnl = (p - cost) / cost
+            reason = None
+            
+            # 止损
+            if pnl <= stop_loss:
+                reason = 'stop_loss'
+            # 止盈
+            elif pnl >= take_profit:
+                reason = 'take_profit'
+            # 最长持有
+            elif h.get('hold_days', 0) >= hold_days_max:
+                reason = 'hold_days_max'
+            
+            if reason:
+                to_sell.append((code, reason, pnl))
+                logger.info(f"v61b风控: 卖出{code}, 原因={reason}, 盈亏={pnl:.2%}")
+    
+    # ── 2. 调仓日判断 ──
+    last_rebal_date = getattr(state, 'last_rebalance_date', None)
+    if last_rebal_date is None:
+        days_since_rebal = rebalance_days
+    else:
+        days_since_rebal = (date - last_rebal_date).days
+    
+    is_rebalance_day = (days_since_rebal >= rebalance_days)
+    has_sell_signal = len(to_sell) > 0
+    
+    # ── 3. 选股 ──
+    buy_plan = []
+    if is_rebalance_day or has_sell_signal:
+        # 执行选股
+        data = load_data_with_range(
+            (date - pd.Timedelta(days=365)).strftime('%Y-%m-%d'),
+            date.strftime('%Y-%m-%d')
+        )
+        scores = calc_scores(date, data)
+        candidates = scores.head(top_n * 2).index.tolist()
+        
+        # 排除已持有和将卖出的
+        held = set(state.holdings.keys())
+        sell_codes = {c for c, _, _ in to_sell}
+        candidates = [c for c in candidates if c not in held and c not in sell_codes]
+        
+        # 计算可买入数量
+        remaining = len(held) - len(sell_codes)
+        can_buy = min(max_holdings - remaining, max_daily_buy)
+        can_buy = max(can_buy, 0)
+        
+        # 选股
+        buy_list = candidates[:can_buy]
+        
+        # 生成买入计划
+        if buy_list and date in cp.index:
+            price_data = cp.loc[date]
+            # 计算可用资金
+            sell_cash = sum(
+                price_data.get(c, 0) * state.holdings[c].get('shares', 0)
+                for c, _, _ in to_sell if c in state.holdings and c in price_data.index
+            )
+            available = state.cash + sell_cash
+            per_stock = available / len(buy_list) * 0.95  # 95%仓位
+            
+            for code in buy_list:
+                if code in price_data.index:
+                    price = price_data[code]
+                    if not pd.isna(price) and price > 0:
+                        qty = int(per_stock / price / 100) * 100
+                        if qty > 0:
+                            buy_plan.append({
+                                'code': code,
+                                'score': round(scores.get(code, 0), 2),
+                                'price': round(price, 2),
+                                'qty': qty,
+                                'target_amount': round(per_stock, 2),
+                            })
+        
+        # 更新调仓日期
+        if is_rebalance_day:
+            state.last_rebalance_date = date
+            logger.info(f"v61b: 调仓日，选出{len(buy_plan)}只股票")
+        else:
+            logger.info(f"v61b: 卖出即买，选出{len(buy_plan)}只股票")
+    else:
+        logger.info(f"v61b: 非调仓日(第{days_since_rebal}天)且无卖出，跳过选股")
+    
+    # ── 4. 生成交易计划 ──
+    sell_plan = [
+        {
+            'code': c,
+            'qty': state.holdings[c].get('shares', state.holdings[c].get('qty', 0)),
+            'reason': reason,
+            'pnl': round(pnl, 4),
+        }
+        for c, reason, pnl in to_sell if c in state.holdings
+    ]
+    
+    hold_plan = []
+    for code, h in state.holdings.items():
+        if code not in {c for c, _, _ in to_sell} and code not in {b['code'] for b in buy_plan}:
+            price = 0
+            if date in cp.index and code in cp.columns:
+                price = cp.loc[date, code]
+                if pd.isna(price) or price <= 0:
+                    price = h.get('cost_price', 0)
+            hold_plan.append({
+                'code': code,
+                'current_shares': h.get('shares', h.get('qty', 0)),
+                'price': round(price, 2),
+                'cost_price': round(h.get('cost_price', 0), 2),
+                'action': 'hold',
+            })
+    
+    plan = {
+        'date': str(date),
+        'account_id': account_id,
+        'strategy': 'v61b',
+        'sell_plan': sell_plan,
+        'buy_plan': buy_plan,
+        'hold_plan': hold_plan,
+        'timestamp': datetime.now().isoformat(),
+    }
+    
+    logger.info(f"v61b计划: 卖{len(sell_plan)}只, 买{len(buy_plan)}只, 持{len(hold_plan)}只")
+    
+    return plan
 
 def main():
     import argparse

@@ -39,10 +39,25 @@ class StrategyAdapter:
         self._select_fns = {}
         self._risk_params = {}
         self._regime_params = {}
+        self._overlay_scripts = {}  # 外部脚本overlay配置
         self._register_builtin_strategies()
 
     def _register_builtin_strategies(self):
         """注册所有活跃策略"""
+        # ── v61b: 换手率+小市值 优化版（overlay模式）──
+        # 该策略有特殊逻辑（每5天调仓、卖出即买），使用独立脚本
+        self._overlay_scripts["v61b"] = {
+            "module": "scripts.backtest.v61b_risk_scan",
+            "entry_func": "run_wf_overlay",
+            "params": {
+                "REBALANCE_DAYS": 5,
+                "TOP_N": 5,
+                "STOP_LOSS": -0.08,
+                "TAKE_PROFIT": 0.25,
+                "HOLD_DAYS_MAX": 5,
+            }
+        }
+        
         # ── v27: 价量共振 ──
         self._select_fns["v27"] = self._v27_select
         self._risk_params["v27"] = {

@@ -41,7 +41,45 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     if strategy_name not in adapter.list_strategies():
         print(f"❌ 未知策略: {strategy_name}，可用: {adapter.list_strategies()}")
         return None
-
+    
+    # ── 检查overlay模式 ──
+    # 如果策略配置了overlay脚本，调用外部脚本的回测函数
+    if hasattr(adapter, '_overlay_scripts') and strategy_name in adapter._overlay_scripts:
+        overlay = adapter._overlay_scripts[strategy_name]
+        print(f"[overlay] 检测到外部脚本: {overlay['module']}.{overlay['entry_func']}")
+        
+        # 动态导入模块
+        import importlib
+        try:
+            module = importlib.import_module(overlay['module'])
+            entry_func = getattr(module, overlay['entry_func'])
+        except (ImportError, AttributeError) as e:
+            print(f"❌ 加载overlay脚本失败: {e}")
+            return None
+        
+        # 合并参数（命令行参数优先）
+        overlay_params = overlay.get('params', {})
+        result = entry_func(
+            train_days=train_days,
+            test_days=test_days,
+            step_days=step_days,
+            start_date=start_date,
+            end_date=end_date,
+            params=overlay_params
+        )
+        
+        # 打印结果
+        print("\n" + "=" * 60)
+        print(f"{strategy_name} Overlay 回测结果")
+        print("=" * 60)
+        print(f"  总收益率: {result.get('total', 0):+.2f}%")
+        print(f"  夏普比率: {result.get('sharpe', 0):+.3f}")
+        print(f"  最大回撤: {result.get('dd', 0):+.1f}%")
+        print(f"  正收益fold: {result.get('pos_rate', 0):.1f}% ({result.get('n_folds', 0)} folds)")
+        print("=" * 60)
+        
+        return result
+    
     # v40: 因子恶化卖出追踪器（全局，按 account_id 隔离）
     sell_penalty_trackers = {}
 

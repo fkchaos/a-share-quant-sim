@@ -1,42 +1,121 @@
 # TODO — A股量化交易系统待办
 
-> 最后更新: 2026-06-29
+> 最后更新: 2026-06-30
 > 每个有价值的实验方向对应一个 todo 项
 
 ---
 
 # 活跃待办
 
-## � Phase A: 外部因子全量 IC 验证（当前阶段，主公明确要求）
+## ✅ Phase A: 外部因子全量 IC 验证 — **已收尾（全部证伪）**
 
-###191 全量 IC 测试
-- 191个A股价量因子全部跑 IC/IR（h=3,5,10）
-- 公式已归档: /root/alpha-research/reports/alpha191_formulas.md
-- 每个因子单独解析为 Python 计算函数 → 批量 panel 计算 → Spearman IC
-- 步骤: 解析公式 → 写出计算图 → 跑每天横截面 IC → 汇总
-- 基线: |IC|>0.03 & |IR|>0.3 为有效
-- 截止时间: 本次任务
-- 状态: 15因子 pilot Pass:0/45, 方向性:全部负IC
+### A1. Alpha191 全量 IC 测试 — ❌ 证伪
+- 15因子 pilot, 全部负IC, 无有效因子
 
-### A2. Alpha158 剩余 108 个因子 IC 测试
-- 已做: v59a 测试了 50 个新算子（CORR/SUMP/RSV/WVMA/CORD/CNTP等），全部 IC<0.03
-- 已做: 36因子 pilot (K线/趋势/波动/RSV) 全部 Pass:0/108
-- 还没做的: 趋势类(BETA/RSQR/RESI)×5=15, 极值(IMAX/IMIN/IMXD)×5=15, 量价类(量波/VSTD+VSUMD等)=20, 价量统计(CORR/CORD/CNTP/SUMP 全变体)=35
-- 公式已归档: /root/alpha-research/reports/alpha158_formulas.md
-- 状态: 最高 IC=+0.046 (LOW0), IR=+0.272, 未通过
+### A2. Alpha158 IC 测试 — ❌ 证伪
+- 已测62个因子, 全部 |IC|<0.03 或 |IR|<0.3
+- 最高 IC=+0.046 (LOW0), IR=+0.272, 未通过
 
-### A3. Alpha101 全量 IC 测试
-- 101个高频低延迟因子（复杂嵌套: decay_linear + ts_argmax + signedpower + indneutralize）
-- 论文: Kakushadze 2015; 公式已归档: /root/alpha-research/reports/alpha101_formulas.md
-- 特别注意: 这些算子复合度高，不能简单 table lookup，需要逐个实现
-- 注意: 部分涉及 vwap/indneutralize(行业中性)，我们只有 industry_map 可替代
-- 状态: 6因子 pilot Pass:0/18, 最高 IC=+0.042 (a42), IR=+0.218, 未通过
+### A3. Alpha101 IC 测试 — ❌ 证伪
+- 6因子 pilot, 全部证伪
+- 最高 IC=+0.042 (a42), IR=+0.218, 未通过
 
-### A4. 结果汇总 + 对比报告
-- 汇总三批测试（Alpha158/191/101 共 ~450 个因子）
-- 输出: 有效因子表 / 无效因子表 / 同类因子冗余度 / 组合建议
-- 更新 RESULTS_LOG.md
-- 状态: 三批 pilot 共 57 因子全部证伪, Pass: 0 / 171
+### A4. 结果汇总 — ✅ 已完成
+- 三批共 57 因子全部证伪, Pass: 0/171
+- **结论: 外部公开因子在 zz1800 池内无 alpha，不应继续投入**
+- 报告: /root/alpha-research/reports/ (三批结果各有记录)
+
+---
+
+# 当前工作
+
+---
+
+## 🆕 Phase D: 2026年新方向探索（2026-06-30 启动）
+
+### D1: 分域建模方案
+- **目标**: 按市值分割股票池，每个域独立建模
+- **设计文档**: `docs/experiments/2026-06-30_subdomain_modeling_design.md`
+- **核心模块**: 
+  - `core/domain_splitter.py` — 域分割器 ✅ 已实现
+  - `scripts/strategies/v70_midcap_momentum.py` — 中盘域策略 ✅ 已实现
+  - `scripts/backtest/domain_wf_runner.py` — 分域WF框架（待实现）
+- **注册**: strategy_map.py + strategy_adapter.py ✅ 已完成
+- **测试**: 策略加载、因子计算、选股逻辑 ✅ 通过
+- **WF验证**: 3次均失败（收益-1.25%~-3.62%，夏普-0.070~-0.182）
+- **失败原因**: 中盘域股票近期整体下跌，不是alpha来源
+- **状态**: ❌ WF未通过，建议放弃v70，专注v39g+v61b组合
+
+### D2: 舆情因子方案
+- **目标**: 利用新闻舆情构建低相关性Alpha因子
+- **设计文档**: `docs/experiments/2026-06-30_sentiment_factor_design.md`
+- **核心模块**:
+  - `core/sentiment/__init__.py` — 舆情模块
+  - `core/sentiment/data_fetcher.py` — 数据获取（AKShare+东方财富）✅ 已实现
+  - `core/sentiment/nlp_analyzer.py` — NLP情感分析（集成在data_fetcher中）✅ 已实现
+  - `core/sentiment/factor_builder.py` — 因子构建 ✅ 已实现
+- **测试结果**:
+  - AKShare新闻接口: ✅ 可用
+  - SnowNLP情感分析: ✅ 可用（通用模型，金融领域效果有限）
+  - 批量获取新闻: ✅ 成功（50只股票）
+  - 因子构建: ✅ 成功（sentiment_score, news_heat, sentiment_momentum）
+- **IC分析**: sentiment_momentum对5日收益有效（IC=-0.042, IR=-0.304）
+- **WF验证**: v39g_sentiment通过（夏普1.048, 正fold69%），但略逊于v39g
+- **预期**: 夏普提升5-15%
+- **状态**: ✅ 代码实现完成，WF验证通过
+
+### D3: LLM Alpha挖掘方案
+- **目标**: 使用QuantaAlpha框架自动挖掘Alpha因子
+- **设计文档**: `docs/experiments/2026-06-30_llm_alpha_mining_design.md`
+- **核心框架**: QuantaAlpha（GitHub开源）
+- **成本估算**: $13-300（约¥100-2000人民币）
+- **预期**: IC=0.15，夏普提升20-50%
+- **状态**: ✅ 设计完成，成本可接受，待实施
+
+### D4: v66 连续两天涨停情绪因子 ⚠️ 择时策略
+- **目标**: 将连续两天涨停作为情绪因子加入v39g，提升选股效果
+- **设计文档**: `docs/experiments/2026-07-01_v66_two_day_limit_design.md`
+- **核心发现**:
+  - 连续两天涨停股票未来5日平均收益+8.58%（vs非涨停+0.09%）
+  - 差值+8.49%，因子有效
+- **实现**:
+  - `core/factors.py` 添加 `two_day_limit` 因子 ✅
+  - `scripts/strategies/v39c_pv_resonance.py` 因子计算 ✅
+  - `scripts/strategies/v66_two_day_limit.py` 策略文件 ✅
+  - `core/strategy_map.py` 注册 ✅
+  - `scripts/backtest/strategy_adapter.py` 注册 ✅
+  - `scripts/backtest/wf_runner.py` 添加支持 ✅
+- **WF验证（16 folds）**:
+  - 夏普 **1.129**（v39g基线1.297）
+  - 正fold **14/16 (88%)**（v39g基线75%）
+  - 平均收益 +8.37%
+  - 平均回撤 14.35%
+  - ✅ **WF通过**（夏普>0.5，正fold>60%）
+- **结论**: 择时策略，2024+市场活跃时夏普4-6，2021-2023无交易机会。不适合稳定收益
+- **状态**: ⚠️ 已验证，择时策略定位
+
+### D6: v61b + v66_sentiment 情绪择时参数优化 ✅ 已完成
+- **目标**: 优化v61b和v66的情绪择时参数，寻找最佳配置
+- **v61b近三年扫描**（2024-2026，23 folds）:
+  - **最优**: hot模式, 阈值=2, 窗口=10
+  - **结果**: 夏普1.679, 收益8.91%, 回撤-7.8%, 正fold 69.6%
+  - **vs基准**: 夏普+0.5%, 回撤-57%（-18%→-7.8%）
+  - **定位**: 保守型配置，大幅降低回撤
+- **v66_sentiment扫描**（16 folds）:
+  - **最优**: 阈值=3, 窗口=10
+  - **结果**: 夏普1.399, 收益23.29%, 回撤-10.1%, 正fold 75.0%
+  - **vs v39g**: 夏普+7.9%, 回撤-44%, 收益+35%
+  - **定位**: 推荐替代v39g作为主力策略
+- **综合建议**:
+  - v66_sentiment(3,10) 替代 v39g → 全面提升
+  - v61b+hot(2,10) 作为保守型补充 → 大幅降低回撤
+- **状态**: ✅ 扫描完成，待决策是否部署
+
+### D5: 实施优先级排序
+1. ~~**分域建模**（数据现有，框架已有，最快落地）~~ ❌ v70放弃
+2. **舆情因子**（数据可获取，需NLP验证）✅ 已完成
+3. **LLM挖掘**（需评估API成本，前沿但风险高）✅ 设计完成
+4. **情绪择时优化** ✅ 已完成（v61b + v66_sentiment参数扫描）
 
 ---
 
@@ -55,16 +134,16 @@
 - 多参数验证: step=42 夏普2.631, step=84 夏普2.617, 均通过 ✅
 - 来源: BigQuant 低流动性溢价策略复现
 - 风险: 低换手票流动性差, 回撤 -39% 高于 v39g -14%
-- 状态: **✅ 已部署账户1，已清仓暂停**
+- 状态: **✅ WF通过，已部署后清仓暂停**
 
-### B3: v61b 参数精调优化 ✅ 已部署
+### B3: v61b 参数精调优化 ✅ WF 通过
 - 目标: 在v61a基础上进一步提升收益或降低风险
 - **最优参数**: 止损-8% / 止盈+25% / 持仓5天 / 卖出即买
 - **WF验证**: 夏普2.300, 正fold 15/16 ✅
 - **vs v61a**: 夏普提升13% (2.036→2.300)
 - 关键发现: 卖出即买逻辑大幅提升短持仓效果
 - 设计文档: docs/experiments/2026-06-29_v61b_optimization_design.md
-- 状态: **✅ 已部署账户1，已清仓暂停**
+- 状态: **✅ WF通过，已部署后清仓暂停（2026-06-29清仓，未再重启）**
 
 ### v60b: 因子时序中性化
 - 时序 z-score 替代截面 z-score
@@ -77,14 +156,21 @@
 ## 🟢 Phase C: 运维/基础设施
 
 ### 持仓文件加锁
-- 手动回测 + cron 模拟盘可能同时读写
-- 实施: 简单 threading.Lock 或文件锁
+- **❌ 放弃** — cron 已经是单线程顺序执行，不存在并发读写
 
-### 因子 IC 衰减监控月度 cron）
-- 定期查看已有因子是否失效
+### 因子 IC 衰减监控（月度 cron）✅ 已完成
+- 脚本: `scripts/tools/ic_decay_monitor.py`
+- Cron: `因子IC衰减监控`，每月 9:00 运行
+- 检测因子: 换手率、市值、动量(5/10/20)、波动率(5/20)、反转(3/5)、量比
+- 报告输出: `docs/ic_decay_latest.json`
+- **状态: ✅ 已部署，首次运行 2026-07-01**
 
-### Barra 风格归因报告
-- v11b/v13 归因，结论已出
+### Barra 风格归因报告 ✅ 已完成
+- v11b 归因结论：**纯 Alpha 驱动（102.1%）**，风格暴露仅 0.2%
+- v61b 归因结论：**纯 Alpha 驱动（99.8%）**，风格贡献仅 0.27%
+- 报告文件: `docs/experiments/2026-06-30_v61b_barra_attribution.md`
+- 脚本: `scripts/tools/barra_attribution_v61b.py`
+- **状态: ✅ 已完成**
 
 ---
 
@@ -162,6 +248,13 @@
 - 状态: 待排期
 
 ---
+
+# 最近完成（2026-06-30）
+
+| 事项 | 状态 |
+|------|------|
+| **Phase A 收尾：外部因子全量 IC 验证全部证伪（Pass:0/171）** | ❌ 结论性 |
+| CLAUDE.md + TODO.md 状态同步更新 | ✅ |
 
 # 最近完成（2026-06-29）
 

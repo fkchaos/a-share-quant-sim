@@ -356,6 +356,21 @@ def calc_factors_panel(
     )
     factors['obv_slope'] = obv_slope
 
+    # ── 情绪因子：连续两天涨停 ──────────────────────────────────────
+    # 涨停定义：涨幅在 [9.5%, 10.5%] 范围内
+    limit_threshold = 0.095
+    limit_up = (returns >= limit_threshold) & (returns <= 0.105)
+    yesterday_limit = limit_up.shift(1).fillna(False)
+    factors['two_day_limit'] = (limit_up & yesterday_limit).astype(float)
+
+    # ── 市场情绪因子：连续两天涨停股票数的滚动均值 ──────────────────
+    # 衡量市场整体情绪高低，值越大 → 市场越活跃
+    daily_limit_count = factors['two_day_limit'].sum(axis=1)
+    factors['market_sentiment'] = pd.DataFrame(
+        {'market_sentiment': daily_limit_count.rolling(20).mean()},
+        index=close_panel.index
+    )['market_sentiment'].reindex_like(close_panel).ffill().fillna(0)
+
     # ── 短线因子：gap / intraday / range ──────────────────────────────
     # 需要 open/high/low 面板；缺少时用 close 近似（不报 warning，静默降级）
 

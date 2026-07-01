@@ -527,6 +527,19 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     return df
 
 
+def _slice_factors(factors, start_idx, end_idx):
+    """切片因子面板（dict of DataFrames）"""
+    if factors is None:
+        return None
+    sliced = {}
+    for key, val in factors.items():
+        if hasattr(val, 'iloc'):
+            sliced[key] = val.iloc[start_idx:end_idx]
+        else:
+            sliced[key] = val
+    return sliced
+
+
 def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
                   high_panel, low_panel, open_panel, extra_data=None):
     """根据策略名计算因子"""
@@ -636,52 +649,22 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
-    elif strategy_name == "v49":
+    elif strategy_name == "v65_yesterday_limit":
+        from scripts.strategies.v65_yesterday_limit import calc_factors_v65_yesterday_limit
+        return calc_factors_v65_yesterday_limit(close_panel, volume_panel, amount_panel,
+                                                 high_panel, low_panel, open_panel)
+    elif strategy_name == "v66":
+        from scripts.strategies.v66_two_day_limit import calc_factors_v66
+        return calc_factors_v66(close_panel, volume_panel, amount_panel,
+                                high_panel, low_panel, open_panel)
         # v49 复用 v39i 的因子面板（连板因子在 select 阶段计算）
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
-    elif strategy_name == "v58a":
-        from scripts.strategies.v58a_breakout import calc_breakout_factors
-        return calc_breakout_factors(close_panel, volume_panel, amount_panel,
-                                    high_panel, low_panel, open_panel)
-    elif strategy_name == "v58b":
-        from scripts.strategies.v58b_bounce_recovery import calc_bounce_factors
-        return calc_bounce_factors(close_panel, volume_panel, amount_panel,
-                                    high_panel, low_panel, open_panel)
-    elif strategy_name == "v60a":
-        from scripts.strategies.v60a_industry_neutral import calc_factors_v60a
-        return calc_factors_v60a(close_panel, volume_panel, amount_panel,
-                                  high_panel, low_panel, open_panel)
-    elif strategy_name == "v40":
-        from scripts.strategies.v40_factor_exit import calc_factors
-        return calc_factors(close_panel, volume_panel, amount_panel,
-                           high_panel, low_panel, open_panel, params=None)
-    elif strategy_name == "v40b":
-        from scripts.strategies.v40_factor_exit import calc_factors
-        return calc_factors(close_panel, volume_panel, amount_panel,
-                           high_panel, low_panel, open_panel, params=None)
-    elif strategy_name == "v41":
-        from scripts.strategies.v41_vwap_deviation import calc_factors_v41
-        return calc_factors_v41(close_panel, volume_panel, amount_panel,
-                                 high_panel, low_panel, open_panel, params=None)
-    # v20c 已退役
-    else:
-        raise ValueError(f"不支持的策略: {strategy_name}")
-
-
-def _slice_factors(factors, start_idx, end_idx):
-    """切片因子面板到指定窗口"""
-    sliced = {}
-    for name, df in factors.items():
-        if hasattr(df, 'iloc'):
-            sliced[name] = df.iloc[start_idx:end_idx]
-        else:
-            sliced[name] = df
-    return sliced
-
-
-if __name__ == "__main__":
+    elif strategy_name == "v66_sentiment":
+        from scripts.strategies.v66_sentiment import calc_factors_v66_sentiment
+        return calc_factors_v66_sentiment(close_panel, volume_panel, amount_panel,
+                                          high_panel, low_panel, open_panel)
     parser = argparse.ArgumentParser(description="通用 Walk-Forward 运行器 / 全量回测")
     parser.add_argument("--strategy", required=True, help="策略名 (v27)")
     parser.add_argument("--train", type=int, default=252, help="训练期天数 (默认: 252)")

@@ -49,7 +49,10 @@ def calc_factors_v61a(close_panel, volume_panel, amount_panel, high_panel, low_p
             ranked = valid.rank(ascending=True, pct=True)
             scores[ranked.index] += ranked
 
-    return scores.sort_values(ascending=False)
+    result = scores.sort_values(ascending=False)
+    if isinstance(result, pd.Series):
+        return {"v61a": result}
+    return result
 
 
 def select_stocks_v61a(factors, date, close_panel, volume_panel, amount_panel,
@@ -58,7 +61,12 @@ def select_stocks_v61a(factors, date, close_panel, volume_panel, amount_panel,
     p = params or DEFAULT_PARAMS
     n = p.get('MAX_HOLDINGS', 5)
 
-    candidates = factors.head(n * 2).index.tolist()  # 多取一些候选
+    if isinstance(factors, dict):
+        scores = list(factors.values())[0]
+    else:
+        scores = factors
+
+    candidates = scores.head(n * 2).index.tolist()  # 多取一些候选
     held = set(current_holdings.keys()) if current_holdings else set()
     buy_list = [c for c in candidates if c not in held]
 

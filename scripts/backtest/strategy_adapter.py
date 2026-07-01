@@ -364,6 +364,59 @@ class StrategyAdapter:
         }
         self._regime_params["v39g"] = {}
 
+        # ── v66: 连续两天涨停情绪因子（v39g + 两日涨停加分）──
+        self._select_fns["v66"] = self._v66_select
+        self._risk_params["v66"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "PV_CORR_20_MIN": 0.0,
+            "BOLL_W_MIN": 0.0,
+            "COOLDOWN_DAYS": 0,
+            "W_MOM": 0.08,
+            "W_PV_CORR": 0.04,
+            "W_TURNOVER": 0.04,
+            "W_SIZE": 0.35,
+            "W_FUND_FLOW": 0.04,
+            "W_GAP": 0.04,
+            "W_ILLIQ": 0.16,
+            "W_TWO_DAY_LIMIT": 0.35,
+        }
+        self._regime_params["v66"] = {}
+
+        # ── v66_sentiment: v66 + 情绪择时 ──
+        self._select_fns["v66_sentiment"] = self._v66_sentiment_select
+        self._risk_params["v66_sentiment"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "W_MOM": 0.08,
+            "W_PV_CORR": 0.04,
+            "W_TURNOVER": 0.04,
+            "W_SIZE": 0.35,
+            "W_FUND_FLOW": 0.04,
+            "W_GAP": 0.04,
+            "W_ILLIQ": 0.16,
+            "W_TWO_DAY_LIMIT": 0.35,
+            "SENTIMENT_THRESHOLD": 5.0,  # 情绪阈值
+            "SENTIMENT_WINDOW": 20,      # 情绪窗口
+        }
+        self._regime_params["v66_sentiment"] = {}
+
         # ── v58a: 窄震出趋势（波动率压缩+放量突破）──
         self._select_fns["v58a"] = self._v58a_select
         self._risk_params["v58a"] = {
@@ -446,6 +499,54 @@ class StrategyAdapter:
             "REBALANCE_DAYS": 5,
         }
         self._regime_params["v61b"] = {}
+
+        # ── v70: 中盘域动量策略（100-500亿市值） ──
+        self._select_fns["v70"] = self._v70_select
+        self._risk_params["v70"] = {
+            "STOP_LOSS": -0.06, "TAKE_PROFIT": 0.12,
+            "HOLD_DAYS_MAX": 5, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.25, "MAX_HOLDINGS": 4,
+            "MOM_THRESHOLD": -0.10,
+            "MIN_MARKET_CAP": 100e8, "MAX_MARKET_CAP": 500e8,
+            "W_MOM": 0.30, "W_QUALITY": 0.20, "W_LOW_VOL": 0.20, "W_REVERSAL": 0.30,
+        }
+        self._regime_params["v70"] = {}
+
+        # ── v39g_sentiment: v39g + 舆情因子 ──
+        self._select_fns["v39g_sentiment"] = self._v39g_sentiment_select
+        self._risk_params["v39g_sentiment"] = {
+            "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3, "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20, "MAX_HOLDINGS": 5,
+            "MOM_THRESHOLD": 0.03,
+            "W_MOM": 0.10, "W_SIZE": 0.35, "W_ILLIQ": 0.20,
+            "W_SENTIMENT": -0.15,
+        }
+        self._regime_params["v39g_sentiment"] = {}
+
+        # ── v63_dragon_leader: 龙头战法（二板定龙头）──
+        self._select_fns["v63_dragon_leader"] = self._v63_dragon_select
+        self._risk_params["v63_dragon_leader"] = {
+            "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3, "MAX_DAILY_BUY": 2,
+            "MAX_POSITION": 0.25, "MAX_HOLDINGS": 3,
+            "MIN_STREAK": 2,
+            "W_STREAK": 0.40, "W_SECTOR": 0.30,
+            "W_SENTIMENT": 0.20, "W_LIQUIDITY": 0.10,
+        }
+        self._regime_params["v63_dragon_leader"] = {}
+
+        # ── v64_concept_heat: 概念热度打板 ──
+        self._select_fns["v64_concept_heat"] = self._v64_concept_select
+        self._risk_params["v64_concept_heat"] = {
+            "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3, "MAX_DAILY_BUY": 2,
+            "MAX_POSITION": 0.25, "MAX_HOLDINGS": 3,
+            "MIN_RECENT_LIMIT": 1, "CONCEPT_HEAT_TOP": 0.02,
+            "W_CONCEPT_HEAT": 0.40, "W_RECENT_LIMIT": 0.30,
+            "W_LIQUIDITY": 0.20, "W_MARKET_CAP": 0.10,
+        }
+        self._regime_params["v64_concept_heat"] = {}
 
         # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
         self._select_fns["v39h"] = self._v39h_select
@@ -686,6 +787,19 @@ class StrategyAdapter:
             "REGIME_SIDEWAYS_ALLOC": 0.7,
             "REGIME_BEAR_ALLOC": 0.3,
         }
+
+        # ── v65_yesterday_limit: 昨日涨停打板（日频）──
+        self._select_fns["v65_yesterday_limit"] = self._v65_yesterday_limit_select
+        self._risk_params["v65_yesterday_limit"] = {
+            "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 1, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.20, "MAX_HOLDINGS": 5,
+            "MIN_STREAK": 2, "HIGH_OPEN_THRESHOLD": 0.02,
+            "CONCEPT_HEAT_TOP": 0.98,
+            "W_STREAK": 0.40, "W_CONCEPT_HEAT": 0.30,
+            "W_LIQUIDITY": 0.20, "W_HIGH_OPEN": 0.10,
+        }
+        self._regime_params["v65_yesterday_limit"] = {}
 
     # ── 统一选股接口 ──────────────────────────────────────────────
 
@@ -951,6 +1065,62 @@ class StrategyAdapter:
         return select_stocks_v61b(factors, date, close_panel, volume_panel, amount_panel,
                                   high_panel, low_panel, open_panel, current_holdings,
                                   merged_params, sold_recently=sold_recently)
+
+    def _v70_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v70 选股: 中盘域动量（100-500亿市值）"""
+        from scripts.strategies.v62_midcap_momentum import select_stocks_v70, calc_factors_v70
+        if factors is None:
+            factors = calc_factors_v70(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v70"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v70(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently)
+
+    def _v39g_sentiment_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                               high_panel, low_panel, open_panel, current_holdings, params,
+                               sold_recently=None):
+        """v39g_sentiment 选股: v39g + 舆情因子"""
+        from scripts.strategies.v39g_sentiment import select_stocks_v39g_sentiment, calc_factors_v39g_sentiment
+        if factors is None:
+            factors = calc_factors_v39g_sentiment(close_panel, volume_panel, amount_panel,
+                                                  high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v39g_sentiment"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v39g_sentiment(factors, date, current_holdings, merged_params,
+                                            sold_recently=sold_recently)
+
+    def _v63_dragon_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                           high_panel, low_panel, open_panel, current_holdings, params,
+                           sold_recently=None):
+        """v63_dragon_leader 选股: 龙头战法"""
+        from scripts.strategies.v63_dragon_leader import select_stocks_v63_dragon, calc_factors_v63_dragon
+        if factors is None:
+            factors = calc_factors_v63_dragon(close_panel, volume_panel, amount_panel,
+                                              high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v63_dragon_leader"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v63_dragon(factors, date, current_holdings, merged_params,
+                                        sold_recently=sold_recently)
+
+    def _v64_concept_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                            high_panel, low_panel, open_panel, current_holdings, params,
+                            sold_recently=None):
+        """v64_concept_heat 选股: 概念热度打板"""
+        from scripts.strategies.v64_concept_heat import select_stocks_v64_concept, calc_factors_v64_concept
+        if factors is None:
+            factors = calc_factors_v64_concept(close_panel, volume_panel, amount_panel,
+                                               high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v64_concept_heat"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v64_concept(factors, date, current_holdings, merged_params,
+                                         sold_recently=sold_recently)
 
     def _v39h_select(self, factors, date, close_panel, volume_panel, amount_panel,
                      high_panel, low_panel, open_panel, current_holdings, params,
@@ -1447,6 +1617,48 @@ class StrategyAdapter:
         return select_stocks_v56a(factors, date, current_holdings, merged_params,
                                   sold_recently=sold_recently, extra_data=None)
 
+    def _v65_yesterday_limit_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                                    high_panel, low_panel, open_panel, current_holdings, params,
+                                    sold_recently=None):
+        """v65_yesterday_limit 选股: 昨日涨停打板"""
+        from scripts.strategies.v65_yesterday_limit import select_stocks_v65_yesterday_limit, calc_factors_v65_yesterday_limit
+        if factors is None:
+            factors = calc_factors_v65_yesterday_limit(close_panel, volume_panel, amount_panel,
+                                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v65_yesterday_limit"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v65_yesterday_limit(factors, date, current_holdings, merged_params,
+                                                 sold_recently=sold_recently)
+
+    def _v66_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None):
+        """v66 选股: 连续两天涨停情绪因子（v39g + 两日涨停加分）"""
+        from scripts.strategies.v66_two_day_limit import select_stocks_v66, calc_factors_v66
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors_v66(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v66"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v66(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently)
+
+    def _v66_sentiment_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                               high_panel, low_panel, open_panel, current_holdings, params,
+                               sold_recently=None):
+        """v66_sentiment 选股: v66 + 情绪择时"""
+        from scripts.strategies.v66_sentiment import select_stocks_v66_sentiment, calc_factors_v66_sentiment
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors_v66_sentiment(close_panel, volume_panel, amount_panel,
+                                                 high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v66_sentiment"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v66_sentiment(factors, date, current_holdings, merged_params,
+                                           sold_recently=sold_recently)
+
 
 _adapter = None
 
@@ -1471,3 +1683,4 @@ def check_risk(strategy_name, state, date, price_data, **kwargs):
 def calc_regime(strategy_name, close_panel, date, **kwargs):
     """模块级便捷函数"""
     return get_adapter().calc_regime(strategy_name, close_panel, date, **kwargs)
+

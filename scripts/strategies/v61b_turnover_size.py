@@ -52,7 +52,11 @@ def calc_factors_v61b(close_panel, volume_panel, amount_panel, high_panel, low_p
             ranked = valid.rank(ascending=True, pct=True)
             scores[ranked.index] += ranked
 
-    return scores.sort_values(ascending=False)
+    result = scores.sort_values(ascending=False)
+    # 包装为 dict 以兼容 wf_runner 的 _slice_factors
+    if isinstance(result, pd.Series):
+        return {"v61b": result}
+    return result
 
 
 def select_stocks_v61b(factors, date, close_panel, volume_panel, amount_panel,
@@ -61,7 +65,13 @@ def select_stocks_v61b(factors, date, close_panel, volume_panel, amount_panel,
     p = params or DEFAULT_PARAMS
     n = p.get('MAX_HOLDINGS', 5)
 
-    candidates = factors.head(n * 2).index.tolist()
+    # 兼容 dict 和 Series 两种因子格式
+    if isinstance(factors, dict):
+        scores = list(factors.values())[0]
+    else:
+        scores = factors
+
+    candidates = scores.head(n * 2).index.tolist()
     held = set(current_holdings.keys()) if current_holdings else set()
     buy_list = [c for c in candidates if c not in held]
 

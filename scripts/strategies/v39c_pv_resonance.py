@@ -113,6 +113,12 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
     down_vol_sum = down_vol.rolling(10).sum()
     fund_flow = up_vol_sum / (down_vol_sum + eps)
 
+    # ── 情绪因子：连续两天涨停 ──
+    limit_threshold = 0.095
+    limit_up = (returns >= limit_threshold) & (returns <= 0.105)
+    yesterday_limit = limit_up.shift(1).fillna(False)
+    two_day_limit = (limit_up & yesterday_limit).astype(float)
+
     return {
         'mom_5': mom_5, 'gap_ratio': gap_ratio,
         'boll_w': boll_w, 'pv_corr_10': pv_corr_10, 'pv_corr_20': pv_corr_20,
@@ -120,6 +126,7 @@ def calc_factors(close_panel, volume_panel, amount_panel, high_panel, low_panel,
         'amount_5d': amount_5d, 'turnover_avg': turnover_avg,
         'size_factor': size_factor, 'illiq': illiq,
         'mom_quality': mom_quality, 'fund_flow': fund_flow,
+        'two_day_limit': two_day_limit,
     }
 
 

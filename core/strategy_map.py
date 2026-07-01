@@ -563,13 +563,13 @@ STRATEGY_MAP = {
         },
     },
 
-    # ── v66_sentiment: v66 + 情绪择时 ──
-    "v66_sentiment": {
+    # ── v67: v66 + 情绪择时 ──
+    "v67": {
         "mode": "custom",
-        "description": "v66_sentiment: v66 + 情绪择时（市场情绪>阈值时才交易）",
+        "description": "v67: v66 + 情绪择时（市场情绪>阈值时才交易）",
         "timing": "intraday",
-        "select_fn": "scripts.strategies.v66_sentiment.select_stocks_v66_sentiment",
-        "calc_factors_fn": "scripts.strategies.v66_sentiment.calc_factors_v66_sentiment",
+        "select_fn": "scripts.strategies.v67.select_stocks_v67",
+        "calc_factors_fn": "scripts.strategies.v67.calc_factors_v67",
         "params": {
             "STOP_LOSS": -0.05,
             "TAKE_PROFIT": 0.05,
@@ -589,8 +589,8 @@ STRATEGY_MAP = {
             "W_GAP": 0.04,
             "W_ILLIQ": 0.16,
             "W_TWO_DAY_LIMIT": 0.35,
-            "SENTIMENT_THRESHOLD": 5.0,
-            "SENTIMENT_WINDOW": 20,
+            "SENTIMENT_THRESHOLD": 2.0,
+            "SENTIMENT_WINDOW": 15,
         },
     },
 

@@ -700,9 +700,9 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v39c_pv_resonance import calc_factors
         return calc_factors(close_panel, volume_panel, amount_panel,
                            high_panel, low_panel, open_panel, params=None)
-    elif strategy_name == "v66_sentiment":
-        from scripts.strategies.v66_sentiment import calc_factors_v66_sentiment
-        return calc_factors_v66_sentiment(close_panel, volume_panel, amount_panel,
+    elif strategy_name == "v67":
+        from scripts.strategies.v67 import calc_factors_v67
+        return calc_factors_v67(close_panel, volume_panel, amount_panel,
                                           high_panel, low_panel, open_panel)
     # 未知策略返回空因子
     return None

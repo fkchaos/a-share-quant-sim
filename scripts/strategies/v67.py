@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-v66_sentiment: v66 + 情绪择时
+v67: v66 + 情绪择时
 基于v39g + 连续两天涨停选股因子 + 情绪择时
 市场情绪 > 阈值时才交易
 """
@@ -12,8 +12,8 @@ from scripts.strategies.v39g_optimized import calc_factors, _score_column, DEFAU
 DEFAULT_PARAMS = {
     **V39G_PARAMS,
     "W_TWO_DAY_LIMIT": 0.35,    # 连续两天涨停权重
-    "SENTIMENT_THRESHOLD": 5.0,  # 情绪阈值：连续两天涨停股票数的滚动均值
-    "SENTIMENT_WINDOW": 20,      # 情绪计算窗口
+    "SENTIMENT_THRESHOLD": 2.0,  # 情绪阈值：连续两天涨停股票数的滚动均值
+    "SENTIMENT_WINDOW": 15,      # 情绪计算窗口
 }
 
 # 重新分配权重，总和保持1.0
@@ -27,7 +27,7 @@ DEFAULT_PARAMS["W_ILLIQ"] = 0.16
 DEFAULT_PARAMS["W_TWO_DAY_LIMIT"] = 0.35
 
 
-def calc_factors_v66_sentiment(close_panel, volume_panel, amount_panel,
+def calc_factors_v67(close_panel, volume_panel, amount_panel,
                                high_panel=None, low_panel=None, open_panel=None,
                                extra_data=None):
     """计算v66因子 = v39g因子 + 两日涨停因子 + 情绪因子"""
@@ -47,7 +47,7 @@ def calc_factors_v66_sentiment(close_panel, volume_panel, amount_panel,
     return factors
 
 
-def select_stocks_v66_sentiment(factors, date, current_holdings=None, params=None,
+def select_stocks_v67(factors, date, current_holdings=None, params=None,
                                 sold_recently=None):
     """v66选股 + 情绪择时"""
     p = {**DEFAULT_PARAMS, **(params or {})}

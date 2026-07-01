@@ -412,9 +412,9 @@ class StrategyAdapter:
         }
         self._regime_params["v66"] = {}
 
-        # ── v66_sentiment: v66 + 情绪择时 ──
-        self._select_fns["v66_sentiment"] = self._v66_sentiment_select
-        self._risk_params["v66_sentiment"] = {
+        # ── v67: v66 + 情绪择时 ──
+        self._select_fns["v67"] = self._v67_select
+        self._risk_params["v67"] = {
             "STOP_LOSS": -0.05,
             "TAKE_PROFIT": 0.05,
             "HOLD_DAYS_MAX": 3,
@@ -433,10 +433,10 @@ class StrategyAdapter:
             "W_GAP": 0.04,
             "W_ILLIQ": 0.16,
             "W_TWO_DAY_LIMIT": 0.35,
-            "SENTIMENT_THRESHOLD": 5.0,  # 情绪阈值
-            "SENTIMENT_WINDOW": 20,      # 情绪窗口
+            "SENTIMENT_THRESHOLD": 2.0,  # 情绪阈值
+            "SENTIMENT_WINDOW": 15,      # 情绪窗口
         }
-        self._regime_params["v66_sentiment"] = {}
+        self._regime_params["v67"] = {}
 
         # ── v58a: 窄震出趋势（波动率压缩+放量突破）──
         self._select_fns["v58a"] = self._v58a_select
@@ -1670,18 +1670,18 @@ class StrategyAdapter:
         return select_stocks_v66(factors, date, current_holdings, merged_params,
                                   sold_recently=sold_recently)
 
-    def _v66_sentiment_select(self, factors, date, close_panel, volume_panel, amount_panel,
+    def _v67_select(self, factors, date, close_panel, volume_panel, amount_panel,
                                high_panel, low_panel, open_panel, current_holdings, params,
                                sold_recently=None):
-        """v66_sentiment 选股: v66 + 情绪择时"""
-        from scripts.strategies.v66_sentiment import select_stocks_v66_sentiment, calc_factors_v66_sentiment
+        """v67 选股: v66 + 情绪择时"""
+        from scripts.strategies.v67 import select_stocks_v67, calc_factors_v67
         if factors is None or "mom_5" not in factors:
-            factors = calc_factors_v66_sentiment(close_panel, volume_panel, amount_panel,
+            factors = calc_factors_v67(close_panel, volume_panel, amount_panel,
                                                  high_panel, low_panel, open_panel)
-        merged_params = dict(self._risk_params["v66_sentiment"])
+        merged_params = dict(self._risk_params["v67"])
         if params:
             merged_params.update(params)
-        return select_stocks_v66_sentiment(factors, date, current_holdings, merged_params,
+        return select_stocks_v67(factors, date, current_holdings, merged_params,
                                            sold_recently=sold_recently)
 
 

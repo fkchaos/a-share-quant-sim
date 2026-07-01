@@ -13,6 +13,10 @@ DEFAULT_PARAMS = {
     'STOP_LOSS': -0.08,
     'TAKE_PROFIT': 0.25,
     'HOLD_DAYS_MAX': 5,
+    # 情绪择时参数（cold模式）
+    'SENTIMENT_WINDOW': 0,       # 0=不启用情绪过滤
+    'SENTIMENT_THRESHOLD': 5.0,
+    'SENTIMENT_COLD_MODE': True, # True=cold(情绪高停止), False=hot(情绪低停止)
 }
 
 def load_data():
@@ -45,8 +49,15 @@ def load_data_with_range(start_date='2020-06-01', end_date='2026-06-29'):
     mcap = df.pivot(index='date', columns='code', values='market_cap')
     turn_5 = turnover.rolling(5, min_periods=3).mean()
 
+    # 情绪因子：连续两天涨停股票数
+    daily_ret = close.pct_change()
+    is_limit = ((daily_ret >= 0.095) & (daily_ret <= 0.105)).astype(float).fillna(0)
+    two_day_limit = (is_limit.shift(1).fillna(0) == 1) & (is_limit == 1)
+    daily_limit_count = two_day_limit.astype(float).sum(axis=1)
+
     print(f"    {close.shape[0]} days, {close.shape[1]} stocks")
-    return {'close': close, 'turnover': turnover, 'mcap': mcap, 'turn_5': turn_5}
+    return {'close': close, 'turnover': turnover, 'mcap': mcap, 'turn_5': turn_5,
+            'daily_limit_count': daily_limit_count}
 
 def calc_scores(date, data):
     """计算选股分数"""
@@ -69,13 +80,20 @@ def calc_scores(date, data):
                   if close.at[date, c] > 0 and turnover.at[date, c] > 0]
     return scores[valid_codes].sort_values(ascending=False)
 
-def run_fold(data, test_start, test_end, rebal, top_n, sl, tp, hold_max):
+def run_fold(data, test_start, test_end, rebal, top_n, sl, tp, hold_max,
+             sent_window=0, sent_thresh=5.0, cold_mode=True):
     close = data['close']
     turnover = data['turnover']
+    daily_limit_count = data.get('daily_limit_count')
     dates = sorted(close.index)
     test_dates = [d for d in dates if test_start <= d <= test_end]
     if len(test_dates) < 10:
         return None
+
+    # 预计算情绪序列
+    sentiment = None
+    if sent_window > 0 and daily_limit_count is not None:
+        sentiment = daily_limit_count.rolling(sent_window).mean()
 
     INIT_CASH = 200000
     cash = INIT_CASH
@@ -94,6 +112,16 @@ def run_fold(data, test_start, test_end, rebal, top_n, sl, tp, hold_max):
     def buy_new(date):
         """买入新股票直到满仓"""
         nonlocal cash
+
+        # 情绪过滤
+        if sentiment is not None and date in sentiment.index:
+            sent = sentiment.loc[date]
+            if not np.isnan(sent):
+                if cold_mode and sent >= sent_thresh:
+                    return  # cold模式: 情绪过高停止买入
+                elif not cold_mode and sent <= sent_thresh:
+                    return  # hot模式: 情绪过低停止买入
+
         scores = calc_scores(date, data)
         target = scores.head(top_n).index.tolist()
         
@@ -153,13 +181,16 @@ def run_fold(data, test_start, test_end, rebal, top_n, sl, tp, hold_max):
     daily_ret = nav.pct_change().dropna()
     sharpe = daily_ret.mean() / daily_ret.std() * np.sqrt(252) if daily_ret.std() > 0 else 0
     dd = (nav / nav.cummax() - 1).min() * 100
-    return {'total': total, 'sharpe': sharpe, 'dd': dd}
+    return {'total': total, 'sharpe': sharpe, 'dd': dd, 'nav': nav}
 
 def run_wf_overlay(train_days=252, test_days=126, step_days=63,
                    start_date='2021-01-01', end_date='2026-05-31',
-                   params=None):
+                   params=None, full=False):
     """
     标准WF回测接口，供wf_runner调用
+    
+    full=False (默认): WF切分回测
+    full=True: 全量连续回测（train/step忽略）
     
     返回标准结果格式：
     {
@@ -168,7 +199,6 @@ def run_wf_overlay(train_days=252, test_days=126, step_days=63,
         "dd": 最大回撤(%),
         "pos_rate": 正收益fold比例(%),
         "n_folds": fold数量,
-        "fold_results": [...]
     }
     """
     p = {**DEFAULT_PARAMS, **(params or {})}
@@ -186,20 +216,60 @@ def run_wf_overlay(train_days=252, test_days=126, step_days=63,
     sl = p['STOP_LOSS']
     tp = p['TAKE_PROFIT']
     hold_max = p['HOLD_DAYS_MAX']
+    sent_window = p.get('SENTIMENT_WINDOW', 0)
+    sent_thresh = p.get('SENTIMENT_THRESHOLD', 5.0)
+    cold_mode = p.get('SENTIMENT_COLD_MODE', True)
     
-    # 运行WF
+    if full:
+        # ── 全量连续回测 ──
+        print(f"[v61b overlay] 全量回测模式, {start_date} ~ {end_date}")
+        if sent_window > 0:
+            print(f"  情绪过滤: cold={cold_mode}, 窗口={sent_window}, 阈值={sent_thresh}")
+        test_s = dates[start_idx]
+        test_e = dates[-1]
+        r = run_fold(data, test_s, test_e, rebal, top_n, sl, tp, hold_max,
+                     sent_window, sent_thresh, cold_mode)
+        if r is None:
+            return {"total": 0, "sharpe": 0, "dd": 0, "pos_rate": 0, "n_folds": 0}
+        
+        # 分年统计
+        nav = r['nav']
+        print(f"\n--- 分年统计 ---")
+        for year in range(2021, 2027):
+            ym = nav.index.year == year
+            if ym.sum() == 0:
+                continue
+            yn = nav[ym]
+            if len(yn) < 2:
+                continue
+            yr = (yn.iloc[-1] / yn.iloc[0] - 1) * 100
+            yd = yn.pct_change().dropna()
+            ys = yd.mean() / yd.std() * np.sqrt(252) if yd.std() > 0 else 0
+            ydd = (yn / yn.cummax() - 1).min() * 100
+            print(f"  {year}: 收益={yr:+.1f}%, 夏普={ys:+.3f}, 回撤={ydd:.1f}%")
+        
+        return {
+            "total": round(r['total'], 2),
+            "sharpe": round(r['sharpe'], 3),
+            "dd": round(r['dd'], 1),
+            "pos_rate": 100.0 if r['sharpe'] > 0 else 0,
+            "n_folds": 1,
+        }
+    
+    # ── WF 切分回测 ──
     fold_results = []
     i = start_idx
     while i + train_days + test_days <= len(dates):
         test_s = dates[i + train_days]
         test_e = dates[min(i + train_days + test_days - 1, len(dates) - 1)]
-        r = run_fold(data, test_s, test_e, rebal, top_n, sl, tp, hold_max)
+        r = run_fold(data, test_s, test_e, rebal, top_n, sl, tp, hold_max,
+                     sent_window, sent_thresh, cold_mode)
         if r:
             fold_results.append(r)
         i += step_days
     
     if not fold_results:
-        return {"total": 0, "sharpe": 0, "dd": 0, "pos_rate": 0, "n_folds": 0, "fold_results": []}
+        return {"total": 0, "sharpe": 0, "dd": 0, "pos_rate": 0, "n_folds": 0}
     
     # 计算汇总指标
     avg_ret = np.mean([f['total'] for f in fold_results])

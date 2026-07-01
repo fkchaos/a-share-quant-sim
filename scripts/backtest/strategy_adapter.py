@@ -58,6 +58,9 @@ class StrategyAdapter:
                 "STOP_LOSS": -0.08,
                 "TAKE_PROFIT": 0.25,
                 "HOLD_DAYS_MAX": 5,
+                "SENTIMENT_WINDOW": 30,
+                "SENTIMENT_THRESHOLD": 5.0,
+                "SENTIMENT_COLD_MODE": True,
             }
         }
         

@@ -65,7 +65,8 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
             step_days=step_days,
             start_date=start_date,
             end_date=end_date,
-            params=overlay_params
+            params=overlay_params,
+            full=full
         )
         
         # 打印结果
@@ -703,6 +704,11 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
         from scripts.strategies.v66_sentiment import calc_factors_v66_sentiment
         return calc_factors_v66_sentiment(close_panel, volume_panel, amount_panel,
                                           high_panel, low_panel, open_panel)
+    # 未知策略返回空因子
+    return None
+
+
+def main():
     parser = argparse.ArgumentParser(description="通用 Walk-Forward 运行器 / 全量回测")
     parser.add_argument("--strategy", required=True, help="策略名 (v27)")
     parser.add_argument("--train", type=int, default=252, help="训练期天数 (默认: 252)")
@@ -733,3 +739,7 @@ def _get_etf_price(code, date):
     except Exception:
         pass
     return None
+
+
+if __name__ == '__main__':
+    main()

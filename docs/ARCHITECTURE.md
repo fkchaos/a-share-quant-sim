@@ -1,6 +1,6 @@
 # 系统架构文档
 
-> 最后更新：2026-06-27（v39g 切换、--pool 参数、16 folds WF）
+> 最后更新：2026-07-01（v61b overlay + 情绪择时 + wf_runner修复）
 
 ## 一、整体架构
 
@@ -113,7 +113,44 @@ a-share-quant-sim/
 
 **关键设计**：`account_runner.py` 和 `wf_runner.py` 都通过 `strategy_adapter` 调用选股+风控，确保回测和模拟盘逻辑一致。
 
-### 3.3 新增策略流程
+### 3.3 Overlay 机制（特殊策略扩展标准框架）
+
+部分策略（如 v61b）有特殊交易逻辑（调仓日判断、卖出即买、排名淘汰），无法用标准 `select()` / `risk_check()` 接口表达。Overlay 机制允许这些策略保留独立脚本，同时通过统一入口（`wf_runner` / `account_runner`）调用。
+
+**工作原理：**
+```
+wf_runner.py --strategy v61b --full
+  → 检测 adapter._overlay_scripts["v61b"]
+  → 动态导入 scripts.backtest.v61b_risk_scan
+  → 调用 run_wf_overlay(full=True, params={...})
+  → 外部脚本完成回测，返回标准结果格式
+```
+
+**配置位置：** `strategy_adapter.py` → `_overlay_scripts["v61b"]`
+```python
+{
+    "module": "scripts.backtest.v61b_risk_scan",
+    "entry_func": "run_wf_overlay",      # WF/全量回测入口
+    "select_func": "select_stocks",       # 模拟盘选股入口
+    "signal_func": "run_signal",          # 完整信号流程入口
+    "params": {
+        "REBALANCE_DAYS": 5,
+        "SENTIMENT_WINDOW": 30,           # 0=不启用情绪过滤
+        "SENTIMENT_THRESHOLD": 5.0,
+        "SENTIMENT_COLD_MODE": True,
+    }
+}
+```
+
+**支持模式：**
+- `full=False`（默认）：WF 切分回测，train/test/step 控制窗口
+- `full=True`：全量连续回测，跑完整个区间
+
+**已知问题（2026-07-01）：**
+- wf_runner.py 之前缺少 `main()` 和 `__main__` 入口，导致命令行运行无输出。已修复。
+- `_calc_factors()` 中存在死代码（return后的代码），已清理。
+
+### 3.4 新增策略流程
 
 1. 在 `scripts/strategies/` 写选股模块
 2. 在 `core/strategy_map.py` 注册（模拟盘）

@@ -7,8 +7,8 @@
 ## 项目概况
 
 - A股量化模拟盘，GitHub: fkchaos/a-share-quant-sim
-- 账户2 = v67 (v66+情绪择时, zz1800)，10万，空仓（2026-06-30 重置）
-- 账户1 = v61b，10万，空仓（2026-06-30 重置）
+- 账户2 = v68 (v67优化版, zz1800)，10万，运行中
+- 账户1 = v61b，10万，运行中
 - DB: data/quant_stocks.db + data/quant_accounts.db
 
 ---

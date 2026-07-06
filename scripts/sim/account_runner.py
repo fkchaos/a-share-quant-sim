@@ -156,18 +156,20 @@ def load_account(account_id, stale_days=30):
         if added:
             try:
                 from datetime import datetime as dt
-                from core.db import get_index_kline
                 buy_date = added[:10]
-                # 用中证800指数K线计算交易日天数
-                idx_kl = get_index_kline("sh000001")
-                if idx_kl:
-                    dates = sorted([r["date"] for r in idx_kl if r["volume"] > 0])
+                # 用上证指数K线计算交易日天数（sh000001在daily_kline表中）
+                import sqlite3
+                _conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), '..', 'data', 'quant_stocks.db'))
+                _rows = _conn.execute("SELECT date, volume FROM daily_kline WHERE code='sh000001'").fetchall()
+                _conn.close()
+                if _rows:
+                    dates = sorted([r[0] for r in _rows if r[1] > 0])
                     if buy_date in dates and str(dt.now().date()) in dates:
                         buy_idx = dates.index(buy_date)
                         today_idx = dates.index(str(dt.now().date()))
                         hd = max(0, today_idx - buy_idx)
                     else:
-                        # 回退到日历天数
+                        # 回退到日历天数（非交易日）
                         buy_dt = dt.strptime(buy_date, "%Y-%m-%d")
                         hd = max(0, (dt.now() - buy_dt).days)
                 else:
@@ -335,6 +337,7 @@ def is_trade_day(date_str):
 def run_signal(account_id, date, strategy_name=None):
     """信号生成：选股 + 风控，输出结构化 JSON"""
     import traceback, json
+    from core.db import get_stock_name_map
     t0 = time.time()
 
     try:
@@ -352,6 +355,9 @@ def run_signal(account_id, date, strategy_name=None):
 
         # 构建结构化输出
         state = load_account(account_id)
+        # 获取股票名称映射（补全策略未返回的名称）
+        name_map = get_stock_name_map()
+        
         result = {
             "type": "signal",
             "account_id": account_id,
@@ -364,15 +370,15 @@ def run_signal(account_id, date, strategy_name=None):
             "cash": state.cash,
             "holdings_count": len(state.holdings),
             "sells": [
-                {"code": s["code"], "name": s.get("name", ""), "shares": s.get("qty", 0), "reason": s.get("reason", ""), "pnl_pct": round(s.get("pnl", 0) * 100, 2)}
+                {"code": s["code"], "name": s.get("name") or name_map.get(s["code"], ""), "shares": s.get("qty", 0), "reason": s.get("reason", ""), "pnl_pct": round(s.get("pnl", 0) * 100, 2)}
                 for s in plan.get("sell_plan", [])
             ],
             "buys": [
-                {"code": b["code"], "name": b.get("name", ""), "shares": b.get("qty", 0), "price": b.get("price", 0), "target_amount": b.get("target_amount", 0)}
+                {"code": b["code"], "name": b.get("name") or name_map.get(b["code"], ""), "shares": b.get("qty", 0), "price": b.get("price", 0), "target_amount": b.get("target_amount", 0)}
                 for b in plan.get("buy_plan", [])
             ],
             "holds": [
-                {"code": h["code"], "name": h.get("name", ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0)}
+                {"code": h["code"], "name": h.get("name") or name_map.get(h["code"], ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0)}
                 for h in plan.get("hold_plan", [])
             ],
             "duration": round(time.time() - t0, 1),

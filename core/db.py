@@ -465,15 +465,33 @@ def get_account(account_id=1):
 
 
 def upsert_account(account_id=1, name="main", cash=200000, initial_capital=200000,
-                   strategy="", params=None):
+                   strategy=None, params=None):
+    """更新账户。strategy=None 时不覆盖已有值（防止 INSERT OR REPLACE 清空策略绑定）。"""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn("account") as conn:
-        conn.execute(
-            """INSERT OR REPLACE INTO account(id,name,cash,initial_capital,strategy,params_json,updated_at)
-               VALUES(?,?,?,?,?,?,?)""",
-            (account_id, name, cash, initial_capital, strategy,
-             json.dumps(params or {}),
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-        )
+        existing = conn.execute("SELECT id FROM account WHERE id=?", (account_id,)).fetchone()
+        if existing:
+            # 已存在 → 只更新传入的字段，不碰 strategy（除非显式传入）
+            sets = ["cash=?", "initial_capital=?", "updated_at=?"]
+            vals = [cash, initial_capital, now_str]
+            if strategy is not None:
+                sets.append("strategy=?")
+                vals.append(strategy)
+            if params is not None:
+                sets.append("params_json=?")
+                vals.append(json.dumps(params))
+            if name != "main":
+                sets.append("name=?")
+                vals.append(name)
+            vals.append(account_id)
+            conn.execute(f"UPDATE account SET {', '.join(sets)} WHERE id=?", vals)
+        else:
+            conn.execute(
+                """INSERT INTO account(id,name,cash,initial_capital,strategy,params_json,updated_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (account_id, name, cash, initial_capital, strategy or "",
+                 json.dumps(params or {}), now_str),
+            )
 
 
 def list_accounts():

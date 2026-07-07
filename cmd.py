@@ -363,7 +363,7 @@ def cmd_switch(args):
     if not confirm("确认切换?"):
         print("已取消"); return
 
-    with get_conn("accounts") as conn:
+    with get_conn("account") as conn:
         conn.execute("UPDATE account SET strategy=?, updated_at=datetime('now') WHERE id=?",
                      (strategy, aid))
     print(f"✅ 策略已切换为 {strategy}")

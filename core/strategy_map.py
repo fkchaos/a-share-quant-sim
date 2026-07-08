@@ -591,9 +591,42 @@ STRATEGY_MAP = {
             "W_TWO_DAY_LIMIT": 0.35,
             "SENTIMENT_THRESHOLD": 2.0,
             "SENTIMENT_WINDOW": 15,
+            "EXCLUDE_LIMIT_UP": True,  # 涨停过滤开关：True=排除涨停股，False=不排除
+        },
+    },
+    # ── v68: v67降低低流动性权重+加大动量权重 ──
+    "v68": {
+        "mode": "custom",
+        "description": "v68: v67基础上弱化低流动性偏好，强化动量驱动",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v68.select_stocks_v68",
+        "calc_factors_fn": "scripts.strategies.v68.calc_factors_v68",
+        "params": {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "W_MOM": 0.35,
+            "W_PV_CORR": 0.02,
+            "W_TURNOVER": 0.03,
+            "W_SIZE": 0.35,
+            "W_FUND_FLOW": 0.00,
+            "W_GAP": 0.00,
+            "W_ILLIQ": 0.05,
+            "W_RECENT_LIMIT_3D": 0.0,  # 新因子：3天内涨停过（默认0，待回测调优）
+            "SENTIMENT_THRESHOLD": 2.0,
+            "SENTIMENT_WINDOW": 15,
+            "EXCLUDE_LIMIT_UP": True,
         },
     },
 
+    # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
     # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
     "v39h": {
         "mode": "custom",

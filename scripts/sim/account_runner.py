@@ -37,7 +37,7 @@ import pandas as pd
 import numpy as np
 
 # 确保项目根目录在 path
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.account import PortfolioState, buy, sell, portfolio_value
 from core.config import TradingCosts
@@ -45,7 +45,7 @@ from core.db import get_kline, get_all_codes, get_tradeable_codes, get_account, 
 from core.strategy_map import load_strategy, list_strategy_names
 from scripts.backtest.strategy_adapter import get_adapter
 
-DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
+DATA_DIR = os.environ.get("BACKTEST_DATA_DIR", os.path.join(PROJECT_ROOT, "data"))
 PORTFOLIO_DIR = os.environ.get("PORTFOLIO_DIR", os.path.join(DATA_DIR, "portfolio"))
 os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
@@ -159,7 +159,7 @@ def load_account(account_id, stale_days=30):
                 buy_date = added[:10]
                 # 用上证指数K线计算交易日天数（sh000001在daily_kline表中）
                 import sqlite3
-                _conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), '..', 'data', 'quant_stocks.db'))
+                _conn = sqlite3.connect(os.path.join(DATA_DIR, 'quant_stocks.db'))
                 _rows = _conn.execute("SELECT date, volume FROM daily_kline WHERE code='sh000001'").fetchall()
                 _conn.close()
                 if _rows:

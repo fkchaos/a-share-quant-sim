@@ -27,9 +27,21 @@ DEFAULT_PARAMS["W_FUND_FLOW"] = 0.00   # 0.04→0，去掉
 def calc_factors_v68(close_panel, volume_panel, amount_panel,
                      high_panel=None, low_panel=None, open_panel=None,
                      extra_data=None):
-    """v68因子 = v67因子（复用v67的calc_factors）"""
-    return calc_factors_v67(close_panel, volume_panel, amount_panel,
+    """v68因子 = v67因子 + 3天内涨停因子"""
+    factors = calc_factors_v67(close_panel, volume_panel, amount_panel,
                             high_panel, low_panel, open_panel, extra_data)
+
+    # ── 新增：3天内涨停过（替代原来的连续两天涨停）──
+    # 涨停阈值
+    returns = close_panel.pct_change()
+    limit_threshold = 0.095
+    limit_up = (returns >= limit_threshold) & (returns <= 0.105)
+
+    # 3天内任一天涨停
+    recent_limit_3d = (limit_up.rolling(3, min_periods=1).sum() > 0).astype(float)
+    factors['recent_limit_3d'] = recent_limit_3d
+
+    return factors
 
 
 def select_stocks_v68(factors, date, current_holdings=None, params=None,
@@ -95,10 +107,10 @@ def select_stocks_v68(factors, date, current_holdings=None, params=None,
         ff_scores = _score_column(factors, date, 'fund_flow', clip_min=0.5, clip_max=3.0)
         scores += ff_scores.reindex(candidates).fillna(0) * p["W_FUND_FLOW"]
 
-    # 连续两天涨停加分
-    if p.get("W_TWO_DAY_LIMIT", 0) > 0 and 'two_day_limit' in factors:
-        tdl = factors['two_day_limit'].loc[date] if date in factors['two_day_limit'].index else pd.Series(0, index=candidates)
-        scores += tdl.reindex(candidates).fillna(0) * p["W_TWO_DAY_LIMIT"]
+    # 近3天涨停加分（替代原来的连续两天涨停）
+    if p.get("W_RECENT_LIMIT_3D", 0) > 0 and 'recent_limit_3d' in factors:
+        tdl = factors['recent_limit_3d'].loc[date] if date in factors['recent_limit_3d'].index else pd.Series(0, index=candidates)
+        scores += tdl.reindex(candidates).fillna(0) * p["W_RECENT_LIMIT_3D"]
 
     # 排序选择
     scores = scores.sort_values(ascending=False)

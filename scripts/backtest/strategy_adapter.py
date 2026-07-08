@@ -63,6 +63,22 @@ class StrategyAdapter:
                 "SENTIMENT_COLD_MODE": True,
             }
         }
+
+        # ── v73: ETF动量轮动（overlay模式）──
+        self._overlay_scripts["v73"] = {
+            "module": "scripts.backtest.v73_etf_wf",
+            "entry_func": "run_wf_overlay",
+            "signal_func": "run_signal",
+            "params": {
+                "STOP_LOSS": -0.05,
+                "TAKE_PROFIT": 0.15,
+                "HOLD_DAYS_MAX": 10,
+                "MOM_WINDOW": 25,
+                "MOM_MIN_SLOPE": 0.0,
+                "INDEX_MA_ENABLED": True,
+                "INDEX_MA_PERIOD": 20,
+            }
+        }
         
         # ── v27: 价量共振 ──
         self._select_fns["v27"] = self._v27_select
@@ -435,9 +451,54 @@ class StrategyAdapter:
             "W_TWO_DAY_LIMIT": 0.35,
             "SENTIMENT_THRESHOLD": 2.0,  # 情绪阈值
             "SENTIMENT_WINDOW": 15,      # 情绪窗口
+            "EXCLUDE_LIMIT_UP": True,   # 涨停过滤开关：True=排除涨停股，False=不排除
         }
         self._regime_params["v67"] = {}
+        # ── v68: v67降低低流动性权重+加大动量权重 ──
+        self._select_fns["v68"] = self._v68_select
+        self._risk_params["v68"] = {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.05,
+            "HOLD_DAYS_MAX": 3,
+            "HOLD_DAYS_EXTEND": 3,
+            "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "MAX_DAILY_BUY": 4,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "MOM_THRESHOLD": 0.03,
+            "PV_CORR_10_MIN": -0.5,
+            "W_MOM": 0.35,
+            "W_PV_CORR": 0.02,
+            "W_TURNOVER": 0.03,
+            "W_SIZE": 0.35,
+            "W_FUND_FLOW": 0.00,
+            "W_GAP": 0.00,
+            "W_ILLIQ": 0.15,
+            "W_TWO_DAY_LIMIT": 0.35,
+            "SENTIMENT_THRESHOLD": 2.0,
+            "SENTIMENT_WINDOW": 15,
+            "EXCLUDE_LIMIT_UP": True,
+        }
+        self._regime_params["v68"] = {}
 
+        # ── v69: 行业动量追涨 ──
+        self._select_fns["v69"] = self._v69_select
+        self._risk_params["v69"] = {
+            "STOP_LOSS": -0.06,
+            "TAKE_PROFIT": 0.12,
+            "HOLD_DAYS_MAX": 5,
+            "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.25,
+            "MAX_HOLDINGS": 5,
+            "EXCLUDE_LIMIT_UP": True,
+            "SENTIMENT_THRESHOLD": 20,
+        }
+        self._regime_params["v69"] = {}
+
+        # ── v58a: 窄震出趋势（波动率压缩+放量突破）──
         # ── v58a: 窄震出趋势（波动率压缩+放量突破）──
         self._select_fns["v58a"] = self._v58a_select
         self._risk_params["v58a"] = {
@@ -532,6 +593,39 @@ class StrategyAdapter:
             "W_MOM": 0.30, "W_QUALITY": 0.20, "W_LOW_VOL": 0.20, "W_REVERSAL": 0.30,
         }
         self._regime_params["v70"] = {}
+
+        # ── v71: 极端集中动量 ──
+        self._select_fns["v71"] = self._v71_select
+        self._risk_params["v71"] = {
+            "STOP_LOSS": -0.03, "TAKE_PROFIT": 0.20,
+            "HOLD_DAYS_MAX": 3, "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 5, "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "MAX_DAILY_BUY": 1, "MAX_POSITION": 0.40, "MAX_HOLDINGS": 3,
+            "EXCLUDE_LIMIT_UP": True, "SENTIMENT_THRESHOLD": 15,
+        }
+        self._regime_params["v71"] = {}
+
+
+        # ── v72: 首板低开修复 ──
+        self._select_fns["v72"] = self._v72_select
+        self._risk_params["v72"] = {
+            "STOP_LOSS": -0.03, "TAKE_PROFIT": 0.08,
+            "HOLD_DAYS_MAX": 3, "HOLD_DAYS_MIN": 1,
+            "MAX_DAILY_BUY": 1, "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "EXCLUDE_LIMIT_UP": True,
+        }
+        self._regime_params["v72"] = {}
+
+
+        # ── v73: ETF动量轮动 ──
+        self._select_fns["v73"] = self._v73_select
+        self._risk_params["v73"] = {
+            "STOP_LOSS": -0.05, "TAKE_PROFIT": 0.15,
+            "HOLD_DAYS_MAX": 10, "HOLD_DAYS_MIN": 1,
+            "MAX_DAILY_BUY": 1, "MAX_POSITION": 1.0, "MAX_HOLDINGS": 1,
+            "INDEX_MA_ENABLED": True,
+        }
+        self._regime_params["v73"] = {}
 
         # ── v39g_sentiment: v39g + 舆情因子 ──
         self._select_fns["v39g_sentiment"] = self._v39g_sentiment_select
@@ -1104,6 +1198,54 @@ class StrategyAdapter:
             merged_params.update(params)
         return select_stocks_v70(factors, date, current_holdings, merged_params,
                                   sold_recently=sold_recently)
+
+    def _v71_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v71 选股: 极端集中动量（Top1行业+1-2只强势股+指数MA）"""
+        from scripts.strategies.v71_extreme_momentum import select_stocks_v71, calc_factors_v71
+        if factors is None or "industry_momentum" not in factors:
+            factors = calc_factors_v71(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v71"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v71(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently,
+                                  close_panel=close_panel, high_panel=high_panel)
+
+
+    def _v72_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v72 选股: 首板低开修复"""
+        from scripts.strategies.v72_low_open_repair import select_stocks_v72, calc_factors_v72
+        if factors is None or "first_board" not in factors:
+            factors = calc_factors_v72(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v72"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v72(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently,
+                                  close_panel=close_panel, high_panel=high_panel,
+                                  open_panel=open_panel)
+
+
+    def _v73_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None):
+        """v73 选股: ETF动量轮动"""
+        from scripts.strategies.v73_etf_rotation import select_stocks_v73, calc_factors_v73
+        if factors is None or "etf_momentum" not in factors:
+            factors = calc_factors_v73(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v73"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v73(factors, date, current_holdings, merged_params,
+                                  sold_recently=sold_recently,
+                                  close_panel=close_panel, high_panel=high_panel)
 
     def _v39g_sentiment_select(self, factors, date, close_panel, volume_panel, amount_panel,
                                high_panel, low_panel, open_panel, current_holdings, params,
@@ -1682,7 +1824,38 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v67(factors, date, current_holdings, merged_params,
-                                           sold_recently=sold_recently)
+                                           sold_recently=sold_recently,
+                                           close_panel=close_panel, high_panel=high_panel)
+
+    def _v68_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                               high_panel, low_panel, open_panel, current_holdings, params,
+                               sold_recently=None):
+        """v68 选股: v67降低低流动性权重+加大动量权重"""
+        from scripts.strategies.v68 import select_stocks_v68, calc_factors_v68
+        if factors is None or "mom_5" not in factors:
+            factors = calc_factors_v68(close_panel, volume_panel, amount_panel,
+                                                 high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v68"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v68(factors, date, current_holdings, merged_params,
+                                           sold_recently=sold_recently,
+                                           close_panel=close_panel, high_panel=high_panel)
+
+    def _v69_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                               high_panel, low_panel, open_panel, current_holdings, params,
+                               sold_recently=None):
+        """v69 选股: 行业动量追涨"""
+        from scripts.strategies.v69_industry_momentum import select_stocks_v69, calc_factors_v69
+        if factors is None or "industry_momentum" not in factors:
+            factors = calc_factors_v69(close_panel, volume_panel, amount_panel,
+                                                 high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v69"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v69(factors, date, current_holdings, merged_params,
+                                           sold_recently=sold_recently,
+                                           close_panel=close_panel, high_panel=high_panel)
 
 
 _adapter = None

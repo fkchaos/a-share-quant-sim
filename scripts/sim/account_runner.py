@@ -639,7 +639,8 @@ def _run_signal_impl(account_id, date, strategy_name=None):
         if date in cp.index and code in cp.columns:
             price = cp.loc[date, code]
             if not pd.isna(price) and price > 0 and per_stock > 0:
-                qty = int(per_stock / price / 100) * 100
+                adj_price = price * (1 + COMMISSION_RATE + SLIPPAGE_RATE)
+                qty = int(per_stock / adj_price / 100) * 100
                 if qty == 0:
                     qty = 100  # 至少1手
         buy_plan.append({
@@ -861,11 +862,12 @@ def _run_execute_impl(account_id, date, strategy_name=None):
         else:
             details.append({"action": "SKIP", "code": code, "reason": "价格缺失或持仓不存在"})
 
-    # 后买
+    # 后买（完全按计划执行，不重算）
     buy_plan_map = {b['code']: b for b in plan.get('buy_plan', [])}
-    cands = [(b['code'], b.get('score', 0)) for b in plan.get('buy_plan', [])]
-    for code, score in cands:
-        if code in spot and code not in state.holdings and spot[code] > 0:
+    for item in plan.get('buy_plan', []):
+        code = item['code']
+        plan_qty = item.get('qty', 0)
+        if code in spot and code not in state.holdings and spot[code] > 0 and plan_qty > 0:
             price = spot[code]
 
             # 涨停检测：当前价 >= 前收盘价 * 1.095（主板10%涨停，留一点余量）
@@ -875,34 +877,22 @@ def _run_execute_impl(account_id, date, strategy_name=None):
                 if price >= limit_up_price:
                     is_limit_up = True
 
-            adj = price * (1 + COMMISSION_RATE + SLIPPAGE_RATE)
-            max_pos = params.get("MAX_POSITION", 0.30)
-            max_hold = params.get("MAX_HOLDINGS", 12)
-            max_buy = params.get("MAX_DAILY_BUY", 5)
-            available = state.cash - state.initial_capital * 0.03
-            available = available * regime_mult
-            if available <= 0:
-                break
-            nb = min(max_buy, max_hold - len(state.holdings))
-            if nb <= 0:
-                break
-            per_stock = min(available / nb, state.initial_capital * max_pos)
-            shares = int(per_stock / adj / 100) * 100
-            if shares <= 0 or shares * adj > state.cash:
-                details.append({"action": "SKIP", "code": code, "reason": "资金不足"})
+            # 直接用信号计划的股数
+            if plan_qty * price > state.cash:
+                details.append({"action": "SKIP", "code": code, "reason": f"资金不足(需{plan_qty*price:.0f},有{state.cash:.0f})"})
                 continue
-            state = buy(state, code, price, date, shares)
+            state = buy(state, code, price, date, plan_qty)
             bname = buy_plan_map.get(code, {}).get('name', code)
             buy_note = "涨停排队" if is_limit_up else ""
             details.append({
                 "action": "BUY",
                 "code": code,
                 "name": bname,
-                "shares": shares,
+                "shares": plan_qty,
                 "price": round(price, 2),
                 "note": buy_note,
             })
-        else:
+        elif plan_qty > 0:
             details.append({"action": "SKIP", "code": code, "reason": "价格缺失或已持仓"})
 
     save_account(state, account_id)

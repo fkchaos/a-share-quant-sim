@@ -498,9 +498,14 @@ def list_accounts():
     """返回所有账户列表 [{"id", "name", "strategy", "cash", "initial_capital"}, ...]"""
     with get_conn("account") as conn:
         rows = conn.execute(
-            "SELECT id, name, strategy, cash, initial_capital, updated_at FROM account ORDER BY id"
+            "SELECT id, name, strategy, cash, initial_capital, params_json, updated_at FROM account ORDER BY id"
         ).fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["params"] = json.loads(d.pop("params_json", "{}"))
+            result.append(d)
+        return result
 
 
 def create_account(account_id, name="", cash=100000, initial_capital=100000, strategy=""):
@@ -571,6 +576,15 @@ def delete_holding(account_id, code):
 def clear_holdings(account_id=1):
     with get_conn("holdings") as conn:
         conn.execute("DELETE FROM holdings WHERE account_id=?", (account_id,))
+
+
+def get_other_accounts_holdings(account_id):
+    """返回所有【其他】账户持有的股票代码集合（跨账户去重用）"""
+    with get_conn("holdings") as conn:
+        rows = conn.execute(
+            "SELECT code FROM holdings WHERE account_id != ?", (account_id,)
+        ).fetchall()
+        return {r["code"] for r in rows}
 
 
 # ── 交易记录 ───────────────────────────────────────────────

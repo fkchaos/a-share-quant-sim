@@ -626,6 +626,109 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v69: 行业动量追涨 ──
+    "v69": {
+        "mode": "custom",
+        "description": "v69: 行业动量追涨（申万行业分类+个股动量+情绪择时）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v69_industry_momentum.select_stocks_v69",
+        "calc_factors_fn": "scripts.strategies.v69_industry_momentum.calc_factors_v69",
+        "params": {
+            "STOP_LOSS": -0.06,
+            "TAKE_PROFIT": 0.12,
+            "HOLD_DAYS_MAX": 5,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.25,
+            "MAX_HOLDINGS": 5,
+            "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 7,
+            "HOLD_DAYS_EXTEND_PNL": 0.03,
+            "W_MOM_5D": 0.50,
+            "W_MOM_10D": 0.30,
+            "W_MOM_20D": 0.20,
+            "TOP_INDUSTRY_PCT": 0.20,
+            "TOP_INDUSTRIES": 3,
+            "W_STOCK_MOM": 0.50,
+            "W_STOCK_VOL": 0.30,
+            "W_STOCK_AMT": 0.20,
+            "STOCK_MOM_MIN": 0.02,
+            "SENTIMENT_ENABLED": True,
+            "SENTIMENT_THRESHOLD": 20,
+            "EXCLUDE_LIMIT_UP": True,
+            "MIN_AMOUNT": 5e7,
+        },
+    },
+    # ── v71: 极端集中动量 ──
+    "v71": {
+        "mode": "custom",
+        "description": "v71: 极端集中动量（Top1行业+1-2只强势股+指数MA）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v71_extreme_momentum.select_stocks_v71",
+        "calc_factors_fn": "scripts.strategies.v71_extreme_momentum.calc_factors_v71",
+        "params": {
+            "STOP_LOSS": -0.03,
+            "TAKE_PROFIT": 0.20,
+            "HOLD_DAYS_MAX": 3,
+            "MAX_DAILY_BUY": 1,
+            "MAX_POSITION": 0.40,
+            "MAX_HOLDINGS": 3,
+            "HOLD_DAYS_MIN": 1,
+            "HOLD_DAYS_EXTEND": 5,
+            "HOLD_DAYS_EXTEND_PNL": 0.08,
+            "TOP_INDUSTRIES": 1,
+            "STOCK_MOM_MIN": 0.05,
+            "SENTIMENT_ENABLED": True,
+            "SENTIMENT_THRESHOLD": 15,
+            "EXCLUDE_LIMIT_UP": True,
+        },
+    },
+
+
+    # ── v72: 首板低开修复 ──
+    "v72": {
+        "mode": "custom",
+        "description": "v72: 首板低开修复（昨日首板涨停+今日低开+修复交易）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v72_low_open_repair.select_stocks_v72",
+        "calc_factors_fn": "scripts.strategies.v72_low_open_repair.calc_factors_v72",
+        "params": {
+            "STOP_LOSS": -0.03,
+            "TAKE_PROFIT": 0.08,
+            "HOLD_DAYS_MAX": 3,
+            "MAX_DAILY_BUY": 1,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "HOLD_DAYS_MIN": 1,
+            "LOW_OPEN_MAX": 1.01,
+            "LOW_OPEN_MIN": 0.95,
+            "EXCLUDE_LIMIT_UP": True,
+            "MIN_AMOUNT": 5e7,
+        },
+    },
+
+
+    # ── v73: ETF动量轮动 ──
+    "v73": {
+        "mode": "custom",
+        "description": "v73: ETF动量轮动（25日对数回归×R²评分，每次持1只最强ETF）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v73_etf_rotation.select_stocks_v73",
+        "calc_factors_fn": "scripts.strategies.v73_etf_rotation.calc_factors_v73",
+        "params": {
+            "STOP_LOSS": -0.05,
+            "TAKE_PROFIT": 0.15,
+            "HOLD_DAYS_MAX": 10,
+            "MAX_HOLDINGS": 1,
+            "MAX_DAILY_BUY": 1,
+            "MAX_POSITION": 1.0,
+            "MOM_WINDOW": 25,
+            "MOM_MIN_R2": 0.3,
+            "INDEX_MA_ENABLED": True,
+            "INDEX_MA_PERIOD": 20,
+        },
+    },
+
+    # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
     # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
     # ── v39h: 动态 MOM_THRESHOLD（熊市自适应减仓）──
     "v39h": {

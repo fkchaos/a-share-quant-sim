@@ -318,7 +318,15 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
         print(f"  最终持仓:   {total_trades} 只")
         print(f"  最终净值:   {nav_s.iloc[-1]:.2f}")
 
-        return nav_s
+        # 统一返回DataFrame格式（与WF模式一致）
+        result_df = pd.DataFrame([{
+            "test_ret": total_ret,
+            "test_sharpe": sharpe,
+            "test_dd": max_dd,
+            "test_days": len(nav_s),
+            "fold": 0,
+        }])
+        return result_df
 
     print("\n[3/4] 运行 Walk-Forward...")
     t0 = time.time()
@@ -703,7 +711,27 @@ def _calc_factors(strategy_name, close_panel, volume_panel, amount_panel,
     elif strategy_name == "v67":
         from scripts.strategies.v67 import calc_factors_v67
         return calc_factors_v67(close_panel, volume_panel, amount_panel,
+                                         high_panel, low_panel, open_panel)
+    elif strategy_name == "v68":
+        from scripts.strategies.v68 import calc_factors_v68
+        return calc_factors_v68(close_panel, volume_panel, amount_panel,
                                           high_panel, low_panel, open_panel)
+    elif strategy_name == "v69":
+        from scripts.strategies.v69_industry_momentum import calc_factors_v69
+        return calc_factors_v69(close_panel, volume_panel, amount_panel,
+                                          high_panel, low_panel, open_panel)
+    elif strategy_name == "v71":
+        from scripts.strategies.v71_extreme_momentum import calc_factors_v71
+        return calc_factors_v71(close_panel, volume_panel, amount_panel,
+                                           high_panel, low_panel, open_panel)
+    elif strategy_name == "v72":
+        from scripts.strategies.v72_low_open_repair import calc_factors_v72
+        return calc_factors_v72(close_panel, volume_panel, amount_panel,
+                                           high_panel, low_panel, open_panel)
+    elif strategy_name == "v73":
+        from scripts.strategies.v73_etf_rotation import calc_factors_v73_aligned as calc_factors_v73
+        return calc_factors_v73(close_panel, volume_panel, amount_panel,
+                                           high_panel, low_panel, open_panel)
     # 未知策略返回空因子
     return None
 

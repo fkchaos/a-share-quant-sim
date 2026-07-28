@@ -438,8 +438,8 @@ def run_signal(account_id, date, params, state, panels):
     if is_rebalance_day or has_sell_signal:
         # 执行选股
         data = load_data_with_range(
-            (date - pd.Timedelta(days=365)).strftime('%Y-%m-%d'),
-            date.strftime('%Y-%m-%d')
+            (pd.Timestamp(date) - pd.Timedelta(days=365)).strftime('%Y-%m-%d'),
+            date if isinstance(date, str) else date.strftime('%Y-%m-%d')
         )
         scores = calc_scores(date, data)
         candidates = scores.head(top_n * 2).index.tolist()

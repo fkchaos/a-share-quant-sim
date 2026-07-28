@@ -375,7 +375,11 @@ def run_signal(account_id, date, strategy_name=None):
             ],
             "buys": [
                 {"code": b["code"], "name": b.get("name") or name_map.get(b["code"], ""), "shares": b.get("qty", 0), "price": b.get("price", 0), "target_amount": b.get("target_amount", 0)}
-                for b in plan.get("buy_plan", [])
+                for b in plan.get("buy_plan", []) if b.get("qty", 0) > 0
+            ],
+            "top_scores": [
+                {"code": c, "name": name_map.get(c, ""), "score": round(s, 4)}
+                for c, s in plan.get("top_scores_raw", [])[:10]
             ],
             "holds": [
                 {"code": h["code"], "name": h.get("name") or name_map.get(h["code"], ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0)}
@@ -457,7 +461,20 @@ def _run_signal_impl(account_id, date, strategy_name=None):
                 with open(plan_file, 'w') as f:
                     json.dump(plan, f, ensure_ascii=False, indent=2)
                 logger.info(f"[overlay] 计划已保存: {plan_file}")
-            
+
+                # overlay 模式补 top_scores（用空 holdings 选股，让已持仓也参与打分）
+                if not plan.get("top_scores_raw"):
+                    try:
+                        full_cands = adapter.select(strategy_name, None, date,
+                                                     panels[0], panels[1], panels[2],
+                                                     panels[3], panels[4], panels[5],
+                                                     current_holdings={},
+                                                     params=overlay_params)
+                        plan["top_scores_raw"] = [(c, s) for c, s in full_cands[:10]]
+                    except Exception as e:
+                        logger.warning(f"[overlay] top_scores 生成失败: {e}")
+                        plan["top_scores_raw"] = []
+
             return plan
     
     # ── 标准信号生成逻辑 ──
@@ -557,16 +574,34 @@ def _run_signal_impl(account_id, date, strategy_name=None):
                            cp, vp, ap, hp, lp, op,
                            current_holdings=state.holdings,
                            params=params)
+    # top_scores：用空 holdings 选股，让已持仓也参与打分
+    top_scores_raw = adapter.select(strategy_name, None, date,
+                                    cp, vp, ap, hp, lp, op,
+                                    current_holdings={},
+                                    params=params)
     # 市场状态识别 → 仓位乘数（用 strategy_adapter 统一接口）
     regime_label, regime_mult = adapter.calc_regime(strategy_name, cp, date, params)
     logger.info(f"市场状态: {regime_label}, 仓位乘数: {regime_mult}")
 
     sell_codes = [c for c, _, _ in to_sell]
 
+    # ── 跨账户持仓去重（开关：账户 params_json 中 CROSS_ACCOUNT_DEDUP=true）──
+    # 必须在截取前执行，这样排除后能自动补位后面的候选
+    if _acct_cfg and _acct_cfg.get("params", {}).get("CROSS_ACCOUNT_DEDUP", False):
+        from core.db import get_other_accounts_holdings
+        other_held = get_other_accounts_holdings(account_id)
+        if other_held:
+            before_cnt = len(cands)
+            cands = [(c, s) for c, s in cands if c not in other_held]
+            if before_cnt != len(cands):
+                logger.info(f"跨账户去重: {before_cnt} → {len(cands)} 只 (排除其他账户持仓)")
+
     # 限制选股数量：卖出后持仓 + 新股 <= MAX_HOLDINGS
     sell_codes_set = set(sell_codes)
     remaining_after_sell = {c for c in state.holdings if c not in sell_codes_set}
     max_new = max(0, params["MAX_HOLDINGS"] - len(remaining_after_sell))
+    # 保存原始选股得分（供 top_scores 输出）
+    top_scores_raw = list(cands)
     cands = cands[:max_new]
 
     # 估算每只买入预算（用于资金容量过滤和计算股数）
@@ -690,6 +725,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
         ],
         'buy_plan': buy_plan,
         'hold_plan': hold_plan,
+        'top_scores_raw': top_scores_raw,
         'timestamp': datetime.now().isoformat(),
     }
     plan_file = os.path.join(PORTFOLIO_DIR, f"trade_plan_{account_id}.json")
@@ -979,8 +1015,11 @@ def cmd_list_accounts():
     print("账户级配置:")
     for acct in accounts:
         cfg = acct.get("params", {})
-        ps = cfg.get("POSITION_SCALE", 1.0)
-        print(f"  账户{acct['id']}: POSITION_SCALE={ps:.2f}")
+        if cfg:
+            items = ", ".join(f"{k}={v}" for k, v in cfg.items())
+            print(f"  账户{acct['id']}: {items}")
+        else:
+            print(f"  账户{acct['id']}: (无)")
 
 
 def cmd_create_account(account_id, name, cash, strategy="", force=False, position_scale=1.0):
@@ -1025,6 +1064,37 @@ def cmd_switch_strategy(account_id, strategy):
         print(f"✅ 账户 {account_id} 策略已切换为: {strategy}")
     else:
         print(f"⚠️ 账户 {account_id} 不存在")
+
+
+def cmd_set_param(account_id, key, value):
+    """设置账户级参数（如 CROSS_ACCOUNT_DEDUP=true）"""
+    from core.db import get_account, get_conn
+    import json as _json
+    acct = get_account(account_id)
+    if not acct:
+        print(f"❌ 账户 {account_id} 不存在")
+        return
+    params = dict(acct.get("params", {}))
+    # 自动类型推断
+    if value.lower() == "true":
+        params[key] = True
+    elif value.lower() == "false":
+        params[key] = False
+    else:
+        try:
+            params[key] = int(value)
+        except ValueError:
+            try:
+                params[key] = float(value)
+            except ValueError:
+                params[key] = value
+    # 只更新 params_json，不动 cash/initial_capital
+    from datetime import datetime
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn("account") as conn:
+        conn.execute("UPDATE account SET params_json=?, updated_at=? WHERE id=?",
+                     (_json.dumps(params), now_str, account_id))
+    print(f"✅ 账户 {account_id} 参数已更新: {key}={params[key]}")
 
 
 # ── 入口 ─────────────────────────────────────────────────────────
@@ -1074,6 +1144,12 @@ if __name__ == "__main__":
     p_switch.add_argument("--account-id", type=int, required=True, help="账户ID")
     p_switch.add_argument("--strategy", type=str, required=True, help="目标策略名")
 
+    # set-param 子命令
+    p_setparam = subparsers.add_parser("set-param", help="设置账户级参数")
+    p_setparam.add_argument("--account-id", type=int, required=True, help="账户ID")
+    p_setparam.add_argument("--key", type=str, required=True, help="参数名（如 CROSS_ACCOUNT_DEDUP）")
+    p_setparam.add_argument("--value", type=str, required=True, help="参数值（true/false/数字/字符串）")
+
     # run 子命令（运行模式）
     p_run = subparsers.add_parser("run", help="运行信号/执行/报告")
     p_run.add_argument("mode", choices=["intraday_signal", "intraday_execute", "tail_signal", "tail_execute", "report_only"], help="运行模式")
@@ -1090,6 +1166,8 @@ if __name__ == "__main__":
         cmd_create_account(args.account_id, args.name, args.cash, args.strategy, args.force)
     elif args.subcommand == "switch":
         cmd_switch_strategy(args.account_id, args.strategy)
+    elif args.subcommand == "set-param":
+        cmd_set_param(args.account_id, args.key, args.value)
     elif args.subcommand == "run":
         if args.mode in ("intraday_signal", "tail_signal"):
             run_signal(args.account_id, args.date, args.strategy)

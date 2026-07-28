@@ -14,6 +14,7 @@ DEFAULT_PARAMS = {
     "W_TWO_DAY_LIMIT": 0.35,    # 连续两天涨停权重
     "SENTIMENT_THRESHOLD": 2.0,  # 情绪阈值：连续两天涨停股票数的滚动均值
     "SENTIMENT_WINDOW": 15,      # 情绪计算窗口
+    "EXCLUDE_LIMIT_UP": True,   # 涨停过滤开关：True=排除涨停股，False=不排除
 }
 
 # 重新分配权重，总和保持1.0
@@ -48,8 +49,8 @@ def calc_factors_v67(close_panel, volume_panel, amount_panel,
 
 
 def select_stocks_v67(factors, date, current_holdings=None, params=None,
-                                sold_recently=None):
-    """v66选股 + 情绪择时"""
+                                sold_recently=None, close_panel=None, high_panel=None):
+    """v66选股 + 情绪择时 + 涨停过滤"""
     p = {**DEFAULT_PARAMS, **(params or {})}
     
     # 情绪检查：市场情绪 > 阈值时才交易
@@ -78,6 +79,21 @@ def select_stocks_v67(factors, date, current_holdings=None, params=None,
         candidates = [c for c in candidates if c not in current_holdings]
     if sold_recently:
         candidates = [c for c in candidates if c not in sold_recently]
+    
+    # ===== 涨停过滤（新增） =====
+    if p.get("EXCLUDE_LIMIT_UP") and close_panel is not None and high_panel is not None:
+        if date in close_panel.index and date in high_panel.index:
+            close_today = close_panel.loc[date]
+            high_today = high_panel.loc[date]
+            # 排除当天涨停的股票：收盘价 == 最高价（涨停封板）
+            original_count = len(candidates)
+            candidates = [c for c in candidates 
+                         if c in close_today.index and c in high_today.index
+                         and not (close_today[c] == high_today[c])]
+            filtered_count = original_count - len(candidates)
+            if filtered_count > 0:
+                print(f"  [{date}] 涨停过滤: 排除 {filtered_count} 只")
+    
     if not candidates:
         return []
     

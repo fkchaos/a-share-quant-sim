@@ -62,6 +62,8 @@ def select_stocks_v68(factors, date, current_holdings=None, params=None,
     candidates = list(m5.index)
 
     # 筛选条件（同v67）
+    # 过滤科创板（688/689开头）
+    candidates = [c for c in candidates if not c.startswith(('688', '689'))]
     candidates = [c for c in candidates if m5[c] > p["MOM_THRESHOLD"]]
     if date in factors['pv_corr_10'].index:
         pv10 = factors['pv_corr_10'].loc[date]

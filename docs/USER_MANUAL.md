@@ -1,6 +1,6 @@
 # 用户手册
 
-> 最后更新：2026-06-29（第六章重写：新策略开发完整流程示例 + 回测上线步骤）
+> 最后更新：2026-07-29（双账户运行：账户1 v61b + 账户2 v68）
 
 零基础也能看懂。每条命令都可以直接复制粘贴。
 
@@ -102,23 +102,23 @@ sqlite3 data/quant_accounts.db "UPDATE account SET initial_capital=500000 WHERE 
 ## 三、回测引擎
 
 > **回测入口**：`python3 scripts/backtest/wf_runner.py --strategy <策略名>`
-> 当前运行策略：**v39g**（账户2，zz1800 股票池）
+> 当前运行策略：**v61b**（账户1）+ **v68**（账户2）
 > 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py），统一使用 wf_runner。
 
 ### 3.1 快速开始
 
 ```bash
 # 全量回测（不做 WF 切分，直接跑全部历史数据）
-python3 scripts/backtest/wf_runner.py --strategy v39g --full --pool zz1800
+python3 scripts/backtest/wf_runner.py --strategy v68 --full --pool zz1800
 
 # WF 回测（默认 16 folds，约 2-3 分钟）
-python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz1800
+python3 scripts/backtest/wf_runner.py --strategy v68 --pool zz1800
 
 # WF 回测（指定股票池）
-python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz800
+python3 scripts/backtest/wf_runner.py --strategy v68 --pool zz800
 
 # 指定回测区间
-python3 scripts/backtest/wf_runner.py --strategy v39g --start 2023-01-01 --end 2025-12-31
+python3 scripts/backtest/wf_runner.py --strategy v68 --start 2023-01-01 --end 2025-12-31
 
 # 参数扫描（调参用，很慢，日常回测不要用）
 # ⚠️ 以下扫描脚本已归档到 archive/，当前使用 strategy_map.py params 统一管理
@@ -139,7 +139,7 @@ wf_runner.py
 
 | 参数 | 默认值 | 说明 | 示例 |
 |------|--------|------|------|
-| `--strategy` | 必填 | 策略名（v39g） | `--strategy v39g` |
+| `--strategy` | 必填 | 策略名（v68） | `--strategy v68` |
 | `--pool` | 策略配置 | 股票池覆盖（zz800/zz1800） | `--pool zz1800` |
 | `--train` | 252 | 训练期天数 | `--train 252` |
 | `--test` | 252 | 测试期天数 | `--test 126` |
@@ -154,7 +154,7 @@ wf_runner.py
 
 ```bash
 # 查看最新的 WF 结果
-cat data/backtest_results/wf_v39i_latest.json
+cat data/backtest_results/wf_v68_latest.json
 
 # 查看所有回测结果目录
 ls -lt data/backtest_results/ | head -5
@@ -162,8 +162,8 @@ ls -lt data/backtest_results/ | head -5
 
 ### 3.5 单次回测需要多久？
 
-- v39i WF（4 folds, step=252）：约 **50 秒**
-- v39i 参数扫描：约 **40 分钟**（通过 strategy_map.py params 调参，无需独立扫描脚本）
+- v68 WF（16 folds）：约 **2-3 分钟**
+- v68 参数扫描：约 **40 分钟**（通过 strategy_map.py params 调参，无需独立扫描脚本）
 
 ### 3.6 模拟盘回测（account_runner.py）
 
@@ -189,25 +189,25 @@ Walk-Forward（WF）是一种过拟合检测方法。把历史数据切成 N 段
 ### 4.2 运行 WF
 
 ```bash
-# v39g 价量共振（默认 step=252，4 folds）
-python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz1800
+# v68 多因子评分（默认 step=252，4 folds）
+python3 scripts/backtest/wf_runner.py --strategy v68 --pool zz1800
 
-# v39g 更多 folds（step=63，16 folds，约 3 分钟）
-python3 scripts/backtest/wf_runner.py --strategy v39g --step 63 --pool zz1800
+# v68 更多 folds（step=63，16 folds，约 3 分钟）
+python3 scripts/backtest/wf_runner.py --strategy v68 --step 63 --pool zz1800
 ```
 
 ### 4.3 怎么看结果
 
 WF 结果直接打印在终端，汇总在最后：
 ```
-v39g WF 汇总 (16 folds)
-  测试期平均收益率: 8.31%
-  测试期平均夏普:   1.164
-  测试期平均回撤:   14.00%
-  正收益 fold:      12/16 (75%)
+v68 WF 汇总 (16 folds)
+  测试期平均收益率: +X.XX%
+  测试期平均夏普:   X.XXX
+  测试期平均回撤:   XX.XX%
+  正收益 fold:      XX/16 (XX%)
 
   WF 通过标准: 正收益 fold >= 60%, 夏普 > 0.5
-  ✅ WF 通过 (75% 正收益 fold, 夏普 1.164)
+  ✅/❌ WF 结果
 ```
 
 ### 4.4 判断标准
@@ -220,16 +220,15 @@ v39g WF 汇总 (16 folds)
 
 全部满足 = **WF 通过**，策略可以上线模拟盘。
 
-### 4.5 各策略 WF 结果参考（2026-06-27 数据）
+### 4.5 各策略 WF 结果参考（2026-07-29 数据）
 
 | 策略 | 股票池 | 平均收益率 | 夏普 | 回撤 | 正收益fold | 状态 |
 |------|--------|-----------|------|------|-----------|------|
-| v39g | zz1800 | +8.31% | 1.164 | 14.00% | 12/16(75%) | ✅ WF通过 |
-| v39i | zz800 | — | 0.708 | 22.96% | 14/16(87.5%) | ✅ WF通过 |
-| v39i | zz1800 | — | 0.620 | 23.08% | 10/16(62.5%) | ✅ WF通过 |
-| v39g | zz800 | — | 0.308 | 15.41% | 12/16(75%) | ❌ 夏普不足 |
+| v61b | zz1800 | — | — | — | — | ✅ 运行中（账户1） |
+| v68 | zz1800 | — | — | — | — | ✅ 运行中（账户2） |
+| v39g | zz1800 | +8.31% | 1.164 | 14.00% | 12/16(75%) | 🔬 参考（已被 v68 替代） |
 
-**当前运行**：账户2 = v39g（zz1800），全量回测 +66.70%/夏普0.818
+**当前运行**：账户1 = v61b（低换手小票，10万），账户2 = v68（多因子评分，10万）
 
 ---
 
@@ -242,29 +241,41 @@ v39g WF 汇总 (16 folds)
 所有账户统一通过 `account_runner.py run` 操作，策略由 DB 自动读取，不需要每次指定 `--strategy`：
 
 ```bash
-# 信号生成（自动读取账户绑定的策略）
+# 账户1（v61b）信号生成
+python scripts/sim/account_runner.py run --account-id 1 intraday_signal
+
+# 账户2（v68）信号生成
 python scripts/sim/account_runner.py run --account-id 2 intraday_signal
 
-# 执行交易
+# 账户1（v61b）执行交易
+python scripts/sim/account_runner.py run --account-id 1 intraday_execute
+
+# 账户2（v68）执行交易
 python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 
 # 收盘报告
+python scripts/sim/account_runner.py run --account-id 1 report_only
 python scripts/sim/account_runner.py run --account-id 2 report_only
 
 # 临时指定策略（覆盖绑定，用于测试）
-python scripts/sim/account_runner.py run --account-id 2 --strategy v39g intraday_signal
+python scripts/sim/account_runner.py run --account-id 2 --strategy v68 intraday_signal
 ```
 
-### 5.2 账户1：v11b（⏸️ 已暂停）
+### 5.2 账户1：v61b（✅ 运行中）
+
+低换手小票策略，10万初始资金。
 
 ```bash
 python scripts/sim/account_runner.py run --account-id 1 intraday_signal
+python scripts/sim/account_runner.py run --account-id 1 intraday_execute
 python scripts/sim/account_runner.py run --account-id 1 report_only
 ```
 
-### 5.3 账户2：v39g（✅ 运行中）
+**v61b 关键参数**：STOP_LOSS=-8%, TAKE_PROFIT=+25%, HOLD_DAYS_MAX=5, MAX_POSITION=0.25, MAX_HOLDINGS=5
 
-当前绑定策略 **v39g**（价量共振 + 短持快出 + 重小市值，zz1800 股票池，WF 夏普 1.164）：
+### 5.3 账户2：v68（✅ 运行中）
+
+多因子评分策略（动量+illiq+size），10万初始资金。
 
 ```bash
 # 上午出信号
@@ -277,7 +288,7 @@ python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 python scripts/sim/account_runner.py run --account-id 2 report_only
 ```
 
-**v39g 关键参数**：HOLD_DAYS_MAX=3, TAKE_PROFIT=5%, MAX_DAILY_BUY=4, MAX_POSITION=0.20, W_SIZE=0.40
+**v68 关键参数**：STOP_LOSS=-5%, TAKE_PROFIT=+5%, HOLD_DAYS_MAX=3, MAX_DAILY_BUY=4, MAX_POSITION=0.2, MAX_HOLDINGS=5, W_MOM=0.35, W_ILLIQ=0.15, W_SIZE=0.35
 
 ### 5.4 账户3：v20c（❌ 已退役）
 
@@ -585,9 +596,9 @@ v57a_my_strategy.py  →  strategy_map.py   →  strategy_adapter.py  →  wf_ru
 
 | 策略 | 账户 | 参数位置 |
 |------|------|---------|
-| v39i | 账户2（运行中） | `strategy_map.py` → `STRATEGY_MAP["v39i"]["params"]` |
-| v44 | 参考（高夏普） | `strategy_map.py` → `STRATEGY_MAP["v44"]["params"]` |
-| v11b | 账户1（暂停） | `strategy_map.py` → `STRATEGY_MAP["v11b"]["params"]` |
+| v61b | 账户1（运行中） | `strategy_map.py` → `STRATEGY_MAP["v61b"]["params"]` |
+| v68 | 账户2（运行中） | `strategy_map.py` → `STRATEGY_MAP["v68"]["params"]` |
+| v39g | 参考（已被 v68 替代） | `strategy_map.py` → `STRATEGY_MAP["v39g"]["params"]` |
 | 回测通用 | — | `core/config.py` → `CONFIG` 字典（因子权重、交易成本等） |
 
 ### 7.2 常用参数说明
@@ -607,26 +618,19 @@ v57a_my_strategy.py  →  strategy_map.py   →  strategy_adapter.py  →  wf_ru
 | `regime_sideways_alloc` | 震荡市可用资金比例 | 0.5 ~ 0.8 | strategy_map params |
 | `regime_bear_alloc` | 熊市可用资金比例 | 0.1 ~ 0.5 | strategy_map params |
 
-### 7.3 v39i 当前默认参数参考（strategy_map.py）
+### 7.3 v68 当前默认参数参考（strategy_map.py）
 
 ```python
-# core/strategy_map.py → STRATEGY_MAP["v39i"]["params"]
+# core/strategy_map.py → STRATEGY_MAP["v68"]["params"]
 STOP_LOSS            = -0.05    # 止损 -5%
-TAKE_PROFIT          = 0.10     # 止盈 +10%
-MAX_HOLDINGS         = 8        # 最大持仓 8 只
-MAX_DAILY_BUY        = 3        # 每日最多买 3 只
-MAX_POSITION         = 0.125    # 单只最大仓位 12.5%
-HOLD_DAYS_MAX        = 5        # 最大持仓天数 5
-HOLD_DAYS_EXTEND     = 10       # 浮盈延长最大天数
-HOLD_DAYS_EXTEND_PNL = 0.03     # 浮盈延长触发阈值 3%
-MOM_THRESHOLD        = 0.05     # 动量阈值 5%
-W_MOM                = 0.15     # 动量因子权重 15%
-W_SIZE               = 0.30     # 规模因子权重 30%
-W_ILLIQ              = 0.20     # 非流动性因子权重 20%
-W_TURNOVER           = 0.15     # 换手率因子权重 15%
-W_VOLATILITY         = 0.10     # 波动率因子权重 10%
-W_PRICE              = 0.05     # 价格因子权重 5%
-W_MOMENTUM_3M        = 0.05     # 3月动量因子权重 5%
+TAKE_PROFIT          = 0.05     # 止盈 +5%
+MAX_HOLDINGS         = 5        # 最大持仓 5 只
+MAX_DAILY_BUY        = 4        # 每日最多买 4 只
+MAX_POSITION         = 0.20     # 单只最大仓位 20%
+HOLD_DAYS_MAX        = 3        # 最大持仓天数 3
+W_MOM                = 0.35     # 动量因子权重 35%
+W_SIZE               = 0.35     # 规模因子权重 35%
+W_ILLIQ              = 0.15     # 非流动性因子权重 15%
 ```
 
 ---
@@ -646,8 +650,8 @@ W_MOMENTUM_3M        = 0.05     # 3月动量因子权重 5%
 
 ```bash
 cd /root/a-share-quant-sim
-python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
-python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
+python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
 ```
 
 > 💡 如果报 `No module named 'pandas'`，说明当前环境的 Python 没装依赖。
@@ -675,17 +679,19 @@ hermes cron pause <job_id>
 hermes cron resume <job_id>
 ```
 
-**当前任务清单（已启用 — 策略 v39g）：**
+**当前任务清单（已启用 — 账户1 v61b + 账户2 v68）：**
 
 | 任务 | 时间 | Job ID | 策略 |
 |------|------|--------|------|
 | 🟢 数据更新-上午 | 11:31 工作日 | `8ebcb1e20cf1` | — |
 | 🟢 数据更新-下午 | 15:05 工作日 | `b530aff8cbb4` | — |
-| 🟢 账户2-上午信号 | 11:45 工作日 | `6ef77c65f34c` | v39g |
-| 🟢 账户2-下午执行 | 13:00 工作日 | `b0ba5f428eb5` | v39g |
+| 🟢 账户1-上午信号 | 11:45 工作日 | `d09a4fdbe506` | v61b |
+| 🟢 账户1-下午执行 | 13:00 工作日 | `050969e9b685` | v61b |
+| 🟢 账户2-上午信号 | 11:45 工作日 | `6ef77c65f34c` | v68 |
+| 🟢 账户2-下午执行 | 13:00 工作日 | `b0ba5f428eb5` | v68 |
 | 🟢 收盘报告 | 15:30 工作日 | `b6e0ef652f31` | — |
 
-**已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
+**已暂停任务：** 账户3 尾盘信号/执行(v20c)、Cron监控-巡检/心跳、每日记忆整理
 
 **执行路径说明（两种环境 Case by Case）：**
 
@@ -715,12 +721,17 @@ crontab -e
 31 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update >> data/portfolio/update.log 2>&1
 5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update >> data/portfolio/update.log 2>&1
 
-# 账户2 信号+执行
-45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2 >> data/portfolio/account_runner.log 2>&1
-0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2 >> data/portfolio/account_runner.log 2>&1
+# 账户1（v61b）信号+执行
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1 >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 1 >> data/portfolio/account_runner.log 2>&1
+
+# 账户2（v68）信号+执行
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2 >> data/portfolio/account_runner.log 2>&1
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2 >> data/portfolio/account_runner.log 2>&1
 
 # 收盘报告
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2 >> data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1 >> data/portfolio/account_runner.log 2>&1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2 >> data/portfolio/account_runner.log 2>&1
 ```
 
 > 注意：非 Agent 用户不需要 venv 完整路径，`python3` 直接可用（前提是 `pip install -e .` 已安装依赖）。
@@ -1006,11 +1017,11 @@ python3 scripts/sim/account_runner.py run --account-id <id> --strategy my_strate
 ### 场景 2：改个参数看效果
 
 ```bash
-# 修改 v39g 的止盈从 5% 改为 8%
-# 编辑 core/strategy_map.py → STRATEGY_MAP["v39g"]["params"]["TAKE_PROFIT"] = 0.08
+# 修改 v68 的止盈从 5% 改为 8%
+# 编辑 core/strategy_map.py → STRATEGY_MAP["v68"]["params"]["TAKE_PROFIT"] = 0.08
 
 # 跑回测
-python3 scripts/backtest/wf_runner.py --strategy v39g --pool zz1800
+python3 scripts/backtest/wf_runner.py --strategy v68 --pool zz1800
 
 # 对比结果（看终端输出汇总行）
 ```

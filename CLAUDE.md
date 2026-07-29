@@ -7,9 +7,34 @@
 ## 项目概况
 
 - A股量化模拟盘，GitHub: fkchaos/a-share-quant-sim
-- 账户2 = v68 (v67优化版, zz1800)，10万，运行中
-- 账户1 = v61b，10万，运行中
+- 账户1 = v61b（低换手小票，overlay模式，REBALANCE_DAYS=5，每只股票独立计算调仓日），10万，运行中
+- 账户2 = v68（v67优化版，W_MOM=0.35/W_ILLIQ=0.15/W_SIZE=0.35，情绪择时），10万，运行中
+- 股票池：zz1800
 - DB: data/quant_stocks.db + data/quant_accounts.db
+
+### 当前策略参数
+
+| 参数 | v61b（账户1） | v68（账户2） | v39g（基准） |
+|------|--------------|-------------|-------------|
+| STOP_LOSS | -0.08 | -0.05 | — |
+| TAKE_PROFIT | 0.25 | 0.05 | — |
+| HOLD_DAYS_MAX | 5 | 3 | — |
+| MAX_DAILY_BUY | 5 | 4 | — |
+| MAX_POSITION | 0.25 | 0.2 | — |
+| MAX_HOLDINGS | 5 | 5 | — |
+| REBALANCE_DAYS | 5 | — | — |
+| W_MOM | — | 0.35 | 0.1 |
+| W_ILLIQ | — | 0.15 | 0.2 |
+| W_SIZE | — | 0.35 | 0.4 |
+| SENTIMENT_THRESHOLD | — | 2.0 | — |
+| SENTIMENT_WINDOW | — | 15 | — |
+
+### 回测/WF 结果
+
+| 策略 | 全量回测收益 | 年化 | Sharpe | 回撤 | WF 收益/fold | WF Sharpe | 正fold率 |
+|------|------------|------|--------|------|-------------|-----------|---------|
+| v61b | +935% | 73.81% | 1.551 | -33.8% | +31.60% | 2.152 | 87.5% |
+| v68 | +152.4% | — | 0.675 | -28.3% | +10.08% | 1.429 | 81% |
 
 ---
 
@@ -79,22 +104,35 @@
 
 ```
 core/           — 共享引擎（account, db, strategy_map, factors）
-scripts/strategies/ — 每个策略一个文件（v39g_optimized.py, v58a_breakout.py, ...）
-scripts/backtest/   — WF框架（wf_runner.py, strategy_adapter.py）
+scripts/strategies/ — 策略文件：
+  - v61_turnover_size.py      # v61b基础（低换手小票因子）
+  - v61b_turnover_size.py     # v61b叠加信号
+  - v68.py                    # v68（v67优化版，情绪择时）
+  - v39g_optimized.py         # v39g基准策略
+  - v39c_pv_resonance.py      # v39c-g/i共用因子
+  - v58a_breakout.py          # 突破策略
+  - ...（更多见 scripts/strategies/）
+scripts/backtest/   — WF框架：
+  - wf_runner.py              # Walk-Forward运行器 + --full全量回测
+  - strategy_adapter.py       # 策略适配器（选股+风控，overlay注册）
+  - v61b_risk_scan.py         # v61b overlay信号/回测入口
 scripts/sim/        — 模拟盘执行（account_runner.py）
-scripts/tools/      — 工具（format_daily_data.py, IC分析脚本）
+scripts/tools/      — 工具（init_project.py, update_daily_data_async.py, format_report.py）
 docs/               — 正式文档
-data/               — SQLite 数据库
+data/               — SQLite 数据库（quant_stocks.db + quant_accounts.db）
 alpha-research/     — 因子研究（独立目录，外部研究工具，不移植代码）
 ```
 
 ## 实验编号规则
 
-- v39x: 基线策略系列
+- v39x: 基线策略系列（v39g为标准基准）
 - v40-55x: 历史实验
 - v58x: 外部策略验证（BigQuant/短线策略）
 - v59x: Alpha158/Alpha191 新算子验证
 - v60x: 中性化/优化方向
+- v61x: 低换手小票系列（v61b为当前账户1策略）
+- v62-68x: 中短线策略探索（v68为当前账户2策略）
+- v69+: ETF轮动/行业动量等新方向
 - 所有有价值的实验方向对应一个 todo 项
 
 ## 汇报风格

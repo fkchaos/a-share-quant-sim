@@ -1,13 +1,13 @@
 # 系统架构文档
 
-> 最后更新：2026-07-01（v61b overlay + 情绪择时 + wf_runner修复）
+> 最后更新：2026-07-29（v61b + v68 双账户运行）
 
 ## 一、整体架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     cron 调度层（6个任务）                     │
-│  账户1(v11b,暂停)  账户2(v39g,运行中)  收盘报告                 │
+│                     cron 调度层（8个任务）                     │
+│  账户1(v61b)  账户2(v68)  数据更新  收盘报告                    │
 └──────────────┬──────────────────────────┬───────────────────┘
                │                          │
                ▼                          ▼
@@ -55,14 +55,17 @@ a-share-quant-sim/
 │   │   └── account_runner.py    # 统一入口（信号/执行/报告）
 │   │
 │   ├── strategies/          # 选股逻辑（活跃）
-│   │   ├── v39c_pv_resonance.py  # v39c-g/i 共用因子计算
-│   │   ├── v39g 参数: HOLD=3, TP=5%, W_SIZE=0.40（⭐ 当前运行）
-│   │   ├── v39i_optimized.py    # v39i 动态MOM_THRESHOLD
+│   │   ├── v61_turnover_size.py      # v61b基础（低换手小票因子）
+│   │   ├── v61b_turnover_size.py     # v61b叠加信号（⭐ 账户1）
+│   │   ├── v68.py                    # v68（v67优化版，情绪择时，⭐ 账户2）
+│   │   ├── v39g_optimized.py         # v39g基准策略（W_MOM=0.1, W_SIZE=0.4）
+│   │   ├── v39c_pv_resonance.py      # v39c-g/i 共用因子计算
 │   │   └── ...
 │   │
 │   ├── backtest/            # 回测框架
 │   │   ├── wf_runner.py         # Walk-Forward 运行器 + 全量回测（--full）
-│   │   ├── strategy_adapter.py  # 策略适配器（选股+风控）
+│   │   ├── strategy_adapter.py  # 策略适配器（选股+风控，overlay注册）
+│   │   ├── v61b_risk_scan.py    # v61b overlay信号/回测入口
 │   │   └── sweep_v27_*.py       # 参数扫描脚本（调参用）
 │   │
 │   └── tools/               # 工具脚本
@@ -104,7 +107,7 @@ a-share-quant-sim/
 `core/strategy_map.py` 是模拟盘策略的注册中心，策略名 → 选股函数 + 风控参数 + 股票池（pool字段）。
 
 每个策略通过 `pool` 字段指定股票池：
-- `'zz800'`（默认）— 中证800范围
+- `'zz1800'`（默认）— 中证1800范围
 - `'full_a'` — 全A范围（如 v43）
 
 ### 3.2 strategy_adapter（回测+模拟盘统一接口）
@@ -135,7 +138,13 @@ wf_runner.py --strategy v61b --full
     "signal_func": "run_signal",          # 完整信号流程入口
     "params": {
         "REBALANCE_DAYS": 5,
-        "SENTIMENT_WINDOW": 30,           # 0=不启用情绪过滤
+        "STOP_LOSS": -0.08,
+        "TAKE_PROFIT": 0.25,
+        "HOLD_DAYS_MAX": 5,
+        "MAX_DAILY_BUY": 5,
+        "MAX_POSITION": 0.25,
+        "MAX_HOLDINGS": 5,
+        "SENTIMENT_WINDOW": 0,            # 0=不启用情绪过滤
         "SENTIMENT_THRESHOLD": 5.0,
         "SENTIMENT_COLD_MODE": True,
     }
@@ -146,7 +155,7 @@ wf_runner.py --strategy v61b --full
 - `full=False`（默认）：WF 切分回测，train/test/step 控制窗口
 - `full=True`：全量连续回测，跑完整个区间
 
-**已知问题（2026-07-01）：**
+**已知问题（2026-07-29）：**
 - wf_runner.py 之前缺少 `main()` 和 `__main__` 入口，导致命令行运行无输出。已修复。
 - `_calc_factors()` 中存在死代码（return后的代码），已清理。
 
@@ -187,10 +196,10 @@ cron → account_runner.py --strategy v27 intraday_signal
 账户存储在 `quant_accounts.db` 的 `account` 表中，通过 CLI 动态管理：
 
 ```bash
-python scripts/sim/account_runner.py create --account-id 1 --name "v11b账户" --cash 200000 --strategy v11b
-python scripts/sim/account_runner.py create --account-id 2 --name "v27账户" --cash 200000 --strategy v27 --position-scale 0.8
+python scripts/sim/account_runner.py create --account-id 1 --name "v61b账户" --cash 100000 --strategy v61b
+python scripts/sim/account_runner.py create --account-id 2 --name "v68账户" --cash 100000 --strategy v68
 python scripts/sim/account_runner.py list    # 查看所有账户及配置
-python scripts/sim/account_runner.py switch --account-id 2 --strategy v35  # 切换策略
+python scripts/sim/account_runner.py switch --account-id 2 --strategy v68  # 切换策略
 ```
 
 每个账户独立绑定一个策略，拥有独立的现金、持仓和交易记录。`POSITION_SCALE` 等账户级配置存于 `params_json` 字段。
@@ -203,7 +212,7 @@ SQLite 双库分离，`core/db.py` 统一管理连接：
 
 | 数据库 | 表 | 内容 |
 |--------|-----|------|
-| `data/quant_stocks.db` | `stock_pool` | 股票池（中证800成分股） |
+| `data/quant_stocks.db` | `stock_pool` | 股票池（中证1800成分股） |
 | | `daily_kline` | 日K线（所有股票+指数） |
 | | `index_kline` | 指数K线（上证/中证500等） |
 | | `indicators` | 技术指标 |
@@ -237,12 +246,21 @@ account_runner.py → quant_accounts.db (交易记录)
 ### 路径 A：非 Agent 用户（系统 crontab）
 
 ```cron
-# 管道：执行 → format_report.py 格式化 → 终端 stdout
-45 11 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
-0 13 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
-30 15 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
+# 数据更新
 31 11 * * 1-5 python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 5 15 * * 1-5 python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
+
+# 账户1(v61b) - overlay模式，直接运行signal
+45 11 * * 1-5 python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
+0 13 * * 1-5 python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 1
+
+# 账户2(v68) - 标准策略，switch && run
+50 11 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+5 13 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
+
+# 收盘报告
+30 15 * * 1-5 python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
+31 15 * * 1-5 python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
 ```
 
 ### 路径 B：Agent 用户（Hermes cron）
@@ -250,11 +268,13 @@ account_runner.py → quant_accounts.db (交易记录)
 | 任务 | 时间 | 策略 |
 |------|------|------|
 | 数据更新 | 11:31/15:05 工作日 | — |
-| 账户2-上午信号 | 11:45 工作日 | **v39g** |
-| 账户2-下午执行 | 13:00 工作日 | **v39g** |
+| 账户1-上午信号 | 11:45 工作日 | **v61b** |
+| 账户1-下午执行 | 13:00 工作日 | **v61b** |
+| 账户2-上午信号 | 11:50 工作日 | **v68** |
+| 账户2-下午执行 | 13:05 工作日 | **v68** |
 | 收盘报告 | 15:30 工作日 | — |
 
-> 账户1(v11b) 已暂停，不参与日常调度。
+> 两个账户均在运行中，各自独立调度。
 
 ## 七、回测与模拟盘一致性
 

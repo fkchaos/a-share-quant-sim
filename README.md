@@ -14,11 +14,11 @@ pip install -e .                       # 安装依赖
 python3 scripts/tools/init_project.py  # 一键初始化（建表+股票池+K线+账户）
 
 # 回测验证
-python3 scripts/backtest/wf_runner.py --strategy v39i --full  # 全量回测
-python3 scripts/backtest/wf_runner.py --strategy v44           # WF 回测
+python3 scripts/backtest/wf_runner.py --strategy v68 --full  # 全量回测
+python3 scripts/backtest/wf_runner.py --strategy v68         # WF 回测
 
 # 模拟盘信号
-python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal
+python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal
 
 # 全局状态
 python3 cmd.py status
@@ -40,8 +40,8 @@ python3 cmd.py status
 
 | 账户 | 策略 | 资金 | 状态 |
 |------|------|------|------|
-| 账户2 | v39i（价量共振+动态MOM_THRESHOLD） | 20万 | ✅ 运行中 |
-| 账户1 | v11b（Ensemble截面因子） | 20万 | ⏸️ 暂停 |
+| 账户1 | v61b（低换手小票+overlay模式） | 10万 | ✅ 运行中 |
+| 账户2 | v68（v67优化版，情绪择时） | 10万 | ✅ 运行中 |
 
 ## License
 

@@ -1,6 +1,6 @@
 # Cron 任务配置指南
 
-> 最后更新：2026-06-29（区分 Agent / 非 Agent 执行路径，策略标注更新为 v39g）
+> 最后更新：2026-07-29（双账户运行：账户1 v61b + 账户2 v68，策略标注更新）
 
 本文档说明 cron 任务的两种执行路径，以及如何从零重建所有任务。
 
@@ -21,9 +21,12 @@
 ```bash
 # crontab 示例（管道：执行 → 格式化 → 终端输出）
 # 注意：每次执行前先 switch 绑定策略，防止 DB strategy 字段丢失导致失败
-45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
-0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 1
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
 31 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 ```
@@ -31,7 +34,7 @@
 **流程**：
 ```
 account_runner.py run --account-id 2 intraday_signal
-  └─ 从 DB 读取绑定的策略 (v39g)
+  └─ 从 DB 读取绑定的策略 (v68)
   └─ 加载数据 → 计算因子 → 选股 → 风控检查
   └─ 输出 JSON 到 stdout
   │
@@ -64,33 +67,39 @@ Hermes cron → agent 执行 account_runner.py → agent 输出报告文本 → 
 | | 路径 A（非 Agent） | 路径 B（Agent） |
 |---|---|---|
 | **调度器** | 系统 crontab | Hermes cron |
-| **执行入口** | `run_and_send.py`（已废弃） | `account_runner.py` + `format_report.py` |
+| **执行入口** | `account_runner.py` + `format_report.py` | `account_runner.py` |
 | **报告可见性** | 终端 stdout | Agent 推送通知 |
 | **依赖** | 只需 Python + 项目依赖 | Hermes Agent 环境 |
 | **通知方式** | 无需（看终端） | Hermes deliver |
+
+> ⚠️ 旧入口 `run_and_send.py` 已废弃，不再使用。
 
 ---
 
 ## 二、当前活跃任务
 
 ### 路径 B（Hermes cron，当前服务器使用）
-
 | 任务 | Job ID | 时间 | 策略 |
 |------|--------|------|------|
 | 🟢 数据更新-上午 | `8ebcb1e20cf1` | 11:31 工作日 | — |
 | 🟢 数据更新-下午 | `b530aff8cbb4` | 15:05 工作日 | — |
-| 🟢 账户2-上午信号 | `6ef77c65f34c` | 11:45 工作日 | v39g |
-| 🟢 账户2-下午执行 | `b0ba5f428eb5` | 13:00 工作日 | v39g |
+| 🟢 账户1-上午信号 | `d09a4fdbe506` | 11:45 工作日 | v61b |
+| 🟢 账户1-下午执行 | `050969e9b685` | 13:00 工作日 | v61b |
+| 🟢 账户2-上午信号 | `6ef77c65f34c` | 11:45 工作日 | v68 |
+| 🟢 账户2-下午执行 | `b0ba5f428eb5` | 13:00 工作日 | v68 |
 | 🟢 收盘报告 | `b6e0ef652f31` | 15:30 工作日 | — |
+| 🟡 S&P500五指标周报 | `1600b5347f43` | 周六 8:00 | — |
+| 🟡 因子IC衰减监控 | `ca8ef8f68f6c` | 每月1日 9:00 | — |
 
 ### 已暂停
 
-| 任务 | 原因 |
-|------|------|
-| ⏸️ 账户1-信号/执行 | v11b 暂停 |
-| ⏸️ 账户3-尾盘信号/执行 | v20c 退役 |
-| ⏸️ Cron监控-巡检/心跳 | 不再需要 |
-| ⏸️ 每日记忆整理 | 暂停 |
+| 任务 | Job ID | 原因 |
+|------|--------|------|
+| ⏸️ 账户3-尾盘信号 | `87aa1ba8b19d` | v20c 退役 |
+| ⏸️ 账户3-尾盘执行 | `cbb2ceef2f5b` | v20c 退役 |
+| ⏸️ Cron监控-巡检 | `33b36c29e92d` | 不再需要 |
+| ⏸️ Cron监控-心跳 | `82bc6578ad5e` | 不再需要 |
+| ⏸️ 每日记忆整理 | `9de1b237665f` | 暂停 |
 
 ---
 
@@ -128,16 +137,16 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 用 python 解析输出 JSON，报告必须包含：更新股票数、失败数、K线数、耗时。"
 ```
 
-#### 账户2-上午信号
+#### 账户1-上午信号（v61b）
 
 ```bash
 hermes cron create \
-  --name "账户2-上午信号" \
+  --name "账户1-上午信号" \
   --schedule "45 11 * * 1-5" \
-  --prompt "执行账户2上午信号（策略 v39g）。
+  --prompt "执行账户1上午信号（策略 v61b）。
 
 直接执行一条命令：
-cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/format_report.py --type signal --account 2
+cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/format_report.py --type signal --account 1
 
 用 python 解析输出 JSON，报告中必须包含：
 1. 信号摘要（现金/持仓数/买卖计划，含每只股的价格和数量）
@@ -147,16 +156,54 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 注意：不要使用 hermes message 子命令，直接输出报告文本即可，Hermes 会自动推送。switch 确保策略绑定不会因 DB 状态丢失而失败。"
 ```
 
-#### 账户2-下午执行
+#### 账户2-上午信号（v68）
+
+```bash
+hermes cron create \
+  --name "账户2-上午信号" \
+  --schedule "45 11 * * 1-5" \
+  --prompt "执行账户2上午信号（策略 v68）。
+
+直接执行一条命令：
+cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/format_report.py --type signal --account 2
+
+用 python 解析输出 JSON，报告中必须包含：
+1. 信号摘要（现金/持仓数/买卖计划，含每只股的价格和数量）
+2. 当日市场状态
+3. 如果执行失败用一句话说明原因
+
+注意：不要使用 hermes message 子命令，直接输出报告文本即可，Hermes 会自动推送。switch 确保策略绑定不会因 DB 状态丢失而失败。"
+```
+
+#### 账户1-下午执行（v61b）
+
+```bash
+hermes cron create \
+  --name "账户1-下午执行" \
+  --schedule "0 13 * * 1-5" \
+  --prompt "执行账户1下午交易（策略 v61b）。
+
+直接执行一条命令：
+cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/format_report.py --type execute --account 1
+
+用 python 解析输出，报告中必须包含：
+1. 执行摘要（买入/卖出各多少只，含价格数量）
+2. 执行后现金和持仓状态
+3. 如果执行失败用一句话说明原因
+
+注意：不要使用 hermes message 子命令，直接输出报告文本即可，Hermes 会自动推送。switch 确保策略绑定不会因 DB 状态丢失而失败。"
+```
+
+#### 账户2-下午执行（v68）
 
 ```bash
 hermes cron create \
   --name "账户2-下午执行" \
   --schedule "0 13 * * 1-5" \
-  --prompt "执行账户2下午交易（策略 v39g）。
+  --prompt "执行账户2下午交易（策略 v68）。
 
 直接执行一条命令：
-cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/format_report.py --type execute --account 2
+cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | /root/.hermes/hermes-agent/venv/bin/python3 scripts/tools/format_report.py --type execute --account 2
 
 用 python 解析输出，报告中必须包含：
 1. 执行摘要（买入/卖出各多少只，含价格数量）
@@ -175,6 +222,7 @@ hermes cron create \
   --prompt "执行收盘报告（所有活跃账户）。
 
 运行命令：
+cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>&1
 cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>&1
 
 用 python 解析输出，报告必须包含：现金、持仓明细（含市值和盈亏%）、总收益率。"
@@ -192,14 +240,21 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 # 数据更新（下午）
 5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 
-# 账户2-上午信号
-45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+# 账户1-上午信号（v61b）
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
 
-# 账户2-下午执行
-0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
+# 账户2-上午信号（v68）
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+
+# 账户1-下午执行（v61b）
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 1
+
+# 账户2-下午执行（v68）
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
 
 # 收盘报告
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
 ```
 
 > 注意：所有脚本依赖 `pip install -e .` 安装的项目依赖。普通部署 `python3` 直接可用，无需 venv 完整路径。
@@ -228,7 +283,8 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 
 ### 4.3 策略标注
 
-- 账户2当前绑定策略：**v39g**（非 v39i）
+- 账户1当前绑定策略：**v61b**（低换手小票）
+- 账户2当前绑定策略：**v68**（多因子评分，动量+illiq+size）
 - 切换策略时只需改 DB `account.strategy` 字段，代码无需改动
 
 ---
@@ -247,5 +303,5 @@ ls ~/.hermes/cron/output/<job_id>/
 cat ~/.hermes/cron/output/<job_id>/*.md | tail -20
 
 # 非 Agent 用户：直接跑 account_runner.py | format_report.py 看终端输出
-python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
 ```

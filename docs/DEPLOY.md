@@ -1,6 +1,6 @@
 # 部署指南
 
-> 最后更新：2026-06-29（定时调度重构：两条执行路径 case by case 说明）
+> 最后更新：2026-07-29（双账户运行：账户1 v61b + 账户2 v68）
 
 零基础部署，5 分钟跑通。
 
@@ -69,33 +69,30 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 
 ## 4. 跑回测
 
-> ✅ v27 回测入口：`python scripts/backtest/wf_runner.py --strategy v27`
+> ✅ v68 回测入口：`python scripts/backtest/wf_runner.py --strategy v68`
 > 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py）。
 
 ```bash
 # 全量回测（不做 WF 切分，直接跑全部历史数据）
-python scripts/backtest/wf_runner.py --strategy v27 --full
+python scripts/backtest/wf_runner.py --strategy v68 --full
 
 # WF 回测（默认 4 folds，约 50 秒）
-python scripts/backtest/wf_runner.py --strategy v27
+python scripts/backtest/wf_runner.py --strategy v68
 
 # 指定训练/测试/滑动窗口
-python scripts/backtest/wf_runner.py --strategy v27 --train 252 --test 126 --step 63
+python scripts/backtest/wf_runner.py --strategy v68 --train 252 --test 126 --step 63
 
 # 指定回测区间
-python scripts/backtest/wf_runner.py --strategy v27 --start 2023-01-01 --end 2025-12-31
+python scripts/backtest/wf_runner.py --strategy v68 --start 2023-01-01 --end 2025-12-31
 ```
 
-# 参数扫描（调参用，很慢，日常回测不要用）
-python scripts/backtest/sweep_v27_final.py          # 全组合扫描（48组，约40分钟）
-python scripts/backtest/sweep_v27_mom_threshold.py  # 动量阈值扫描
-python scripts/backtest/sweep_v27_sltp_hold.py      # 止损止盈持仓扫描
+# 参数扫描脚本已归档到 archive/，当前使用 strategy_map.py params 统一管理
 
 # 模拟盘回测
 python scripts/sim/account_runner.py --account-id 2 report_only
 ```
 
-输出在 `data/backtest_results/` 目录下，包含 wf_v27_latest.json、NAV 曲线、交易记录。
+输出在 `data/backtest_results/` 目录下，包含 wf_v68_latest.json、NAV 曲线、交易记录。
 
 ---
 
@@ -114,11 +111,11 @@ python scripts/sim/account_runner.py list
 ======================================================================
 ID  名称          策略        现金          初始资金      更新时间
 ----------------------------------------------------------------------
- 1   账户1         v27        ¥  200,000  ¥  200,000  2026-06-19 10:00:00
- 2   账户2                    ¥  100,000  ¥  100,000  2026-06-19 10:00:00
+ 1   账户1         v61b       ¥  100,000  ¥  100,000  2026-07-29 10:00:00
+ 2   账户2         v68        ¥  100,000  ¥  100,000  2026-07-29 10:00:00
 ======================================================================
-可用策略: v11b, v27, v28, v20c
-活跃策略: v11b, v27, v28
+可用策略: v11b, v27, v28, v61b, v68, v20c
+活跃策略: v61b, v68
 ```
 
 ### 5.2 创建新账户
@@ -128,7 +125,7 @@ ID  名称          策略        现金          初始资金      更新时间
 python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000
 
 # 创建账户并绑定策略
-python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --strategy v27
+python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 100000 --strategy v68
 
 # 强制覆盖已有账户（清空持仓和交易记录后重建）
 python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --force
@@ -139,8 +136,8 @@ python scripts/sim/account_runner.py create --account-id 4 --name "我的账户"
 ### 5.3 切换策略
 
 ```bash
-# 将账户4切换为 v27 策略
-python scripts/sim/account_runner.py switch --account-id 4 --strategy v27
+# 将账户4切换为 v68 策略
+python scripts/sim/account_runner.py switch --account-id 4 --strategy v68
 
 # 切换到 v11b
 python scripts/sim/account_runner.py switch --account-id 4 --strategy v11b
@@ -160,7 +157,7 @@ sqlite3 data/quant_accounts.db "UPDATE account SET cash=500000, initial_capital=
 python scripts/tools/init_project.py --accounts --force
 
 # 方法2：手动清空后重建单个账户
-python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --cash 200000 --force
+python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --cash 100000 --force
 ```
 
 ### 5.6 账户数据说明
@@ -182,17 +179,25 @@ python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --ca
 模拟盘 = 信号生成 + 执行 + 报告，三步。
 
 ```bash
-# 信号生成（自动读取账户绑定的策略）
+# 账户1（v61b）信号生成
 python scripts/sim/account_runner.py run --account-id 1 intraday_signal
 
-# 执行交易
+# 账户2（v68）信号生成
+python scripts/sim/account_runner.py run --account-id 2 intraday_signal
+
+# 账户1（v61b）执行交易
 python scripts/sim/account_runner.py run --account-id 1 intraday_execute
+
+# 账户2（v68）执行交易
+python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 
 # 收盘报告
 python scripts/sim/account_runner.py run --account-id 1 report_only
+python scripts/sim/account_runner.py run --account-id 2 report_only
 
 # 临时指定策略（覆盖账户绑定的策略，用于测试）
-python scripts/sim/account_runner.py run --account-id 1 --strategy v11b intraday_signal
+python scripts/sim/account_runner.py run --account-id 1 --strategy v61b intraday_signal
+python scripts/sim/account_runner.py run --account-id 2 --strategy v68 intraday_signal
 ```
 
 旧脚本（`sim_account1/2/3.py`）保留作为备份，不再被 cron 调用。
@@ -220,14 +225,21 @@ crontab -e
 31 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 
-# 账户2-上午信号
-45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+# 账户1-上午信号（v61b）
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
 
-# 账户2-下午执行
-0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
+# 账户2-上午信号（v68）
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+
+# 账户1-下午执行（v61b）
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 1
+
+# 账户2-下午执行（v68）
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
 
 # 收盘报告
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v39g && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
 ```
 
 **查看报告**：直接看 crontab 输出（`>> data/portfolio/account_runner.log` 或用 `mail` 转发）。
@@ -255,11 +267,13 @@ hermes cron pause <job_id>
 |------|------|------|
 | 数据更新-上午 | 11:31 工作日 | — |
 | 数据更新-下午 | 15:05 工作日 | — |
-| 账户2-上午信号 | 11:45 工作日 | v39g |
-| 账户2-下午执行 | 13:00 工作日 | v39g |
+| 账户1-上午信号 | 11:45 工作日 | v61b |
+| 账户1-下午执行 | 13:00 工作日 | v61b |
+| 账户2-上午信号 | 11:45 工作日 | v68 |
+| 账户2-下午执行 | 13:00 工作日 | v68 |
 | 收盘报告 | 15:30 工作日 | — |
 
-**已暂停任务：** 账户1 信号/执行、账户3 尾盘信号/执行、Cron监控-巡检/心跳
+**已暂停任务：** 账户3 尾盘信号/执行(v20c)、Cron监控-巡检/心跳、每日记忆整理
 
 > 详细配置说明、手动重建命令、设计原则见 [CRON_SETUP.md](CRON_SETUP.md)
 
@@ -270,9 +284,10 @@ data/
 ├── quant_stocks.db       # 股票数据（K线、股票池、技术指标）
 ├── quant_accounts.db     # 账户数据（持仓、交易记录）
 └── portfolio/            # 交易计划 + 日志
-    ├── trade_plan_v27.json
-    ├── trade_plan_v20c.json
+    ├── trade_plan_v61b.json
+    ├── trade_plan_v68.json
     ├── sim_account1.log
+    ├── sim_account2.log
     └── account_runner.log
 ```
 
@@ -282,17 +297,17 @@ data/
 
 | 策略 | 风格 | 特点 | 状态 |
 |------|------|------|------|
-| v39g | 多因子评分（小市值+动量确认） | WF 夏普 1.297，当前最优 | ✅ 运行中（账户2） |
-| v39i | 多因子评分（动量+illiq+size） | WF 夏普 0.732，通过但不如 v39g | 🔬 备选 |
+| v61b | 低换手小票 | SL=-8%/TP=+25%/HOLD=5天/MAX_POS=0.25 | ✅ 运行中（账户1，10万） |
+| v68 | 多因子评分（动量+illiq+size） | SL=-5%/TP=+5%/HOLD=3天/MAX_POS=0.2 | ✅ 运行中（账户2，10万） |
+| v39g | 多因子评分（小市值+动量确认） | WF 夏普 1.297，已被 v68 替代 | 🔬 参考 |
 | v11b | 多因子 Ensemble | 最保守，多组选股并集 | ⏸️ 暂停 |
-| v27 | 价量共振 | 简单动量，已不如 v39g | 🔬 参考 |
 | v20c | 尾盘缩量 | 面板 bug 修复后失效（-67%） | ❌ 已退役 |
 
 ### 切换策略
 
 ```bash
 # 直接修改 DB 绑定
-sqlite3 data/quant_accounts.db "UPDATE account SET strategy='v39g' WHERE id=2;"
+sqlite3 data/quant_accounts.db "UPDATE account SET strategy='v68' WHERE id=2;"
 ```
 
 改完后无需重启，下次信号生成时自动生效。
@@ -308,18 +323,21 @@ sqlite3 data/quant_accounts.db "UPDATE account SET strategy='v39g' WHERE id=2;"
 2. `scripts/backtest/strategy_adapter.py` → `_risk_params`
 3. `scripts/backtest/wf_runner.py` → `_calc_factors()` 中的参数使用
 
-| 策略 | 关键参数（v39g） | 说明 |
-|------|-----------------|------|
+|| 策略 | 关键参数（v68） | 说明 ||
+||------|-----------------|------||
 | STOP_LOSS | -0.05 | 止损 5% |
 | TAKE_PROFIT | 0.05 | 止盈 5% |
 | HOLD_DAYS_MAX | 3 | 最长持有 3 天 |
 | MAX_DAILY_BUY | 4 | 每天最多买 4 只 |
 | MAX_POSITION | 0.20 | 单只最大 20% 仓位 |
 | MAX_HOLDINGS | 5 | 最多持有 5 只 |
+| W_MOM | 0.35 | 动量因子权重 |
+| W_ILLIQ | 0.15 | 非流动性因子权重 |
+| W_SIZE | 0.35 | 规模因子权重 |
 
 改完后跑回测验证，再提交代码。
 
-验证：`python3 -c "from core.strategy_map import load_strategy; s=load_strategy('v39g'); print(s['params']['MAX_POSITION'])"`
+验证：`python3 -c "from core.strategy_map import load_strategy; s=load_strategy('v68'); print(s['params']['MAX_POSITION'])"`
 
 ---
 
@@ -393,7 +411,7 @@ python scripts/sim/account_runner.py --account-id 2 intraday_execute
 **Q: 账户已存在，无法创建？**
 ```bash
 # 方法1：使用 --force 强制覆盖
-python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --cash 200000 --force
+python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --cash 100000 --force
 
 # 方法2：先手动删除再创建
 sqlite3 data/quant_accounts.db "DELETE FROM holdings WHERE account_id=2; DELETE FROM trade_log WHERE account_id=2; DELETE FROM account WHERE id=2;"
@@ -461,10 +479,10 @@ sqlite3 data/quant_accounts.db .dump > data/quant_accounts_backup_$(date +%Y%m%d
 | 字段 | 单位 | 说明 |
 |------|------|------|
 | `close` / `open` / `high` / `low` | **元** | 股价，如 3.66 表示 3.66 元/股 |
-| `volume` | **股** | 成交量，如 610370 表示 610,370 股 |
+| `volume` | **手** | 成交量，如 6103 表示 6,103 手（= 610,300 股，1手=100股） |
 | `amount` | **元** | 成交额，如 2246161.6 表示约 224.6 万元 |
 
-**验证方法**：`amount ≈ close × volume`（误差 <1%）。
+**验证方法**：`amount ≈ close × volume × 100`（误差 <1%，注意 volume 单位是手需 ×100 转为股）。
 
 **⚠️ 换数据源时必须重新确认单位**：
 - 腾讯行情接口（`qt.gtimg.cn`）：amount 单位为**元**
@@ -476,18 +494,17 @@ sqlite3 data/quant_accounts.db .dump > data/quant_accounts_backup_$(date +%Y%m%d
 
 ### 14.2 load_panel_from_db 面板顺序
 
-`load_panel_from_db()` 返回的面板顺序为：
+`load_panel_from_db()` 返回的面板为 3 元组：
 
 ```
-tpl[0] = close_panel
-tpl[1] = volume_panel
-tpl[2] = amount_panel
-tpl[3] = open_panel    ← 注意：不是 high！
-tpl[4] = high_panel    ← 注意：不是 low！
-tpl[5] = low_panel     ← 注意：不是 open！
+close, volume, amount = load_panel_from_db(...)
 ```
 
-**⚠️ 历史 bug**：`v20_tail_pick.py` 的 `load_panel()` 曾把 `tpl[3]` 当 high、`tpl[4]` 当 low、`tpl[5]` 当 open（三者全错），导致 v20c 策略的 `daily_range` 因子计算错误。修复后 v20c 策略失效（WF 5/16，全量 -67%），旧版好结果完全源于错位假阳性。
+- `close` — 收盘价面板（日期 × 股票）
+- `volume` — 成交量面板（单位：手，1手=100股）
+- `amount` — 成交额面板（单位：元）
+
+> ⚠️ 早期版本返回 6 元组 `(close, volume, amount, open, high, low)`，当前已简化为 3 元组。如需 OHLC 数据，请通过 `core.db` 模块单独查询。
 
 **教训**：解包面板时务必对照 `load_panel_from_db` 的返回顺序，不能凭直觉。
 

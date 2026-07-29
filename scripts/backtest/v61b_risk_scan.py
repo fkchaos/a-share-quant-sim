@@ -6,6 +6,32 @@ import sqlite3, numpy as np, pandas as pd
 
 RESULT_FILE = '/root/a-share-quant-sim/scripts/backtest/v61b_risk_results.json'
 
+# 缓存交易日历
+_TRADING_DAYS_CACHE = None
+
+def _get_trading_days(start='2020-01-01', end='2026-12-31'):
+    """获取交易日列表（缓存）"""
+    global _TRADING_DAYS_CACHE
+    if _TRADING_DAYS_CACHE is None:
+        conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), '../../data/quant_stocks.db'))
+        rows = conn.execute(
+            "SELECT DISTINCT date FROM daily_kline WHERE code='sh000001' ORDER BY date"
+        ).fetchall()
+        conn.close()
+        _TRADING_DAYS_CACHE = set(r[0] for r in rows)
+    return _TRADING_DAYS_CACHE
+
+def count_trading_days(entry_date_str, current_date_str):
+    """计算从entry_date（不含）到current_date（含）的交易日天数"""
+    days = _get_trading_days()
+    entry = str(entry_date_str)[:10]
+    current = str(current_date_str)[:10]
+    count = 0
+    for d in sorted(days):
+        if d > entry and d <= current:
+            count += 1
+    return count
+
 # 标准WF参数（供wf_runner调用）
 DEFAULT_PARAMS = {
     'REBALANCE_DAYS': 5,
@@ -422,29 +448,29 @@ def run_signal(account_id, date, params, state, panels):
                 to_sell.append((code, reason, pnl))
                 logger.info(f"v61b风控: 卖出{code}, 原因={reason}, 盈亏={pnl:.2%}")
     
-    # ── 2. 调仓日判断（每只股票独立计算） ──
+    # ── 2. 调仓日判断（每只股票独立计算，用交易日天数） ──
     # 检查是否有股票到期需要调仓
     rebalance_codes = []
+    date_str = str(date)[:10] if not isinstance(date, str) else date[:10]
     for code, h in list(state.holdings.items()):
         if code in {c for c, _, _ in to_sell}:
             continue  # 已在卖出列表，跳过
         
-        # 计算持有天数（用entry_date）
+        # 计算持有天数（用entry_date，计算交易日天数）
         entry_date = h.get('entry_date')
         if entry_date is None:
             rebalance_codes.append(code)  # 无入场日期，强制调仓
             continue
         
         try:
-            entry_dt = pd.Timestamp(entry_date)
-            days_held = (date - entry_dt).days
+            days_held = count_trading_days(entry_date, date_str)
         except:
             rebalance_codes.append(code)  # 解析失败，强制调仓
             continue
         
         if days_held >= rebalance_days:
             rebalance_codes.append(code)
-            logger.info(f"v61b: {code} 持有{days_held}天(>={rebalance_days})，触发调仓")
+            logger.info(f"v61b: {code} 持有{days_held}个交易日(>={rebalance_days})，触发调仓")
     
     has_sell_signal = len(to_sell) > 0
     has_rebalance = len(rebalance_codes) > 0
@@ -461,7 +487,7 @@ def run_signal(account_id, date, params, state, panels):
                 cost = h.get('cost_price', 0)
                 pnl = (p - cost) / cost if cost > 0 else 0
                 to_sell.append((code, 'rebalance', pnl))
-                days = (date - pd.Timestamp(h.get('entry_date', date))).days
+                days = count_trading_days(h.get('entry_date', date), date_str)
                 logger.info(f"v61b: 调仓卖出{code}, 持有{days}天")
         
         # 执行选股

@@ -99,7 +99,7 @@ def run_fold(data, test_start, test_end, rebal, top_n, sl, tp, hold_max,
     cash = INIT_CASH
     holdings = {}
     nav_list = []
-    days_since = rebal
+    first_day = True
 
     def sell(code, date):
         nonlocal cash
@@ -166,12 +166,11 @@ def run_fold(data, test_start, test_end, rebal, top_n, sl, tp, hold_max,
             sell(code, date)
 
         nav_list.append({'date': date, 'nav': val})
-        days_since += 1
 
-        # 调仓日或有卖出时，都重新计算买入
-        if days_since >= rebal or len(to_sell) > 0:
-            days_since = 0 if days_since >= rebal else days_since
+        # 第一天或有卖出时，补充买入新股
+        if first_day or len(to_sell) > 0:
             buy_new(date)
+            first_day = False
 
     if not nav_list:
         return None
@@ -423,19 +422,48 @@ def run_signal(account_id, date, params, state, panels):
                 to_sell.append((code, reason, pnl))
                 logger.info(f"v61b风控: 卖出{code}, 原因={reason}, 盈亏={pnl:.2%}")
     
-    # ── 2. 调仓日判断 ──
-    last_rebal_date = getattr(state, 'last_rebalance_date', None)
-    if last_rebal_date is None:
-        days_since_rebal = rebalance_days
-    else:
-        days_since_rebal = (date - last_rebal_date).days
+    # ── 2. 调仓日判断（每只股票独立计算） ──
+    # 检查是否有股票到期需要调仓
+    rebalance_codes = []
+    for code, h in list(state.holdings.items()):
+        if code in {c for c, _, _ in to_sell}:
+            continue  # 已在卖出列表，跳过
+        
+        # 计算持有天数（用entry_date）
+        entry_date = h.get('entry_date')
+        if entry_date is None:
+            rebalance_codes.append(code)  # 无入场日期，强制调仓
+            continue
+        
+        try:
+            entry_dt = pd.Timestamp(entry_date)
+            days_held = (date - entry_dt).days
+        except:
+            rebalance_codes.append(code)  # 解析失败，强制调仓
+            continue
+        
+        if days_held >= rebalance_days:
+            rebalance_codes.append(code)
+            logger.info(f"v61b: {code} 持有{days_held}天(>={rebalance_days})，触发调仓")
     
-    is_rebalance_day = (days_since_rebal >= rebalance_days)
     has_sell_signal = len(to_sell) > 0
+    has_rebalance = len(rebalance_codes) > 0
     
     # ── 3. 选股 ──
     buy_plan = []
-    if is_rebalance_day or has_sell_signal:
+    if has_rebalance or has_sell_signal:
+        # 将调仓股票加入卖出列表
+        for code in rebalance_codes:
+            if code in state.holdings and code not in {c for c, _, _ in to_sell}:
+                h = state.holdings[code]
+                price_data = cp.loc[date] if date in cp.index else pd.Series()
+                p = price_data.get(code, 0) if code in price_data.index else 0
+                cost = h.get('cost_price', 0)
+                pnl = (p - cost) / cost if cost > 0 else 0
+                to_sell.append((code, 'rebalance', pnl))
+                days = (date - pd.Timestamp(h.get('entry_date', date))).days
+                logger.info(f"v61b: 调仓卖出{code}, 持有{days}天")
+        
         # 执行选股
         data = load_data_with_range(
             (pd.Timestamp(date) - pd.Timedelta(days=365)).strftime('%Y-%m-%d'),
@@ -482,14 +510,10 @@ def run_signal(account_id, date, params, state, panels):
                                 'target_amount': round(per_stock, 2),
                             })
         
-        # 更新调仓日期
-        if is_rebalance_day:
-            state.last_rebalance_date = date
-            logger.info(f"v61b: 调仓日，选出{len(buy_plan)}只股票")
-        else:
-            logger.info(f"v61b: 卖出即买，选出{len(buy_plan)}只股票")
+        # 记录日志
+        logger.info(f"v61b: 卖出{len(to_sell)}只，选出{len(buy_plan)}只新股")
     else:
-        logger.info(f"v61b: 非调仓日(第{days_since_rebal}天)且无卖出，跳过选股")
+        logger.info(f"v61b: 无到期/无卖出，跳过选股")
     
     # ── 4. 生成交易计划 ──
     sell_plan = [

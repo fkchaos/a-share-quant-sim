@@ -39,6 +39,7 @@ DEFAULT_PARAMS = {
     'STOP_LOSS': -0.08,
     'TAKE_PROFIT': 0.25,
     'HOLD_DAYS_MAX': 5,
+    'MAX_POSITION': 0.20,  # 单个仓位上限20%
     # 情绪择时参数（cold模式）
     'SENTIMENT_WINDOW': 0,       # 0=不启用情绪过滤
     'SENTIMENT_THRESHOLD': 5.0,
@@ -411,6 +412,7 @@ def run_signal(account_id, date, params, state, panels):
     hold_days_max = params.get("HOLD_DAYS_MAX", 5)
     max_holdings = params.get("MAX_HOLDINGS", 5)
     max_daily_buy = params.get("MAX_DAILY_BUY", 5)
+    max_position = params.get("MAX_POSITION", 0.20)
     
     # ── 1. 风控检查：止损/止盈/最长持有 ──
     to_sell = []
@@ -474,10 +476,11 @@ def run_signal(account_id, date, params, state, panels):
     
     has_sell_signal = len(to_sell) > 0
     has_rebalance = len(rebalance_codes) > 0
+    has_vacancy = len(state.holdings) < max_holdings
     
     # ── 3. 选股 ──
     buy_plan = []
-    if has_rebalance or has_sell_signal:
+    if has_rebalance or has_sell_signal or has_vacancy:
         # 将调仓股票加入卖出列表
         for code in rebalance_codes:
             if code in state.holdings and code not in {c for c, _, _ in to_sell}:
@@ -520,7 +523,16 @@ def run_signal(account_id, date, params, state, panels):
                 for c, _, _ in to_sell if c in state.holdings and c in price_data.index
             )
             available = state.cash + sell_cash
-            per_stock = available / len(buy_list) * 0.95  # 95%仓位
+            # 计算总资产（用于MAX_POSITION限制）
+            total_value = state.cash
+            if date in cp.index:
+                for code, h in state.holdings.items():
+                    shares = h.get('shares', h.get('qty', 0))
+                    p = price_data.get(code, 0)
+                    total_value += p * shares
+            # 单只股票最大金额 = 总资产 × MAX_POSITION
+            max_per_stock = total_value * max_position
+            per_stock = min(available / len(buy_list) * 0.95, max_per_stock)
             
             for code in buy_list:
                 if code in price_data.index:
@@ -539,7 +551,7 @@ def run_signal(account_id, date, params, state, panels):
         # 记录日志
         logger.info(f"v61b: 卖出{len(to_sell)}只，选出{len(buy_plan)}只新股")
     else:
-        logger.info(f"v61b: 无到期/无卖出，跳过选股")
+        logger.info(f"v61b: 无到期/无卖出/无空位，跳过选股")
     
     # ── 4. 生成交易计划 ──
     sell_plan = [

@@ -1125,7 +1125,7 @@ STRATEGY_MAP = {
             "TAKE_PROFIT": 0.25,
             "HOLD_DAYS_MAX": 5,
             "MAX_DAILY_BUY": 5,
-            "MAX_POSITION": 0.25,
+            "MAX_POSITION": 0.20,  # 单个仓位上限20%
             "MAX_HOLDINGS": 5,
             "REBALANCE_DAYS": 5,
         },

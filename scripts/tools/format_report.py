@@ -55,6 +55,7 @@ def format_signal(data: dict, account_id: int) -> str:
 
     if top_scores:
         lines.append(f"📊 选股Top{len(top_scores)}得分:")
+        lines.append("  score = MOM×0.35 + ILLIQ×0.15 + SIZE×0.35 + TURNOVER×0.03 + PV_CORR×0.02 + recent_limit_3d×0.35")
         for i, t in enumerate(top_scores):
             lines.append(f"  {i+1}. {t['code']} {t.get('name','')} — score={t.get('score',0):.4f} @ {t.get('price',0):.2f}")
 

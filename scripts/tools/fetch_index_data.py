@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
-拉取上证指数历史数据并存入 daily_kline 表。
-上证指数代码: sh000001（腾讯行情格式），存到 DB 时 code='sh000001'
-
-用法:
-    PYTHONPATH=/root/a-share-quant-sim python scripts/tools/fetch_index_data.py
+拉取上证/深证/创业板指数历史数据并存入 daily_kline 表。
+上证指数: sh000001
+深证成指: sz399001
+创业板指: sz399006
 """
 import sys, os, time, requests, re
 from datetime import datetime
 
 from core.db import get_conn
 
-INDEX_CODE = "sh000001"
-INDEX_NAME = "上证指数"
+INDICES = {
+    "sh000001": "上证指数",
+    "sz399001": "深证成指",
+    "sz399006": "创业板指",
+}
 START_DATE = "2020-01-01"
 
-def fetch_index_kline():
-    """从腾讯接口拉取上证指数日K线"""
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={INDEX_CODE},day,{START_DATE},,1000,qfq"
+def fetch_index_kline(code):
+    """从腾讯接口拉取指数日K线"""
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={code},day,{START_DATE},,1000,qfq"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
@@ -36,7 +39,7 @@ def fetch_index_kline():
 
     # 提取日K线数据
     klines = None
-    stock_data = data.get("data", {}).get(INDEX_CODE, {})
+    stock_data = data.get("data", {}).get(code, {})
     for key in ["qfqday", "day"]:
         if key in stock_data:
             klines = stock_data[key]
@@ -51,7 +54,7 @@ def fetch_index_kline():
         # k = [date, open, close, high, low, volume]
         if len(k) >= 6:
             records.append({
-                "code": INDEX_CODE,
+                "code": code,
                 "date": k[0],
                 "open": float(k[1]),
                 "close": float(k[2]),
@@ -65,34 +68,54 @@ def fetch_index_kline():
 def save_to_db(records):
     """存入 daily_kline 表"""
     with get_conn() as conn:
-        # 先删除旧数据
-        conn.execute("DELETE FROM daily_kline WHERE code=?", (INDEX_CODE,))
-        # 插入新数据
         for r in records:
             conn.execute(
                 "INSERT OR REPLACE INTO daily_kline(code,date,open,high,low,close,volume) VALUES(?,?,?,?,?,?,?)",
                 (r["code"], r["date"], r["open"], r["high"], r["low"], r["close"], r["volume"]),
             )
-    print(f"存入 {len(records)} 条上证指数数据")
+
+def fetch_all_indices():
+    """拉取所有指数数据"""
+    all_records = []
+    for code, name in INDICES.items():
+        print(f"📈 更新{name}...")
+        records = fetch_index_kline(code)
+        if records:
+            save_to_db(records)
+            all_records.extend(records)
+            print(f"  存入 {len(records)} 条{name}数据")
+        else:
+            print(f"  ⚠️ {name}更新失败")
+    return all_records
+
+def get_latest_index_points():
+    """获取所有指数最新点数"""
+    result = {}
+    with get_conn() as conn:
+        for code, name in INDICES.items():
+            row = conn.execute(
+                "SELECT close FROM daily_kline WHERE code=? ORDER BY date DESC LIMIT 1",
+                (code,)
+            ).fetchone()
+            if row:
+                result[name] = row["close"]
+    return result
 
 def main():
-    print(f"拉取上证指数({INDEX_CODE}) 历史数据...")
+    print(f"拉取指数历史数据...")
     t0 = time.time()
-    records = fetch_index_kline()
+    records = fetch_all_indices()
     if not records:
         print("拉取失败")
         return
     print(f"拉取 {len(records)} 条，耗时 {time.time()-t0:.1f}s")
-    print(f"数据范围: {records[0]['date']} ~ {records[-1]['date']}")
-    save_to_db(records)
 
-    # 验证
-    with get_conn() as conn:
-        row = conn.execute("SELECT COUNT(*) as c FROM daily_kline WHERE code=?", (INDEX_CODE,)).fetchone()
-        print(f"DB 中上证指数数据: {row['c']} 条")
-        row = conn.execute("SELECT * FROM daily_kline WHERE code=? ORDER BY date DESC LIMIT 3", (INDEX_CODE,)).fetchall()
-        for r in row:
-            print(f"  {r['date']}: 开{r['open']:.2f} 收{r['close']:.2f} 高{r['high']:.2f} 低{r['low']:.2f}")
+    # 显示最新点数
+    points = get_latest_index_points()
+    if points:
+        print("\n📊 最新指数点数:")
+        for name, close in points.items():
+            print(f"  {name}: {close:.2f}")
 
 if __name__ == "__main__":
     main()

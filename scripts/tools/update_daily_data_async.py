@@ -151,17 +151,30 @@ async def async_update_all(write_csv=False):
     print(f"  ─────────────────────────────")
     print(f"  总耗时: {total:.1f}s")
 
-    # ── 更新上证指数 ──
+    # ── 更新指数 ──
     index_ok = False
     try:
-        from fetch_index_data import fetch_index_kline, save_to_db
-        print(f"\n📈 更新上证指数...")
-        idx_records = fetch_index_kline()
-        if idx_records:
-            save_to_db(idx_records)
-            index_ok = True
+        from fetch_index_data import fetch_all_indices, get_latest_index_points
+        print(f"\n📈 更新指数...")
+        fetch_all_indices()
+        index_ok = True
     except Exception as e:
-        print(f"  ⚠️ 上证指数更新失败: {e}")
+        print(f"  ⚠️ 指数更新失败: {e}")
+
+    # 显示最新指数点数
+    try:
+        from fetch_index_data import get_latest_index_points
+        points = get_latest_index_points()
+        if points:
+            print("\n📊 最新指数点数:")
+            for name, close in points.items():
+                print(f"  {name}: {close:.2f}")
+    except Exception:
+        pass
+
+    # 显示更新时间
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"\n⏰ 数据更新时间: {now}")
 
     # 输出结构化 JSON
     result = {

@@ -81,7 +81,7 @@ Hermes cron → agent 执行 account_runner.py → agent 输出报告文本 → 
 ### 路径 B（Hermes cron，当前服务器使用）
 | 任务 | Job ID | 时间 | 策略 |
 |------|--------|------|------|
-| 🟢 数据更新(每半小时) | `f79178b2d93f` | 9:31-11:31,13:01-15:31 工作日 | — |
+| 🟢 数据更新(每半小时) | `f79178b2d93f` | 9:01-11:31,13:01-15:31 工作日 | — |
 | 🟢 账户1-上午信号 | `d09a4fdbe506` | 11:45 工作日 | v61b |
 | 🟢 账户1-下午执行 | `050969e9b685` | 13:00 工作日 | v61b |
 | 🟢 账户2-上午信号 | `6ef77c65f34c` | 11:45 工作日 | v68 |
@@ -234,7 +234,7 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 
 ```bash
 # 数据更新（每半小时，跳过午休）
-31 9-11,13-15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null
+01,31 9-11,13-15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null
 
 # 账户1-上午信号（v61b）
 45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1

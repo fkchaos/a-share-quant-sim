@@ -247,8 +247,7 @@ account_runner.py → quant_accounts.db (交易记录)
 
 ```cron
 # 数据更新
-31 11 * * 1-5 python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
-5 15 * * 1-5 python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
+01,31 9-11,13-15 * * 1-5 python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 
 # 账户1(v61b) - overlay模式，直接运行signal
 45 11 * * 1-5 python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
@@ -267,7 +266,7 @@ account_runner.py → quant_accounts.db (交易记录)
 
 | 任务 | 时间 | 策略 |
 |------|------|------|
-| 数据更新(每半小时) | 9:31-11:31,13:01-15:31 工作日 | — |
+| 数据更新(每半小时) | 9:01-11:31,13:01-15:31 工作日 | — |
 | 账户1-上午信号 | 11:45 工作日 | **v61b** |
 | 账户1-下午执行 | 13:00 工作日 | **v61b** |
 | 账户2-上午信号 | 11:50 工作日 | **v68** |

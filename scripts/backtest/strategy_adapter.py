@@ -921,7 +921,7 @@ class StrategyAdapter:
     def select(self, strategy_name, factors, date, close_panel=None,
                volume_panel=None, amount_panel=None, high_panel=None,
                low_panel=None, open_panel=None, current_holdings=None,
-               params=None, sold_recently=None):
+               params=None, sold_recently=None, return_all=False):
         """
         统一选股接口。
 
@@ -930,9 +930,10 @@ class StrategyAdapter:
             factors: dict — calc_factors() 返回的因子面板
             date: Timestamp — 选股日期
             close_panel, volume_panel, amount_panel, high_panel, low_panel, open_panel:
-                DataFrame — 价格面板（v20c 需要）
-            current_holdings: dict — 当前持仓（用于排除已持有）
+                DataFrame — 价格面板 (v20c 需要)
+            current_holdings: dict — 当前持仓 (用于排除已持有)
             params: dict — 策略参数覆盖
+            return_all: bool — 返回全部候选 (用于打分显示)
 
         返回:
             list[(code, score)] — 按评分降序排列
@@ -942,7 +943,7 @@ class StrategyAdapter:
             raise ValueError(f"未知策略: {strategy_name}，可用: {list(self._select_fns.keys())}")
         return fn(factors, date, close_panel, volume_panel, amount_panel,
                    high_panel, low_panel, open_panel, current_holdings, params,
-                   sold_recently=sold_recently)
+                   sold_recently=sold_recently, return_all=return_all)
 
     def _v27_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,
@@ -1829,7 +1830,7 @@ class StrategyAdapter:
 
     def _v68_select(self, factors, date, close_panel, volume_panel, amount_panel,
                                high_panel, low_panel, open_panel, current_holdings, params,
-                               sold_recently=None):
+                               sold_recently=None, return_all=False):
         """v68 选股: v67降低低流动性权重+加大动量权重"""
         from scripts.strategies.v68 import select_stocks_v68, calc_factors_v68
         if factors is None or "mom_5" not in factors:
@@ -1840,7 +1841,8 @@ class StrategyAdapter:
             merged_params.update(params)
         return select_stocks_v68(factors, date, current_holdings, merged_params,
                                            sold_recently=sold_recently,
-                                           close_panel=close_panel, high_panel=high_panel)
+                                           close_panel=close_panel, high_panel=high_panel,
+                                           return_all=return_all)
 
     def _v69_select(self, factors, date, close_panel, volume_panel, amount_panel,
                                high_panel, low_panel, open_panel, current_holdings, params,

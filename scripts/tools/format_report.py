@@ -53,6 +53,11 @@ def format_signal(data: dict, account_id: int) -> str:
     lines.append(f"现金: ¥{cash:,.0f}  持仓: {holdings} 只")
     lines.append("─" * 30)
 
+    if top_scores:
+        lines.append(f"📊 选股Top{len(top_scores)}得分:")
+        for i, t in enumerate(top_scores):
+            lines.append(f"  {i+1}. {t['code']} {t.get('name','')} — score={t.get('score',0):.4f} @ {t.get('price',0):.2f}")
+
     if sells:
         lines.append(f"🔴 卖出 {len(sells)} 只:")
         for s in sells:
@@ -62,11 +67,6 @@ def format_signal(data: dict, account_id: int) -> str:
         lines.append(f"🟢 买入 {len(buys)} 只:")
         for b in buys:
             lines.append(f"  {b['code']} {b.get('name','')} — {b.get('shares','')}股 @ {b.get('price',0):.2f}")
-
-    if top_scores:
-        lines.append(f"📊 选股Top{len(top_scores)}得分:")
-        for i, t in enumerate(top_scores):
-            lines.append(f"  {i+1}. {t['code']} {t.get('name','')} — score={t.get('score',0):.4f} @ {t.get('price',0):.2f}")
 
     if holds:
         lines.append(f"🟡 持有 {len(holds)} 只:")

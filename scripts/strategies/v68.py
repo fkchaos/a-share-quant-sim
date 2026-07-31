@@ -45,7 +45,8 @@ def calc_factors_v68(close_panel, volume_panel, amount_panel,
 
 
 def select_stocks_v68(factors, date, current_holdings=None, params=None,
-                      sold_recently=None, close_panel=None, high_panel=None):
+                      sold_recently=None, close_panel=None, high_panel=None,
+                      return_all=False):
     """v68选股：复用v67逻辑，权重由DEFAULT_PARAMS控制"""
     p = {**DEFAULT_PARAMS, **(params or {})}
 
@@ -116,8 +117,11 @@ def select_stocks_v68(factors, date, current_holdings=None, params=None,
 
     # 排序选择
     scores = scores.sort_values(ascending=False)
-    selected = scores.index[:p["MAX_DAILY_BUY"]]
-    return [(code, scores[code]) for code in selected]
+    if return_all:
+        return [(code, scores[code]) for code in scores.index]
+    else:
+        selected = scores.index[:p["MAX_DAILY_BUY"]]
+        return [(code, scores[code]) for code in selected]
 
 
 if __name__ == '__main__':

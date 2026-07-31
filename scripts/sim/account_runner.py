@@ -164,14 +164,9 @@ def load_account(account_id, stale_days=30):
                 _conn.close()
                 if _rows:
                     dates = sorted([r[0] for r in _rows if r[1] > 0])
-                    if buy_date in dates and str(dt.now().date()) in dates:
-                        buy_idx = dates.index(buy_date)
-                        today_idx = dates.index(str(dt.now().date()))
-                        hd = max(0, today_idx - buy_idx)
-                    else:
-                        # 回退到日历天数（非交易日）
-                        buy_dt = dt.strptime(buy_date, "%Y-%m-%d")
-                        hd = max(0, (dt.now() - buy_dt).days)
+                    # 用最近一个已有交易日作为截止日，不依赖"今天是否是交易日"
+                    latest_td = dates[-1]
+                    hd = sum(1 for d in dates if d > buy_date and d <= latest_td)
                 else:
                     buy_dt = dt.strptime(buy_date, "%Y-%m-%d")
                     hd = max(0, (dt.now() - buy_dt).days)
@@ -374,7 +369,7 @@ def run_signal(account_id, date, strategy_name=None):
                 for s in plan.get("sell_plan", [])
             ],
             "buys": [
-                {"code": b["code"], "name": b.get("name") or name_map.get(b["code"], ""), "shares": b.get("qty", 0), "price": b.get("price", 0), "target_amount": b.get("target_amount", 0)}
+                {"code": b["code"], "name": b.get("name") or name_map.get(b["code"], ""), "shares": b.get("qty", 0), "price": b.get("price", 0), "target_amount": b.get("target_amount", 0), "score": b.get("score", 0)}
                 for b in plan.get("buy_plan", []) if b.get("qty", 0) > 0
             ],
             "top_scores": [
@@ -382,7 +377,7 @@ def run_signal(account_id, date, strategy_name=None):
                 for c, s in plan.get("top_scores_raw", [])[:10]
             ],
             "holds": [
-                {"code": h["code"], "name": h.get("name") or name_map.get(h["code"], ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0)}
+                {"code": h["code"], "name": h.get("name") or name_map.get(h["code"], ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0), "score": h.get("score", 0)}
                 for h in plan.get("hold_plan", [])
             ],
             "duration": round(time.time() - t0, 1),
@@ -578,7 +573,8 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     top_scores_raw = adapter.select(strategy_name, None, date,
                                     cp, vp, ap, hp, lp, op,
                                     current_holdings={},
-                                    params=params)
+                                    params=params,
+                                    return_all=True)
     # 市场状态识别 → 仓位乘数（用 strategy_adapter 统一接口）
     regime_label, regime_mult = adapter.calc_regime(strategy_name, cp, date, params)
     logger.info(f"市场状态: {regime_label}, 仓位乘数: {regime_mult}")
@@ -600,8 +596,6 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     sell_codes_set = set(sell_codes)
     remaining_after_sell = {c for c in state.holdings if c not in sell_codes_set}
     max_new = max(0, params["MAX_HOLDINGS"] - len(remaining_after_sell))
-    # 保存原始选股得分（供 top_scores 输出）
-    top_scores_raw = list(cands)
     cands = cands[:max_new]
 
     # 估算每只买入预算（用于资金容量过滤和计算股数）
@@ -690,6 +684,8 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
     # 生成持有计划：当前持仓中不在 sell_codes 且不在 buy_list 的
     buy_codes_set = {c for c, _ in buy_list}
+    # 从 top_scores_raw 构建分数查找表（持有股票也参与打分）
+    score_map = {c: s for c, s in top_scores_raw}
     hold_plan = []
     for code, h in state.holdings.items():
         if code not in sell_codes_set and code not in buy_codes_set:
@@ -704,6 +700,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
                 'current_shares': h.get('shares', h.get('qty', 0)),
                 'price': round(price, 2),
                 'cost_price': round(h.get('cost_price', 0), 2),
+                'score': round(score_map.get(code, 0), 4),
                 'action': 'hold',
             })
 

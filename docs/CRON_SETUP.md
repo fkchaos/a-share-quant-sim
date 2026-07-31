@@ -81,13 +81,12 @@ Hermes cron → agent 执行 account_runner.py → agent 输出报告文本 → 
 ### 路径 B（Hermes cron，当前服务器使用）
 | 任务 | Job ID | 时间 | 策略 |
 |------|--------|------|------|
-| 🟢 数据更新-上午 | `8ebcb1e20cf1` | 11:31 工作日 | — |
-| 🟢 数据更新-下午 | `b530aff8cbb4` | 15:05 工作日 | — |
+| 🟢 数据更新(每半小时) | `f79178b2d93f` | 9:31-11:31,13:01-15:31 工作日 | — |
 | 🟢 账户1-上午信号 | `d09a4fdbe506` | 11:45 工作日 | v61b |
 | 🟢 账户1-下午执行 | `050969e9b685` | 13:00 工作日 | v61b |
 | 🟢 账户2-上午信号 | `6ef77c65f34c` | 11:45 工作日 | v68 |
 | 🟢 账户2-下午执行 | `b0ba5f428eb5` | 13:00 工作日 | v68 |
-| 🟢 收盘报告 | `b6e0ef652f31` | 15:30 工作日 | — |
+| 🟢 收盘报告 | `b6e0ef652f31` | 16:00 工作日 | — |
 | 🟡 S&P500五指标周报 | `1600b5347f43` | 周六 8:00 | — |
 | 🟡 因子IC衰减监控 | `ca8ef8f68f6c` | 每月1日 9:00 | — |
 
@@ -218,7 +217,7 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 ```bash
 hermes cron create \
   --name "收盘报告" \
-  --schedule "30 15 * * 1-5" \
+  --schedule "0 16 * * 1-5" \
   --prompt "执行收盘报告（所有活跃账户）。
 
 运行命令：
@@ -234,11 +233,8 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 > 管道：`account_runner.py` 输出 JSON → `format_report.py` 格式化 → 终端输出。
 
 ```bash
-# 数据更新（上午）
-31 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
-
-# 数据更新（下午）
-5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
+# 数据更新（每半小时，跳过午休）
+31 9-11,13-15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null
 
 # 账户1-上午信号（v61b）
 45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
@@ -253,8 +249,8 @@ cd /root/a-share-quant-sim && /root/.hermes/hermes-agent/venv/bin/python3 script
 0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
 
 # 收盘报告
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
+0 16 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
+0 16 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
 ```
 
 > 注意：所有脚本依赖 `pip install -e .` 安装的项目依赖。普通部署 `python3` 直接可用，无需 venv 完整路径。

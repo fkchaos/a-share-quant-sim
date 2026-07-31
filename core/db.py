@@ -552,7 +552,7 @@ def get_holdings(account_id=1):
     """返回 {code: {name, shares, cost_price, ...}}"""
     with get_conn("holdings") as conn:
         rows = conn.execute(
-            "SELECT * FROM holdings WHERE account_id=?", (account_id,)
+            "SELECT * FROM holdings WHERE account_id=? AND shares > 0", (account_id,)
         ).fetchall()
         return {r["code"]: dict(r) for r in rows}
 
@@ -582,7 +582,7 @@ def get_other_accounts_holdings(account_id):
     """返回所有【其他】账户持有的股票代码集合（跨账户去重用）"""
     with get_conn("holdings") as conn:
         rows = conn.execute(
-            "SELECT code FROM holdings WHERE account_id != ?", (account_id,)
+            "SELECT code FROM holdings WHERE account_id != ? AND shares > 0", (account_id,)
         ).fetchall()
         return {r["code"] for r in rows}
 

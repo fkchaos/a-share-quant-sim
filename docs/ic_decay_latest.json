@@ -1,46 +1,46 @@
 {
-  "date": "2026-06-30",
-  "data_range": "2025-06-30 ~ 2026-06-29",
-  "n_stocks": 4835,
+  "date": "2026-08-01",
+  "data_range": "2025-08-01 ~ 2026-07-31",
+  "n_stocks": 4828,
   "results": {
     "turnover_ma5_neg": {
-      "IC": 0.0432,
+      "IC": 0.0378,
       "direction": "neg"
     },
     "log_market_cap_neg": {
-      "IC": 0.0481,
+      "IC": 0.0489,
       "direction": "neg"
     },
     "mom_5": {
-      "IC": -0.0291,
+      "IC": -0.0149,
       "direction": "pos"
     },
     "mom_10": {
-      "IC": -0.0376,
+      "IC": -0.0236,
       "direction": "pos"
     },
     "mom_20": {
-      "IC": -0.0267,
+      "IC": -0.0242,
       "direction": "pos"
     },
     "vol_5": {
-      "IC": -0.0379,
+      "IC": -0.0462,
       "direction": "pos"
     },
     "vol_20": {
-      "IC": -0.0385,
+      "IC": -0.0523,
       "direction": "pos"
     },
     "rev_3_neg": {
-      "IC": 0.02,
+      "IC": 0.0144,
       "direction": "neg"
     },
     "rev_5_neg": {
-      "IC": 0.0291,
+      "IC": 0.0149,
       "direction": "neg"
     },
     "vol_ratio": {
-      "IC": -0.0299,
+      "IC": -0.0268,
       "direction": "pos"
     }
   }

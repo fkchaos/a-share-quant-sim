@@ -58,8 +58,12 @@ def format_signal(data: dict, account_id: int) -> str:
         lines.append(f"📊 选股Top{len(top_scores)}得分:")
         if strategy in ("v61b", "v61"):
             lines.append("  score = low_turnover_rank + small_cap_rank (满分2.0)")
+            lines.append("  low_turnover_rank=5日平均换手率的百分位排名, 换手越低得分越高")
+            lines.append("  small_cap_rank=流通市值的百分位排名, 市值越小得分越高")
         elif strategy in ("v68", "v67"):
             lines.append("  score = MOM×0.35 + ILLIQ×0.15 + SIZE×0.35 + TURNOVER×0.03 + PV_CORR×0.02 + recent_limit_3d×0.35")
+            lines.append("  MOM=动量(涨跌趋势), ILLIQ=非流动性溢价, SIZE=小市值偏好")
+            lines.append("  TURNOVER=换手率, PV_CORR=量价相关性, recent_limit_3d=近3日涨停次数")
         else:
             lines.append("  score = 综合评分")
         for i, t in enumerate(top_scores):

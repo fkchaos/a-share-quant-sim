@@ -75,4 +75,4 @@ def select_stocks_v61b(factors, date, close_panel, volume_panel, amount_panel,
     held = set(current_holdings.keys()) if current_holdings else set()
     buy_list = [c for c in candidates if c not in held]
 
-    return [(code, 1.0) for code in buy_list[:n]]
+    return [(code, round(scores.get(code, 0), 4)) for code in buy_list[:n]]

@@ -1169,7 +1169,7 @@ class StrategyAdapter:
 
     def _v61b_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,
-                    sold_recently=None):
+                    sold_recently=None, return_all=False):
         """v61b 选股: 换手率+小市值 优化版（含调仓日判断和卖出即买逻辑）"""
         from scripts.strategies.v61b_turnover_size import select_stocks_v61b, calc_factors_v61b
         if factors is None:

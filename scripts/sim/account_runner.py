@@ -460,12 +460,14 @@ def _run_signal_impl(account_id, date, strategy_name=None):
                 # overlay 模式补 top_scores（用空 holdings 选股，让已持仓也参与打分）
                 if not plan.get("top_scores_raw"):
                     try:
-                        full_cands = adapter.select(strategy_name, None, date,
-                                                     panels[0], panels[1], panels[2],
-                                                     panels[3], panels[4], panels[5],
-                                                     current_holdings={},
-                                                     params=overlay_params)
-                        plan["top_scores_raw"] = [(c, s) for c, s in full_cands[:10]]
+                        # 直接调用因子计算，取前10名（不走adapter.select，避免被截断为n只）
+                        from scripts.strategies.v61b_turnover_size import calc_factors_v61b
+                        factors = calc_factors_v61b(
+                            panels[0], panels[1], panels[2],
+                            panels[3], panels[4], panels[5]
+                        )
+                        scores = list(factors.values())[0]
+                        plan["top_scores_raw"] = [(c, round(s, 4)) for c, s in scores.head(10).items()]
                     except Exception as e:
                         logger.warning(f"[overlay] top_scores 生成失败: {e}")
                         plan["top_scores_raw"] = []

@@ -54,10 +54,16 @@ def format_signal(data: dict, account_id: int) -> str:
     lines.append("─" * 30)
 
     if top_scores:
+        strategy = data.get("strategy", "")
         lines.append(f"📊 选股Top{len(top_scores)}得分:")
-        lines.append("  score = MOM×0.35 + ILLIQ×0.15 + SIZE×0.35 + TURNOVER×0.03 + PV_CORR×0.02 + recent_limit_3d×0.35")
+        if strategy in ("v61b", "v61"):
+            lines.append("  score = low_turnover_rank + small_cap_rank (满分2.0)")
+        elif strategy in ("v68", "v67"):
+            lines.append("  score = MOM×0.35 + ILLIQ×0.15 + SIZE×0.35 + TURNOVER×0.03 + PV_CORR×0.02 + recent_limit_3d×0.35")
+        else:
+            lines.append("  score = 综合评分")
         for i, t in enumerate(top_scores):
-            lines.append(f"  {i+1}. {t['code']} {t.get('name','')} — score={t.get('score',0):.4f} @ {t.get('price',0):.2f}")
+            lines.append(f"  {i+1}. {t['code']} {t.get('name','')} — {t.get('score',0):.4f}")
 
     if sells:
         lines.append(f"🔴 卖出 {len(sells)} 只:")

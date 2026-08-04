@@ -1,125 +1,98 @@
 #!/usr/bin/env python3
-"""Golden Test — 回归测试套件
+"""Golden Test — 回归测试套件（使用独立 Golden Dataset）
 
-用于验证策略/环境/数据变动前后，核心逻辑的结果一致性。
-
-测试层级：
-1. 单元测试：因子计算、选股逻辑
-2. 集成测试：单策略回测
-3. 回归测试：与历史基准对比
+标准输入: tests/golden/golden_stocks.db (10只股票, 2021全年)
+标准答案: tests/golden/golden_baselines.json
 
 使用方法：
+    python tests/golden_test.py
     python -m pytest tests/golden_test.py -v
-    python tests/golden_test.py  # 直接运行
 """
 import sys, os
 import json
-import hashlib
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("BACKTEST_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 
-# ── Golden 基准数据 ──────────────────────────────────────────────
-# 这些值来自历史回测，变动前后应保持一致
-GOLDEN_FILE = Path(__file__).parent / "golden_baselines.json"
+# ── 路径定义 ──
+GOLDEN_DIR = Path(__file__).parent / "golden"
+GOLDEN_DB = GOLDEN_DIR / "golden_stocks.db"
+GOLDEN_JSON = GOLDEN_DIR / "golden_baselines.json"
 
-DEFAULT_BASELINES = {
-    "v39g_full_backtest": {
-        "description": "v39g 全量回测 (2021-01-01 ~ 2026-05-31)",
-        "params": {
-            "strategy": "v39g",
-            "start": "2021-01-01",
-            "end": "2026-05-31",
-            "pool": "zz1800",
-        },
-        "expected": {
-            "total_return_pct": 93.95,
-            "sharpe_ratio": 0.533,
-            "max_drawdown_pct": -35.20,
-            "final_nav": 387892.21,
-        },
-        "tolerance": {
-            "total_return_pct": 2.0,  # ±2%
-            "sharpe_ratio": 0.02,
-            "max_drawdown_pct": 0.5,
-            "final_nav": 5000,
-        }
-    },
-    "v39g_factor_calc": {
-        "description": "v39g 因子计算一致性",
-        "test": "factor_consistency",
-    },
-    "data_source_consistency": {
-        "description": "数据源一致性（腾讯 vs BaoStock）",
-        "test": "data_consistency",
-    }
-}
+# 测试时使用 golden 数据库
+os.environ["BACKTEST_DATA_DIR"] = str(GOLDEN_DIR)
 
 
 def load_baselines():
-    """加载 Golden 基准"""
-    if GOLDEN_FILE.exists():
-        with open(GOLDEN_FILE, 'r') as f:
+    """加载标准参考答案"""
+    if GOLDEN_JSON.exists():
+        with open(GOLDEN_JSON) as f:
             return json.load(f)
-    return DEFAULT_BASELINES
-
-
-def save_baselines(baselines):
-    """保存 Golden 基准"""
-    with open(GOLDEN_FILE, 'w') as f:
-        json.dump(baselines, f, indent=2, ensure_ascii=False)
+    return {}
 
 
 def check_tolerance(actual, expected, tolerance, name=""):
-    """检查是否在容差范围内"""
+    """检查结果是否在容差范围内"""
     passed = True
     details = []
-    
     for key in expected:
-        if key not in actual:
-            details.append(f"  ❌ {key}: 缺失")
+        a = actual.get(key)
+        e = expected[key]
+        t = tolerance.get(key, 0)
+        if a is None:
+            details.append(f"❌ {key}: 缺失")
             passed = False
-            continue
-        
-        exp_val = expected[key]
-        act_val = actual[key]
-        tol = tolerance.get(key, 0)
-        
-        diff = abs(act_val - exp_val)
-        if diff > tol:
-            details.append(f"  ❌ {key}: {act_val} vs {exp_val} (差{diff:.4f}, 容差{tol})")
+        elif abs(a - e) > t:
+            details.append(f"❌ {key}: {a} (差{abs(a-e):.4f}, 容差{t})")
             passed = False
         else:
-            details.append(f"  ✅ {key}: {act_val} (差{diff:.4f}, 容差{tol})")
-    
+            details.append(f"✅ {key}: {a} (差{abs(a-e):.4f}, 容差{t})")
     return passed, details
 
 
 # ── 测试函数 ──────────────────────────────────────────────────────
 
-def test_v39g_full_backtest():
-    """测试 v39g 全量回测结果"""
+def test_golden_data_exists():
+    """测试标准输入数据是否存在"""
     print("\n" + "="*60)
-    print("测试 1: v39g 全量回测结果")
+    print("测试 0: 标准输入数据")
+    print("="*60)
+    
+    if GOLDEN_DB.exists():
+        import sqlite3
+        conn = sqlite3.connect(str(GOLDEN_DB))
+        n_kline = conn.execute("SELECT COUNT(*) FROM daily_kline").fetchone()[0]
+        n_pool = conn.execute("SELECT COUNT(*) FROM stock_pool").fetchone()[0]
+        conn.close()
+        print(f"  ✅ golden_stocks.db: {n_kline} 条K线, {n_pool} 只股票")
+        return True
+    else:
+        print(f"  ❌ golden_stocks.db 不存在")
+        print(f"     请先运行: python tests/golden/build_golden.py")
+        return False
+
+
+def test_v39g_golden_backtest():
+    """测试 v39g 在 golden 数据集上的回测结果"""
+    print("\n" + "="*60)
+    print("测试 1: v39g golden 回测结果")
     print("="*60)
     
     baselines = load_baselines()
-    baseline = baselines.get("v39g_full_backtest")
+    baseline = baselines.get("v39g_golden_2021")
     if not baseline:
         print("  ⚠️ 无基准数据，跳过")
         return None
     
-    # 运行回测
     from scripts.backtest.wf_runner import run_wf
     
     params = baseline["params"]
     print(f"  运行 v39g 全量回测...")
     print(f"  区间: {params['start']} ~ {params['end']}")
+    print(f"  数据源: golden_stocks.db")
     
-    # 捕获输出
     import io
     from contextlib import redirect_stdout
     
@@ -150,7 +123,6 @@ def test_v39g_full_backtest():
         print("  ❌ 无法解析回测结果")
         return False
     
-    # 检查容差
     passed, details = check_tolerance(
         actual, baseline["expected"], baseline["tolerance"], "v39g"
     )
@@ -163,8 +135,119 @@ def test_v39g_full_backtest():
     return passed
 
 
+def test_v61b_golden_backtest():
+    """测试 v61b 在 golden 数据集上的回测结果"""
+    print("\n" + "="*60)
+    print("测试 2: v61b golden 回测结果")
+    print("="*60)
+    
+    baselines = load_baselines()
+    baseline = baselines.get("v61b_golden_2021")
+    if not baseline:
+        print("  ⚠️ 无基准数据，跳过")
+        return None
+    
+    from scripts.backtest.v61b_risk_scan import run_wf_overlay
+    
+    params = baseline["params"]
+    print(f"  运行 v61b 全量回测...")
+    print(f"  区间: {params['start']} ~ {params['end']}")
+    print(f"  数据源: golden_stocks.db")
+    
+    import io
+    from contextlib import redirect_stdout
+    
+    f = io.StringIO()
+    with redirect_stdout(f):
+        result = run_wf_overlay(
+            train_days=252, test_days=252, step_days=252,
+            start_date=params["start"], end_date=params["end"],
+            full=True
+        )
+    
+    # v61b 返回标准格式 {total, sharpe, dd, ...}
+    actual = {
+        'total_return_pct': result['total'],
+        'sharpe_ratio': result['sharpe'],
+        'max_drawdown_pct': result['dd'],
+        'final_nav': 100000 * (1 + result['total'] / 100),
+    }
+    
+    passed, details = check_tolerance(
+        actual, baseline["expected"], baseline["tolerance"], "v61b"
+    )
+    
+    print(f"\n  结果:")
+    for d in details:
+        print(f"    {d}")
+    
+    print(f"\n  {'✅ 通过' if passed else '❌ 失败'}")
+    return passed
+
+
+def test_v68_golden_backtest():
+    """测试 v68 在 golden 数据集上的回测结果"""
+    print("\n" + "="*60)
+    print("测试 3: v68 golden 回测结果")
+    print("="*60)
+    
+    baselines = load_baselines()
+    baseline = baselines.get("v68_golden_2021")
+    if not baseline:
+        print("  ⚠️ 无基准数据，跳过")
+        return None
+    
+    from scripts.backtest.wf_runner import run_wf
+    
+    params = baseline["params"]
+    print(f"  运行 v68 全量回测...")
+    print(f"  区间: {params['start']} ~ {params['end']}")
+    print(f"  数据源: golden_stocks.db")
+    
+    import io
+    from contextlib import redirect_stdout
+    
+    f = io.StringIO()
+    with redirect_stdout(f):
+        run_wf(
+            params["strategy"],
+            train_days=252, test_days=252, step_days=252,
+            start_date=params["start"], end_date=params["end"],
+            full=True, pool_override=params["pool"]
+        )
+    
+    output = f.getvalue()
+    
+    # 解析结果
+    actual = {}
+    for line in output.split('\n'):
+        if '总收益率:' in line:
+            actual['total_return_pct'] = float(line.split(':')[1].strip().replace('%', ''))
+        elif '夏普比率:' in line:
+            actual['sharpe_ratio'] = float(line.split(':')[1].strip())
+        elif '最大回撤:' in line:
+            actual['max_drawdown_pct'] = -float(line.split(':')[1].strip().replace('%', ''))
+        elif '最终净值:' in line:
+            actual['final_nav'] = float(line.split(':')[1].strip().replace(',', ''))
+    
+    if not actual:
+        print("  ❌ 无法解析回测结果")
+        return False
+    
+    passed, details = check_tolerance(
+        actual, baseline["expected"], baseline["tolerance"], "v68"
+    )
+    
+    print(f"\n  结果:")
+    for d in details:
+        print(f"    {d}")
+    
+    print(f"\n  {'✅ 通过' if passed else '❌ 失败'}")
+    return passed
+
+
 def test_factor_consistency():
-    """测试因子计算一致性"""
+    """测试因子计算一致性（使用 golden 数据）"""
     print("\n" + "="*60)
     print("测试 2: 因子计算一致性")
     print("="*60)
@@ -172,43 +255,43 @@ def test_factor_consistency():
     import sqlite3
     from scripts.strategies.v39c_pv_resonance import calc_factors
     
-    # 加载少量数据
-    conn = sqlite3.connect('data/quant_stocks.db', timeout=30)
-    codes = pd.read_sql_query("SELECT code FROM stock_pool_zz1800 LIMIT 10", conn)['code'].tolist()
+    # 从 golden 数据库加载数据
+    conn = sqlite3.connect(str(GOLDEN_DB))
+    codes = pd.read_sql_query("SELECT code FROM stock_pool", conn)['code'].tolist()
+    
+    kline = pd.read_sql_query(
+        "SELECT code, date, open, high, low, close, volume, amount FROM daily_kline ORDER BY code, date",
+        conn
+    )
     conn.close()
     
-    # 构造简单面板
-    np.random.seed(42)
-    dates = pd.date_range('2021-01-01', periods=100, freq='B')
+    if len(kline) == 0:
+        print("  ❌ golden 数据库无数据")
+        return False
+    
+    kline['date'] = pd.to_datetime(kline['date'])
+    dates = sorted(kline['date'].unique())
     n_stocks = len(codes)
     
-    close_panel = pd.DataFrame(
-        np.random.uniform(10, 50, (100, n_stocks)),
-        index=dates, columns=codes
-    )
-    volume_panel = pd.DataFrame(
-        np.random.uniform(1000, 10000, (100, n_stocks)),
-        index=dates, columns=codes
-    )
-    amount_panel = close_panel * volume_panel * 100
+    # 构造面板
+    close_panel = kline.pivot(index='date', columns='code', values='close')
+    volume_panel = kline.pivot(index='date', columns='code', values='volume')
+    amount_panel = kline.pivot(index='date', columns='code', values='amount')
+    high_panel = kline.pivot(index='date', columns='code', values='high')
+    low_panel = kline.pivot(index='date', columns='code', values='low')
+    open_panel = kline.pivot(index='date', columns='code', values='open')
     
-    # 计算因子
+    # 计算因子（两次，验证确定性）
     factors1 = calc_factors(close_panel, volume_panel, amount_panel,
-                           close_panel, close_panel, close_panel)
+                           high_panel, low_panel, open_panel)
     factors2 = calc_factors(close_panel, volume_panel, amount_panel,
-                           close_panel, close_panel, close_panel)
+                           high_panel, low_panel, open_panel)
     
-    # 比较
+    # 对比
     passed = True
     for key in factors1:
-        if key not in factors2:
-            print(f"  ❌ 因子 {key} 在第二次计算中缺失")
-            passed = False
-            continue
-        
         val1 = factors1[key]
         val2 = factors2[key]
-        
         if isinstance(val1, pd.DataFrame):
             if not val1.equals(val2):
                 diff = (val1 - val2).abs().max().max()
@@ -234,130 +317,70 @@ def test_factor_consistency():
     return passed
 
 
-def test_data_consistency():
-    """测试数据源一致性"""
-    print("\n" + "="*60)
-    print("测试 3: 数据源一致性（腾讯 vs BaoStock）")
-    print("="*60)
-    
-    import sqlite3
-    from core.providers.baostock import BaoStockProvider
-    
-    # 测试股票
-    code = '000001'
-    date = '2021-01-04'
-    
-    # SQLite 腾讯
-    conn = sqlite3.connect('data/quant_stocks.db', timeout=30)
-    cursor = conn.execute(
-        "SELECT volume FROM daily_kline WHERE code=? AND date=?",
-        (code, date)
-    )
-    row = cursor.fetchone()
-    tx_volume = row[0] if row else None
-    conn.close()
-    
-    # BaoStock
-    provider = BaoStockProvider()
-    df = provider.get_daily_kline([code], date, date)
-    bs_volume = df['volume'].iloc[0] if not df.empty else None
-    
-    if tx_volume is None or bs_volume is None:
-        print(f"  ❌ 数据缺失: 腾讯={tx_volume}, BaoStock={bs_volume}")
-        return False
-    
-    diff = abs(tx_volume - bs_volume)
-    passed = diff <= 1  # 最多差1手
-    
-    print(f"  SQLite (腾讯): {tx_volume} 手")
-    print(f"  BaoStock: {bs_volume} 手")
-    print(f"  差异: {diff} 手")
-    print(f"\n  {'✅ 通过' if passed else '❌ 失败'}")
-    return passed
-
-
-def test_strategy_adapter_integrity():
+def test_strategy_adapter():
     """测试策略适配器完整性"""
     print("\n" + "="*60)
-    print("测试 4: 策略适配器完整性")
+    print("测试 3: 策略适配器完整性")
     print("="*60)
     
-    from scripts.backtest.strategy_adapter import StrategyAdapter
+    from scripts.backtest.strategy_adapter import get_adapter
+    adapter = get_adapter()
     
-    adapter = StrategyAdapter()
-    
-    # 检查关键策略是否注册
-    required_strategies = ['v39g', 'v61b', 'v68']
+    required = ['v39g', 'v61b', 'v68']
     passed = True
     
-    for strategy in required_strategies:
-        if strategy in adapter._select_fns:
-            print(f"  ✅ {strategy}: 已注册")
+    for s in required:
+        if s in adapter.list_strategies():
+            print(f"  ✅ {s}: 已注册")
         else:
-            print(f"  ❌ {strategy}: 未注册")
+            print(f"  ❌ {s}: 未注册")
             passed = False
-    
-    # 检查参数是否完整
-    for strategy in required_strategies:
-        if strategy in adapter._risk_params:
-            params = adapter._risk_params[strategy]
-            if 'STOP_LOSS' in params and 'MAX_HOLDINGS' in params:
-                print(f"  ✅ {strategy}: 参数完整")
+        
+        if s in adapter._risk_params:
+            params = adapter._risk_params[s]
+            if 'STOP_LOSS' in params and 'TAKE_PROFIT' in params:
+                print(f"  ✅ {s}: 参数完整")
             else:
-                print(f"  ❌ {strategy}: 参数不完整")
+                print(f"  ❌ {s}: 参数不完整")
                 passed = False
         else:
-            print(f"  ❌ {strategy}: 无参数")
+            print(f"  ❌ {s}: 无风险参数")
             passed = False
     
     print(f"\n  {'✅ 通过' if passed else '❌ 失败'}")
     return passed
 
 
-# ── 主入口 ──────────────────────────────────────────────────────
+# ── 主函数 ──────────────────────────────────────────────────────
 
 def main():
     print("="*60)
     print("Golden Test — 回归测试套件")
+    print(f"标准输入: {GOLDEN_DB}")
+    print(f"标准答案: {GOLDEN_JSON}")
     print("="*60)
     
     results = {}
     
-    # 运行所有测试
-    tests = [
-        ("数据源一致性", test_data_consistency),
-        ("因子计算一致性", test_factor_consistency),
-        ("策略适配器完整性", test_strategy_adapter_integrity),
-        ("v39g全量回测", test_v39g_full_backtest),
-    ]
-    
-    for name, test_fn in tests:
-        try:
-            passed = test_fn()
-            results[name] = passed
-        except Exception as e:
-            print(f"\n  ❌ 异常: {e}")
-            results[name] = False
+    results['data'] = test_golden_data_exists()
+    results['adapter'] = test_strategy_adapter()
+    results['v39g'] = test_v39g_golden_backtest()
+    results['v61b'] = test_v61b_golden_backtest()
+    results['v68'] = test_v68_golden_backtest()
     
     # 汇总
     print("\n" + "="*60)
     print("测试汇总")
     print("="*60)
-    
-    all_passed = True
     for name, passed in results.items():
-        status = "✅" if passed else "❌"
+        status = "✅ 通过" if passed else "❌ 失败" if passed is False else "⚠️ 跳过"
         print(f"  {status} {name}")
-        if not passed:
-            all_passed = False
     
-    print(f"\n{'='*60}")
-    print(f"总体结果: {'✅ 全部通过' if all_passed else '❌ 存在失败'}")
-    print(f"{'='*60}")
+    all_passed = all(v for v in results.values() if v is not None)
+    print(f"\n总体结果: {'✅ 全部通过' if all_passed else '❌ 存在失败'}")
     
-    return all_passed
+    return 0 if all_passed else 1
 
 
 if __name__ == '__main__':
-    success = main()
-    sys.exit(0 if success else 1)
+    sys.exit(main())

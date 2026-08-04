@@ -1,0 +1,65 @@
+{
+  "v39g_golden_2021": {
+    "description": "v39g 基准策略 (golden dataset: 10只股票, 2021全年)",
+    "params": {
+      "strategy": "v39g",
+      "start": "2021-01-01",
+      "end": "2021-12-31",
+      "pool": "zz1800"
+    },
+    "expected": {
+      "total_return_pct": 23.69,
+      "sharpe_ratio": 0.665,
+      "max_drawdown_pct": -35.20,
+      "final_nav": 247372.39
+    },
+    "tolerance": {
+      "total_return_pct": 2.0,
+      "sharpe_ratio": 0.02,
+      "max_drawdown_pct": 0.5,
+      "final_nav": 500
+    }
+  },
+  "v61b_golden_2021": {
+    "description": "v61b 低换手小票策略 (golden dataset: 10只股票, 2021全年)",
+    "params": {
+      "strategy": "v61b",
+      "start": "2021-01-01",
+      "end": "2021-12-31",
+      "pool": "zz1800"
+    },
+    "expected": {
+      "total_return_pct": 128.0,
+      "sharpe_ratio": 4.622,
+      "max_drawdown_pct": -12.5,
+      "final_nav": 228000.0
+    },
+    "tolerance": {
+      "total_return_pct": 2.0,
+      "sharpe_ratio": 0.05,
+      "max_drawdown_pct": 1.0,
+      "final_nav": 500
+    }
+  },
+  "v68_golden_2021": {
+    "description": "v68 情绪择时策略 (golden dataset: 10只股票, 2021全年)",
+    "params": {
+      "strategy": "v68",
+      "start": "2021-01-01",
+      "end": "2021-12-31",
+      "pool": "zz1800"
+    },
+    "expected": {
+      "total_return_pct": 55.90,
+      "sharpe_ratio": 0.975,
+      "max_drawdown_pct": -28.29,
+      "final_nav": 311793.29
+    },
+    "tolerance": {
+      "total_return_pct": 2.0,
+      "sharpe_ratio": 0.02,
+      "max_drawdown_pct": 0.5,
+      "final_nav": 500
+    }
+  }
+}

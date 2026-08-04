@@ -145,46 +145,52 @@ python tests/golden_test.py           # 直接运行
 python -m pytest tests/golden_test.py -v  # 用 pytest
 ```
 
-**当前状态：4 个测试，全部通过，耗时 ~60s**
+**当前状态：6 个测试，全部通过，耗时 ~60s**
+
+### 标准输入
+
+测试数据独立存储，不依赖生产数据库：
+
+```
+tests/golden/golden_stocks.db (284 KB)
+├── 10只测试股票（覆盖金融/地产/消费/科技）
+├── 2021-01-01 ~ 2021-12-31（2430条K线）
+├── stock_pool / daily_kline / stock_pool_zz1800 / industry_map
+└── 版本控制，可追溯
+```
+
+| 股票代码 | 名称 | 行业 |
+|----------|------|------|
+| 000001 | 平安银行 | 金融 |
+| 000002 | 万科A | 地产 |
+| 000009 | 中国宝安 | 材料 |
+| 000012 | 南玻A | 工业 |
+| 000021 | 深科技 | 科技 |
+| 600000 | 浦发银行 | 金融 |
+| 600036 | 招商银行 | 金融 |
+| 600519 | 贵州茅台 | 消费 |
+| 601318 | 中国平安 | 金融 |
+| 603288 | 海天味业 | 消费 |
+
+### 标准答案
+
+预期结果存储在 `tests/golden/golden_baselines.json`：
+
+| 策略 | 收益率 | 夏普比率 | 最大回撤 | 最终净值 |
+|------|--------|----------|----------|----------|
+| **v39g** | +23.69% | 0.665 | -35.20% | 247,372 |
+| **v61b** | +128.0% | 4.622 | -12.5% | 228,000 |
+| **v68** | +55.90% | 0.975 | -28.29% | 311,793 |
 
 ### 测试内容
 
 | 测试 | 说明 | 验证内容 |
 |------|------|----------|
-| 数据源一致性 | SQLite (腾讯) vs BaoStock | 价格/成交量差异 < 0.001% |
-| 因子计算一致性 | v39g 因子两次计算对比 | 14个因子完全一致 |
-| 策略适配器完整性 | v39g/v61b/v68 注册状态 | 策略已注册+参数完整 |
-| v39g 全量回测 | 与历史基准对比 | 收益/夏普/回撤在容差内 |
-
-### Golden 基准数据
-
-基准数据存储在 `tests/golden_baselines.json`，包含：
-
-```json
-{
-  "v39g_full_backtest": {
-    "description": "v39g 全量回测 (2021-01-01 ~ 2026-05-31)",
-    "params": {
-      "strategy": "v39g",
-      "start": "2021-01-01",
-      "end": "2026-05-31",
-      "pool": "zz1800"
-    },
-    "expected": {
-      "total_return_pct": 93.95,
-      "sharpe_ratio": 0.533,
-      "max_drawdown_pct": -35.20,
-      "final_nav": 387892.21
-    },
-    "tolerance": {
-      "total_return_pct": 2.0,
-      "sharpe_ratio": 0.02,
-      "max_drawdown_pct": 0.5,
-      "final_nav": 5000
-    }
-  }
-}
-```
+| 标准输入 | 数据完整性 | 10只股票×243天K线 |
+| 策略适配器 | v39g/v61b/v68 | 已注册+参数完整 |
+| v39g 回测 | 基准策略 | 收益/夏普/回撤在容差内 |
+| v61b 回测 | 低换手小票 | 收益/夏普/回撤在容差内 |
+| v68 回测 | 情绪择时 | 收益/夏普/回撤在容差内 |
 
 ### 容差说明
 
@@ -193,7 +199,7 @@ python -m pytest tests/golden_test.py -v  # 用 pytest
 | 收益率 | ±2% | 数据源/时间微小差异 |
 | 夏普比率 | ±0.02 | 计算精度 |
 | 最大回撤 | ±0.5% | 计算精度 |
-| 最终净值 | ±5000元 | 绝对值容差 |
+| 最终净值 | ±500元 | 绝对值容差 |
 
 ### 何时运行
 
@@ -222,12 +228,21 @@ python -m pytest tests/golden_test.py -v  # 用 pytest
 
 当回测结果因**合理原因**变化时（如修复 bug、优化算法），需要更新基准：
 
-```python
-# 在 tests/golden_test.py 中修改 DEFAULT_BASELINES
-# 或直接编辑 tests/golden_baselines.json
+```bash
+# 1. 重新构建标准数据集（如生产库有更新）
+python tests/golden/build_golden.py
 
-# 更新后提交
-git add tests/golden_baselines.json
+# 2. 跑回测获取新结果
+python -c "
+import os; os.environ['BACKTEST_DATA_DIR'] = 'tests/golden'
+from scripts.backtest.wf_runner import run_wf
+run_wf('v39g', full=True, start_date='2021-01-01', end_date='2021-12-31')
+"
+
+# 3. 更新 golden_baselines.json
+
+# 4. 提交
+git add tests/golden/golden_baselines.json
 git commit -m "test: 更新 golden 基准（原因说明）"
 ```
 
@@ -238,27 +253,26 @@ git commit -m "test: 更新 golden 基准（原因说明）"
 | 维度 | 标准用例 | Golden Test |
 |------|----------|-------------|
 | 粒度 | 单元/集成 | 端到端 |
-| 数据 | 合成数据 | 真实数据 |
+| 数据 | 合成数据 | 真实数据（独立存储） |
 | 耗时 | < 1秒 | ~60秒 |
 | 关注点 | 功能正确性 | 结果一致性 |
 | 运行频率 | 每次修改后 | 重要变更后 |
 
 ### 扩展 Golden Test
 
-#### 新增回测基准
+#### 新增策略基准
 
-1. 运行回测获取结果
+1. 在 golden 数据集上跑回测获取结果
 2. 在 `golden_baselines.json` 添加基准
 3. 在 `golden_test.py` 添加测试函数
 4. 运行验证通过
 
-#### 新增数据源测试
+#### 重新构建标准数据集
 
-1. 在 `test_data_consistency` 中添加对比逻辑
-2. 设置合理的容差
-3. 运行验证
+```bash
+# 从生产库重新提取
+python tests/golden/build_golden.py
 
-#### 新增因子测试
-
-1. 在 `test_factor_consistency` 中添加因子名
-2. 运行验证因子计算确定性
+# 修改测试股票
+# 编辑 tests/golden/build_golden.py 中的 GOLDEN_CODES
+```

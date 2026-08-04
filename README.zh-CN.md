@@ -208,6 +208,7 @@ flowchart TD
 | `docs/ARCHITECTURE.md` | 系统设计、模块边界、数据流 |
 | `docs/DEPLOY.md` | 部署与每日定时运行 |
 | `docs/USER_MANUAL.md` | 日常使用 |
+| `docs/TESTING.md` | 标准用例 + Golden Test 回归测试 |
 | `docs/strategy/STRATEGY_REGISTRY.md` | 策略清单与各自的思路 |
 | `docs/strategy/RESULTS_LOG.md` | 完整实验日志，数字与前提在一起 |
 | `docs/strategy/STRATEGIES_DISCARDED.md` | 被证伪的策略与复盘 |

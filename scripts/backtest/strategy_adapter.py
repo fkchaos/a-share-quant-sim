@@ -1097,7 +1097,7 @@ class StrategyAdapter:
 
     def _v39g_select(self, factors, date, close_panel, volume_panel, amount_panel,
                      high_panel, low_panel, open_panel, current_holdings, params,
-                     sold_recently=None):
+                     sold_recently=None, return_all=None):
         """v39g 选股"""
         from scripts.strategies.v39g_optimized import select_stocks_v39g
         if factors is None or "mom_5" not in factors:

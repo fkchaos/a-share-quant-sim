@@ -267,6 +267,7 @@ so any of these can be dropped in is on the roadmap and is a good first contribu
 | `docs/ARCHITECTURE.md` | System design, module boundaries, data flow |
 | `docs/DEPLOY.md` | Deployment and the daily scheduled run |
 | `docs/USER_MANUAL.md` | Day-to-day usage |
+| `docs/TESTING.md` | Standard tests + Golden Test regression suite |
 | `docs/strategy/STRATEGY_REGISTRY.md` | Strategy catalogue and what each one tries |
 | `docs/strategy/RESULTS_LOG.md` | Full experiment log, with figures and their caveats |
 | `docs/strategy/STRATEGIES_DISCARDED.md` | Falsified strategies and post-mortems |

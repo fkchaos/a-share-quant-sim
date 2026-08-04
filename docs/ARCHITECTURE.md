@@ -281,3 +281,4 @@ account_runner.py → quant_accounts.db (交易记录)
 - 共享代码：`core/account.py`（PortfolioState + buy/sell）
 - 共享选股：`scripts/strategies/` 下的选股模块可被回测直接调用
 - 数据源：统一从 `core/db.py` 读取（SQLite）
+- **回归测试**：`tests/golden_test.py`（Golden Test 套件，验证策略/数据变动前后结果一致性，详见 `docs/TESTING.md`）

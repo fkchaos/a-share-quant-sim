@@ -365,7 +365,7 @@ def run_signal(account_id, date, strategy_name=None):
             "cash": state.cash,
             "holdings_count": len(state.holdings),
             "sells": [
-                {"code": s["code"], "name": s.get("name") or name_map.get(s["code"], ""), "shares": s.get("qty", 0), "reason": s.get("reason", ""), "pnl_pct": round(s.get("pnl", 0) * 100, 2)}
+                {"code": s["code"], "name": s.get("name") or name_map.get(s["code"], ""), "shares": s.get("qty", 0), "reason": s.get("reason", ""), "pnl_pct": round(s.get("pnl", 0) * 100, 2), "hold_days": s.get("hold_days", 0)}
                 for s in plan.get("sell_plan", [])
             ],
             "buys": [
@@ -377,7 +377,7 @@ def run_signal(account_id, date, strategy_name=None):
                 for c, s in plan.get("top_scores_raw", [])[:10]
             ],
             "holds": [
-                {"code": h["code"], "name": h.get("name") or name_map.get(h["code"], ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0), "score": h.get("score", 0)}
+                {"code": h["code"], "name": h.get("name") or name_map.get(h["code"], ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0), "score": h.get("score", 0), "hold_days": h.get("hold_days", 0)}
                 for h in plan.get("hold_plan", [])
             ],
             "duration": round(time.time() - t0, 1),
@@ -703,6 +703,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
                 'price': round(price, 2),
                 'cost_price': round(h.get('cost_price', 0), 2),
                 'score': round(score_map.get(code, 0), 4),
+                'hold_days': h.get('hold_days', 0),
                 'action': 'hold',
             })
 
@@ -719,6 +720,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
                 'qty': state.holdings[c].get('shares', state.holdings[c].get('qty', 0)),
                 'reason': reason,
                 'pnl': round(pnl, 4),
+                'hold_days': state.holdings[c].get('hold_days', 0),
             }
             for c, reason, pnl in to_sell if c in state.holdings
         ],

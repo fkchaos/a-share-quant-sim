@@ -72,7 +72,9 @@ def format_signal(data: dict, account_id: int) -> str:
     if sells:
         lines.append(f"🔴 卖出 {len(sells)} 只:")
         for s in sells:
-            lines.append(f"  {s['code']} {s.get('name','')} — {s.get('shares','')}股 ({s.get('reason','')})")
+            hd = s.get('hold_days', 0)
+            hd_str = f" 持{hd}天" if hd else ""
+            lines.append(f"  {s['code']} {s.get('name','')} — {s.get('shares','')}股{hd_str} ({s.get('reason','')})")
 
     if buys:
         lines.append(f"🟢 买入 {len(buys)} 只:")
@@ -82,7 +84,9 @@ def format_signal(data: dict, account_id: int) -> str:
     if holds:
         lines.append(f"🟡 持有 {len(holds)} 只:")
         for h in holds:
-            lines.append(f"  {h['code']} {h.get('name','')} — {h.get('shares','')}股 @ {h.get('price',0):.2f}")
+            hd = h.get('hold_days', 0)
+            hd_str = f" 持{hd}天" if hd else ""
+            lines.append(f"  {h['code']} {h.get('name','')} — {h.get('shares','')}股 @ {h.get('price',0):.2f}{hd_str}")
 
     if skipped:
         lines.append(f"⏭️ 跳过 {skipped} 只（资金不足/风控）")

@@ -560,6 +560,7 @@ def run_signal(account_id, date, params, state, panels):
             'qty': state.holdings[c].get('shares', state.holdings[c].get('qty', 0)),
             'reason': reason,
             'pnl': round(pnl, 4),
+            'hold_days': state.holdings[c].get('hold_days', 0),
         }
         for c, reason, pnl in to_sell if c in state.holdings
     ]
@@ -577,6 +578,7 @@ def run_signal(account_id, date, params, state, panels):
                 'current_shares': h.get('shares', h.get('qty', 0)),
                 'price': round(price, 2),
                 'cost_price': round(h.get('cost_price', 0), 2),
+                'hold_days': h.get('hold_days', 0),
                 'action': 'hold',
             })
     

@@ -246,7 +246,7 @@ def cmd_set_cash(args):
     old = acct['cash']
     delta = p.amount - old
     print(f"账户 {aid} ({acct['name']})")
-    print(f"  当前: ¥{fmt(old)} → 目标: ¥{fmt(p.amount)} (Δ{fmt(delta):+})")
+    print(f"  当前: ¥{fmt(old)} → 目标: ¥{fmt(p.amount)} (Δ{'+' if delta>=0 else ''}{fmt(delta)})")
     if not confirm("确认?"):
         print("已取消"); return
     update_cash(aid, delta=delta)

@@ -79,8 +79,8 @@ def select_stocks_v68(factors, date, current_holdings=None, params=None,
     if sold_recently:
         candidates = [c for c in candidates if c not in sold_recently]
 
-    # 涨停过滤
-    if p.get("EXCLUDE_LIMIT_UP") and close_panel is not None and high_panel is not None:
+    # 涨停过滤（仅在实际选股时过滤，return_all模式保留用于打分显示）
+    if not return_all and p.get("EXCLUDE_LIMIT_UP") and close_panel is not None and high_panel is not None:
         if date in close_panel.index and date in high_panel.index:
             close_today = close_panel.loc[date]
             high_today = high_panel.loc[date]

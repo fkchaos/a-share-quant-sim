@@ -67,7 +67,68 @@ python scripts/tools/init_project.py --accounts    # 只初始化账户
 
 ---
 
-## 4. 跑回测
+## 4. 数据源配置
+
+系统支持多数据源自动切换，配置文件位于 `config/data_sources.yaml`：
+
+```yaml
+primary: tencent    # 主数据源（日常使用）
+backup: baostock    # 备用数据源（primary 失败时自动切换）
+# override: baostock  # 取消注释可强制使用指定数据源（优先级最高）
+```
+
+### 4.1 查看当前配置
+
+```bash
+cat config/data_sources.yaml
+```
+
+### 4.2 切换数据源
+
+**场景 1：临时强制使用 BaoStock**（如腾讯接口不稳定）
+```bash
+vim config/data_sources.yaml
+# 取消注释 override: baostock
+```
+
+**场景 2：恢复默认**（Tencent 主 → BaoStock 备）
+```bash
+vim config/data_sources.yaml
+# 注释掉 override 行
+# override: baostock
+```
+
+**场景 3：永久更换主数据源**
+```bash
+vim config/data_sources.yaml
+primary: baostock    # 改为 BaoStock
+backup: tencent      # 腾讯作为备用
+```
+
+### 4.3 检查数据源健康状态
+
+```python
+from core.provider_manager import ProviderManager
+pm = ProviderManager()
+print(pm.health_check_all())  # {'tencent': True, 'baostock': True}
+```
+
+### 4.4 添加新数据源（可扩展）
+
+1. 在 `core/providers/` 新建 `xxx.py`，继承 `DataProvider` 接口
+2. 实现三个方法：
+   - `get_daily_kline(codes, start_date, end_date)` → 日K线
+   - `get_float_shares(codes, date)` → 流通股本
+   - `get_index_components(index_code, date)` → 指数成分股
+3. 在 `core/provider_manager.py` 的 `_register_builtin_providers()` 中注册
+4. 在 `config/data_sources.yaml` 中配置 primary/backup
+
+> ⚠️ 新数据源必须确保字段单位与现有系统一致：volume=手，amount=元，close/open/high/low=元。
+> 详见 `core/data_provider.py` 的 `KLINE_COLUMNS` 定义。
+
+---
+
+## 5. 跑回测
 
 > ✅ v68 回测入口：`python scripts/backtest/wf_runner.py --strategy v68`
 > 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py）。

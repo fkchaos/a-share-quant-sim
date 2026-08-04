@@ -206,7 +206,43 @@ python scripts/sim/account_runner.py switch --account-id 2 --strategy v68  # 切
 
 ## 六、数据层
 
-### 6.1 双库架构
+### 6.1 数据源 Provider 架构（可扩展）
+
+数据获取采用 **Provider 抽象层**，支持多数据源自动切换和手动指定：
+
+```
+config/data_sources.yaml    ← 配置文件（primary/backup/override）
+         ↓
+core/provider_manager.py    ← ProviderManager（fallback 链管理）
+         ↓
+core/data_provider.py       ← DataProvider 抽象接口
+         ↓
+core/providers/tencent.py   ← 腾讯行情（主数据源，免费）
+core/providers/baostock.py  ← BaoStock（备用数据源，免费）
+```
+
+**Fallback 机制**：
+1. **override**（手动指定）→ 优先级最高，设置后忽略 primary/backup
+2. **primary**（主数据源）→ 日常使用
+3. **backup**（备用数据源）→ primary 失败时自动切换
+
+**切换数据源**（详见 `docs/DEPLOY.md`）：
+```bash
+# 临时强制使用 BaoStock
+vim config/data_sources.yaml
+# 取消注释 override: baostock
+
+# 恢复默认（Tencent 主 → BaoStock 备）
+# 注释掉 override 行
+```
+
+**可扩展**：添加新数据源只需：
+1. 在 `core/providers/` 新建 `xxx.py`，继承 `DataProvider` 接口
+2. 实现 `get_daily_kline()`、`get_float_shares()`、`get_index_components()` 三个方法
+3. 在 `core/provider_manager.py` 的 `_register_builtin_providers()` 中注册
+4. 在 `config/data_sources.yaml` 中配置 primary/backup
+
+### 6.2 双库架构
 
 SQLite 双库分离，`core/db.py` 统一管理连接：
 
@@ -221,7 +257,7 @@ SQLite 双库分离，`core/db.py` 统一管理连接：
 | | `holdings` | 持仓（account_id + code 联合主键） |
 | | `trade_log` | 交易记录 |
 
-### 6.2 核心函数
+### 6.3 核心函数
 
 - `get_kline(code)` / `get_index_kline(code)` — 读取K线
 - `get_tradeable_codes()` — 可交易股票池（排除科创板/北交所）
@@ -229,10 +265,10 @@ SQLite 双库分离，`core/db.py` 统一管理连接：
 - `get_account(id)` / `upsert_account(id, ...)` — 账户读写
 - `get_holdings(id)` / `upsert_holding(...)` — 持仓读写
 
-### 6.3 数据流
+### 6.4 数据流
 
 ```
-腾讯行情 → update_daily_data_async.py → quant_stocks.db
+Provider（腾讯/BaoStock）→ update_daily_data_async.py → quant_stocks.db
                                               ↓
 account_runner.py ← core/db.py ← quant_stocks.db (K线面板)
                                               ↓

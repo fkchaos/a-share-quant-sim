@@ -252,13 +252,17 @@ methodology attached. Read the "Validation, honestly" section first.
 
 ## Data source
 
-Market data comes from a free public quote endpoint, which is why there is no API key. Being
-honest about the trade-off: **from outside mainland China that endpoint may be slow,
-rate-limited, or unreachable.** If ingestion hangs or returns empty frames, that is the most
-likely cause.
+Market data uses a **pluggable Provider architecture** with automatic fallback:
 
-Workable alternatives if you hit this: `akshare`, `baostock`, `tushare`. A clean adapter layer
-so any of these can be dropped in is on the roadmap and is a good first contribution.
+| Provider | Source | Pros | Cons |
+|----------|--------|------|------|
+| **Tencent** (primary) | `qt.gtimg.cn` | Free, no API key, fast | No turnover rate, no ST/status flags |
+| **BaoStock** (backup) | `baostock.com` | Free, has turnover + ST + status | Requires login, slower |
+
+**Auto-fallback**: If primary fails, the system automatically switches to backup.
+**Manual override**: Set `override` in `config/data_sources.yaml` to force a specific provider.
+
+> 📖 See `docs/DEPLOY.md` for configuration details and `docs/ARCHITECTURE.md` for the provider design.
 
 ## Documentation
 

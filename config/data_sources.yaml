@@ -1,0 +1,17 @@
+# 数据源配置
+# primary: 主数据源（日常使用）
+# backup: 备用数据源（primary失败时fallback）
+# override: 手动指定（优先级最高，设置后忽略primary/backup）
+
+primary: tencent
+backup: baostock
+# override: baostock  # 取消注释可强制使用指定数据源
+
+# 数据源详细配置（可选）
+providers:
+  tencent:
+    timeout: 15
+    retry: 3
+  
+  baostock:
+    cache_ttl: 3600

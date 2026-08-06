@@ -73,18 +73,20 @@ def _calc_breadth(close_panel, date, params):
     return above / total if total > 0 else 1.0
 
 def calc_factors_v75i(close_panel, volume_panel, amount_panel,
-                      high_panel, low_panel, open_panel, extra_data=None):
+                      high_panel, low_panel, open_panel, extra_data=None,
+                      params=None):
     """计算因子，使用v75i窗口参数"""
+    p = params or DEFAULT_PARAMS
     weights = {
-        'W_BREAKOUT': DEFAULT_PARAMS['W_BREAKOUT'],
-        'W_VOL_SURGE': DEFAULT_PARAMS['W_VOL_SURGE'],
-        'W_LIQUIDITY': DEFAULT_PARAMS['W_LIQUIDITY'],
+        'W_BREAKOUT': p.get('W_BREAKOUT', DEFAULT_PARAMS['W_BREAKOUT']),
+        'W_VOL_SURGE': p.get('W_VOL_SURGE', DEFAULT_PARAMS['W_VOL_SURGE']),
+        'W_LIQUIDITY': p.get('W_LIQUIDITY', DEFAULT_PARAMS['W_LIQUIDITY']),
     }
     windows = {
-        'BREAKOUT': DEFAULT_PARAMS['BREAKOUT_WINDOW'],
-        'VOL_SHORT': DEFAULT_PARAMS['VOL_SHORT'],
-        'VOL_LONG': DEFAULT_PARAMS['VOL_LONG'],
-        'LIQ': DEFAULT_PARAMS['LIQ_WINDOW'],
+        'BREAKOUT': p.get('BREAKOUT_WINDOW', DEFAULT_PARAMS['BREAKOUT_WINDOW']),
+        'VOL_SHORT': p.get('VOL_SHORT', DEFAULT_PARAMS['VOL_SHORT']),
+        'VOL_LONG': p.get('VOL_LONG', DEFAULT_PARAMS['VOL_LONG']),
+        'LIQ': p.get('LIQ_WINDOW', DEFAULT_PARAMS['LIQ_WINDOW']),
     }
     return calc_factors_v75a(close_panel, volume_panel, amount_panel,
                              high_panel, low_panel, open_panel, extra_data,

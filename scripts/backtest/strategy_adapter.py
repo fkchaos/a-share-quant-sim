@@ -1443,12 +1443,13 @@ class StrategyAdapter:
                     sold_recently=None, return_all=False):
         """v75i 选股: v75f + 因子参数扫描（窗口期优化）"""
         from scripts.strategies.v75i_factor_param import select_stocks_v75i, calc_factors_v75i
-        if factors is None:
-            factors = calc_factors_v75i(close_panel, volume_panel, amount_panel,
-                                       high_panel, low_panel, open_panel)
         merged_params = dict(self._risk_params["v75i"])
         if params:
             merged_params.update(params)
+        if factors is None:
+            factors = calc_factors_v75i(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel,
+                                       params=merged_params)
         return select_stocks_v75i(factors, date, close_panel, volume_panel, amount_panel,
                                   high_panel, low_panel, open_panel, current_holdings,
                                   merged_params, sold_recently=sold_recently, return_all=return_all)

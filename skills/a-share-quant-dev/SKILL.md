@@ -38,6 +38,7 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 ### 2.1 因子开发规范
 - 因子是纯计算单元，策略是组合层，两者解耦
 - `calc_factors_*()` 签名必须接受 `extra_data=None`（account_runner传7个参数）
+- **⚠️ calc_factors必须从params参数读取动态参数（权重/窗口等），不能读模块级DEFAULT_PARAMS！**（adapter传入的params是运行时参数，DEFAULT_PARAMS是静态默认值，两者不同）
 - 新因子放 `core/strategy_map.py` 注册，不硬编码
 - 因子返回格式：dict `{"strategy_name": pd.Series}`
 
@@ -104,6 +105,12 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 - **断电续跑**：结果每完成一组立即写文件，重启时自动跳过已完成组
 - **⚠️ 全量回测Sharpe高≠WF高**：全量回测容易过拟合，WF才是唯一可信评价标准
 - **⚠️ calc_factors必须接受动态权重参数**：否则WF验证时权重不生效，扫描结果无法验证
+- **⚠️ calc_factors必须从params参数读取动态参数（权重/窗口等），不能读模块级DEFAULT_PARAMS**
+- **⚠️ adapter调用calc_factors时必须传入merged_params**（否则动态参数不生效）
+- **⚠️ 弱信号因子优化=拟合噪声**（IC<0.03的因子做权重/窗口优化没有意义）
+- **⚠️ regime选择比因子选择更重要**（广度过滤是regime选择器，不是风险控制）
+- **⚠️ 因子衰减是真实存在的**（中国A股技术因子半衰期约18个月）
+- **⚠️ 分regime IC分析比全局IC更重要**（regime-dependent因子在全局IC下可能是弱信号）
 
 ---
 
@@ -158,4 +165,6 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 | 参数扫描用StringIO | 无法事后诊断 | 输出必须存文件 |
 | WF DEBUG输出写文件 | I/O阻塞，每组从30秒变50分钟 | 重定向到/dev/null，不是文件 |
 | 参数扫描断电 | 结果全丢 | 每组完成立即写文件，重启跳过已完成组 |
+| calc_factors读DEFAULT_PARAMS | 扫描参数不生效，所有组结果相同 | calc_factors必须从params参数读取动态值 |
+| adapter不传params给calc_factors | 同上，参数修改无法传递 | adapter调用calc_factors时必须传入merged_params |
 | 两个WF并行 | OOM被杀 | 串行执行 |

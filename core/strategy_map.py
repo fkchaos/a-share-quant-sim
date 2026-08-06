@@ -1131,6 +1131,176 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v74a: 行业动量增强（v61b + 行业动量因子） ──
+    "v74a": {
+        "mode": "custom",
+        "description": "v74a 行业动量增强: 低换手25%+小市值25%+行业动量50%, IC=0.16, IR=0.97",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v74a_industry_momentum.select_stocks_v74a",
+        "calc_factors_fn": "scripts.strategies.v74a_industry_momentum.calc_factors_v74a",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 5,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+            "W_TURNOVER": 0.25,
+            "W_SIZE": 0.25,
+            "W_INDUSTRY_MOM": 0.50,
+        },
+    },
+
+    # ── v75a: 科技趋势增强（锁定科技板块+突破放量+集中持仓） ──
+    "v75a": {
+        "mode": "custom",
+        "description": "v75a 科技趋势增强: 电子/计算机/通信/传媒, 突破45%+放量30%+流动性25%, 持仓3只",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75a_tech_momentum.select_stocks_v75a",
+        "calc_factors_fn": "scripts.strategies.v75a_tech_momentum.calc_factors_v75a",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "W_BREAKOUT": 0.45,
+            "W_VOL_SURGE": 0.30,
+            "W_LIQUIDITY": 0.25,
+        },
+    },
+
+    # ── v75b: 科技趋势增强 + 板块MA50过滤 ──
+    "v75b": {
+        "mode": "custom",
+        "description": "v75b: v75a+板块MA50过滤, 熊市空仓",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75b_bull_tech.select_stocks_v75b",
+        "calc_factors_fn": "scripts.strategies.v75b_bull_tech.calc_factors_v75b",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+        },
+    },
+
+    # ── v75c: v75a + regime门控（adapter calc_regime） ──
+    "v75c": {
+        "mode": "custom",
+        "description": "v75c: v75a+regime门控, 牛市才交易",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75c_regime_tech.select_stocks_v75c",
+        "calc_factors_fn": "scripts.strategies.v75c_regime_tech.calc_factors_v75c",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+        },
+    },
+
+    # ── v75d: 连续regime仓位乘数 ──
+    "v75d": {
+        "mode": "custom",
+        "description": "v75d: v75a+连续regime仓位乘数",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75d_continuous_regime.select_stocks_v75d",
+        "calc_factors_fn": "scripts.strategies.v75d_continuous_regime.calc_factors_v75d",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+        },
+    },
+
+    # ── v75e: 波动率缩放仓位 ──
+    "v75e": {
+        "mode": "custom",
+        "description": "v75e: v75a+波动率缩放仓位",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75e_vol_scaled.select_stocks_v75e",
+        "calc_factors_fn": "scripts.strategies.v75e_vol_scaled.calc_factors_v75e",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+        },
+    },
+
+    # ── v75f: 市场广度过滤 ──
+    "v75f": {
+        "mode": "custom",
+        "description": "v75f: v75a+市场广度过滤",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75f_breadth.select_stocks_v75f",
+        "calc_factors_fn": "scripts.strategies.v75f_breadth.calc_factors_v75f",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+        },
+    },
+
+    # ── v75g: v75f + 波动率缩放 ──
+    "v75g": {
+        "mode": "custom",
+        "description": "v75g: v75f+波动率缩放仓位",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75g_combo.select_stocks_v75g",
+        "calc_factors_fn": "scripts.strategies.v75g_combo.calc_factors_v75g",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+        },
+    },
+
+    # ── v76a: v61b+v75a 组合策略（60/40攻守兼备） ──
+    "v76a": {
+        "mode": "custom",
+        "description": "v76a 组合: v61b*60%+v75a*40%, 攻守兼备",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v76a_combo.select_stocks_v76a",
+        "calc_factors_fn": "scripts.strategies.v76a_combo.calc_factors_v76a",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 10,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.25,
+            "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+            "W_V61B": 0.60,
+            "W_V75A": 0.40,
+        },
+    },
+
     # ── v70: 中盘域动量策略（100-500亿市值） ──
     "v70": {
         "mode": "custom",

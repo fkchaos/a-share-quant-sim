@@ -8,26 +8,24 @@
 
 - A股量化模拟盘，GitHub: fkchaos/a-share-quant-sim
 - 账户1 = v61b（低换手小票，overlay模式，REBALANCE_DAYS=5，每只股票独立计算调仓日），10万，运行中
-- 账户2 = v68（v67优化版，W_MOM=0.35/W_ILLIQ=0.15/W_SIZE=0.35，情绪择时），10万，运行中
+- 账户2 = v75f（科技趋势+广度过滤，Sharpe 1.806），10万，运行中
 - 股票池：zz1800
 - DB: data/quant_stocks.db + data/quant_accounts.db
 
 ### 当前策略参数
 
-| 参数 | v61b（账户1） | v68（账户2） | v39g（基准） |
+| 参数 | v61b（账户1） | v75f（账户2） | v39g（基准） |
 |------|--------------|-------------|-------------|
-| STOP_LOSS | -0.08 | -0.05 | — |
-| TAKE_PROFIT | 0.25 | 0.05 | — |
-| HOLD_DAYS_MAX | 5 | 3 | — |
-| MAX_DAILY_BUY | 5 | 4 | — |
-| MAX_POSITION | 0.25 | 0.2 | — |
-| MAX_HOLDINGS | 5 | 5 | — |
-| REBALANCE_DAYS | 5 | — | — |
-| W_MOM | — | 0.35 | 0.1 |
-| W_ILLIQ | — | 0.15 | 0.2 |
-| W_SIZE | — | 0.35 | 0.4 |
-| SENTIMENT_THRESHOLD | — | 2.0 | — |
-| SENTIMENT_WINDOW | — | 15 | — |
+| STOP_LOSS | -0.08 | -0.08 | — |
+| TAKE_PROFIT | 0.25 | 0.30 | — |
+| HOLD_DAYS_MAX | 5 | 15 | — |
+| MAX_DAILY_BUY | 5 | 3 | — |
+| MAX_POSITION | 0.25 | 0.35 | — |
+| MAX_HOLDINGS | 5 | 3 | — |
+| REBALANCE_DAYS | 5 | 10 | — |
+| BREADTH_MA | — | 20 | — |
+| BREADTH_HIGH | — | 0.50 | — |
+| BREADTH_LOW | — | 0.30 | — |
 
 ### 回测/WF 结果
 
@@ -35,6 +33,8 @@
 |------|------------|------|--------|------|-------------|-----------|---------|
 | v61b | +935% | 73.81% | 1.551 | -33.8% | +31.60% | 2.152 | 87.5% |
 | v68 | +152.4% | — | 0.675 | -28.3% | +10.08% | 1.429 | 81% |
+| v75a | — | — | — | — | +39.59% | 1.642 | 80% |
+| v75f | — | — | — | — | +44.22% | 1.806 | 93% |
 
 ---
 

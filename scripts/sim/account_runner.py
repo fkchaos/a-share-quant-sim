@@ -362,6 +362,7 @@ def run_signal(account_id, date, strategy_name=None):
             "strategy": plan.get("strategy", ""),
             "regime": plan.get("regime", ""),
             "regime_multiplier": plan.get("regime_multiplier", 1.0),
+            "breadth": plan.get("breadth"),
             "cash": state.cash,
             "holdings_count": len(state.holdings),
             "sells": [
@@ -581,6 +582,15 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     regime_label, regime_mult = adapter.calc_regime(strategy_name, cp, date, params)
     logger.info(f"市场状态: {regime_label}, 仓位乘数: {regime_mult}")
 
+    # v75f 广度指标（传到signal输出用于展示）
+    breadth = None
+    if strategy_name in ("v75f", "v75g"):
+        try:
+            from scripts.strategies.v75f_breadth import _calc_breadth
+            breadth = _calc_breadth(cp, date, params)
+        except Exception:
+            pass
+
     sell_codes = [c for c, _, _ in to_sell]
 
     # ── 跨账户持仓去重（开关：账户 params_json 中 CROSS_ACCOUNT_DEDUP=true）──
@@ -630,11 +640,23 @@ def _run_signal_impl(account_id, date, strategy_name=None):
             filtered.append((code, score))
         cands = filtered
 
+    # 涨停过滤：close==high时不买入（打分阶段不排除，仅买入计划排除）
+    if date in cp.index and hp is not None and date in hp.index:
+        close_today = cp.loc[date]
+        high_today = hp.loc[date]
+        cands = [(c, s) for c, s in cands
+                 if c in close_today.index and c in high_today.index
+                 and not (close_today[c] == high_today[c])]
+
     # 生成计划：等权分配仓位，单只不超过 MAX_POSITION 上限
     remaining_after_sell = len(state.holdings) - len(to_sell)
     max_new_buys = min(params.get("MAX_DAILY_BUY", 6), params.get("MAX_HOLDINGS", 8) - remaining_after_sell)
     max_new_buys = max(max_new_buys, 0)
     buy_list = cands[:max_new_buys]
+    buy_codes = {c for c, _ in buy_list}
+    # 优化：如果当天卖出后又买入同一只股票，不如不卖（省手续费）
+    to_sell = [(c, r, p) for c, r, p in to_sell if c not in buy_codes]
+    sell_codes = [c for c, _, _ in to_sell]
     n = len(buy_list)
     # 当前总资产 = 现金 + 持仓市值（用前一日收盘价估算）
     total_value = state.cash
@@ -713,6 +735,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
         'strategy': strategy_name,
         'regime': regime_label,
         'regime_multiplier': regime_mult,
+        'breadth': breadth,
         'sell_plan': [
             {
                 'code': c,

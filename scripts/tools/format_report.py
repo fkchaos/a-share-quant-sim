@@ -53,6 +53,21 @@ def format_signal(data: dict, account_id: int) -> str:
     lines.append(f"现金: ¥{cash:,.0f}  持仓: {holdings} 只")
     lines.append("─" * 30)
 
+    # 广度/市场情绪（v75f/v75g）
+    breadth = data.get("breadth")
+    if breadth is not None:
+        pct = breadth * 100
+        if breadth >= 0.50:
+            tag = "🟢 强势"
+        elif breadth >= 0.30:
+            tag = "🟡 中性"
+        else:
+            tag = "🔴 弱势"
+        lines.append(f"📈 科技板块广度: {pct:.1f}% ({tag})")
+        lines.append("  公式: 广度 = 科技板块中收盘价>MA20的股票数 / 科技板块总股票数")
+        lines.append("  说明: 反映科技板块整体趋势强度, ≥50%允许买入, <30%强制空仓")
+        lines.append("─" * 30)
+
     if top_scores:
         strategy = data.get("strategy", "")
         lines.append(f"📊 选股Top{len(top_scores)}得分:")
@@ -64,6 +79,11 @@ def format_signal(data: dict, account_id: int) -> str:
             lines.append("  score = MOM×0.35 + ILLIQ×0.15 + SIZE×0.35 + TURNOVER×0.03 + PV_CORR×0.02 + recent_limit_3d×0.35")
             lines.append("  MOM=动量(涨跌趋势), ILLIQ=非流动性溢价, SIZE=小市值偏好")
             lines.append("  TURNOVER=换手率, PV_CORR=量价相关性, recent_limit_3d=近3日涨停次数")
+        elif strategy in ("v75f", "v75a", "v75b", "v75c", "v75d", "v75e", "v75g"):
+            lines.append("  score = BREAKOUT×0.45 + VOL_SURGE×0.30 + LIQUIDITY×0.25")
+            lines.append("  BREAKOUT=20日区间位置(越接近高点越高), VOL_SURGE=5日均量/20日均量(放量确认)")
+            lines.append("  LIQUIDITY=20日均成交额(流动性), 各因子均做百分位rank归一化")
+            lines.append("  ⚡ 广度过滤: 科技板块>MA20占比≥50%才买, <30%空仓")
         else:
             lines.append("  score = 综合评分")
         for i, t in enumerate(top_scores):

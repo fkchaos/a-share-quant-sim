@@ -664,6 +664,17 @@ class StrategyAdapter:
         }
         self._regime_params["v75g"] = {}
 
+        # ── v75h: v75f + 因子权重优化（突破0.35/放量0.30/流动0.35） ──
+        self._select_fns["v75h"] = self._v75h_select
+        self._risk_params["v75h"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "W_BREAKOUT": 0.35, "W_VOL_SURGE": 0.30, "W_LIQUIDITY": 0.35,
+        }
+        self._regime_params["v75h"] = {}
+
         # ── v76a: v61b+v75a 组合策略 ──
         self._select_fns["v76a"] = self._v76a_select
         self._risk_params["v76a"] = {
@@ -1398,6 +1409,21 @@ class StrategyAdapter:
         return select_stocks_v75g(factors, date, close_panel, volume_panel, amount_panel,
                                   high_panel, low_panel, open_panel, current_holdings,
                                   merged_params, sold_recently=sold_recently)
+
+    def _v75h_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75h 选股: v75f + 因子权重优化（突破0.35/放量0.30/流动0.35）"""
+        from scripts.strategies.v75h_optimized import select_stocks_v75h, calc_factors_v75h
+        if factors is None:
+            factors = calc_factors_v75h(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75h"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v75h(factors, date, close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel, current_holdings,
+                                  merged_params, sold_recently=sold_recently, return_all=return_all)
 
     def _v76a_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,

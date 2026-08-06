@@ -38,8 +38,11 @@ def _load_industry_map(codes):
 
 
 def calc_factors_v75a(close_panel, volume_panel, amount_panel,
-                      high_panel, low_panel, open_panel=None, extra_data=None):
-    """计算科技趋势增强因子（突破+放量+流动性）"""
+                      high_panel, low_panel, open_panel=None, extra_data=None,
+                      weights=None):
+    """计算科技趋势增强因子（突破+放量+流动性）
+    weights: 可选dict，覆盖默认权重 {'W_BREAKOUT': x, 'W_VOL_SURGE': x, 'W_LIQUIDITY': x}
+    """
     codes = close_panel.columns.tolist()
     dates = close_panel.index
 
@@ -72,9 +75,10 @@ def calc_factors_v75a(close_panel, volume_panel, amount_panel,
     liq = amount_20.iloc[-1]
 
     # 6. rank评分（仅科技板块）
-    w_bs = DEFAULT_PARAMS['W_BREAKOUT']
-    w_vr = DEFAULT_PARAMS['W_VOL_SURGE']
-    w_lq = DEFAULT_PARAMS['W_LIQUIDITY']
+    w = weights or DEFAULT_PARAMS
+    w_bs = w.get('W_BREAKOUT', DEFAULT_PARAMS['W_BREAKOUT'])
+    w_vr = w.get('W_VOL_SURGE', DEFAULT_PARAMS['W_VOL_SURGE'])
+    w_lq = w.get('W_LIQUIDITY', DEFAULT_PARAMS['W_LIQUIDITY'])
 
     # 突破分数 rank
     valid_bs = bs[tech_mask].dropna()

@@ -1281,6 +1281,30 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v75h: v75f + 因子权重优化（突破0.35/放量0.30/流动0.35） ──
+    "v75h": {
+        "mode": "custom",
+        "description": "v75h: v75f+因子权重优化(0.35/0.30/0.35), 全量回测Sharpe 0.8033",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75h_optimized.select_stocks_v75h",
+        "calc_factors_fn": "scripts.strategies.v75h_optimized.calc_factors_v75h",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "BREADTH_MA": 20,
+            "BREADTH_HIGH": 0.50,
+            "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.35,
+            "W_VOL_SURGE": 0.30,
+            "W_LIQUIDITY": 0.35,
+        },
+    },
+
     # ── v76a: v61b+v75a 组合策略（60/40攻守兼备） ──
     "v76a": {
         "mode": "custom",

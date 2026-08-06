@@ -1,0 +1,133 @@
+---
+name: a-share-quant-dev
+description: A股量化策略开发全流程。Use when developing new strategy.
+---
+
+# A股量化策略开发全流程
+
+## 总览
+
+```
+调研 → 设计文档 → 因子开发 → IC验证 → WF回测 → 参数扫描 → 实盘集成 → 信号cron → 监控
+```
+
+**铁律：每步必须闭环后再进下一步，不跳步。**
+
+---
+
+## 第1阶段：调研与设计
+
+### 1.1 调研
+- 广泛搜索多社区（聚宽/9db/知乎/雪球/Reddit），不闭门造车
+- 调研文档存 `docs/experiments/`
+- 外部项目非侵入式集成，不改原工程
+
+### 1.2 设计文档
+必须输出 `docs/experiments/YYYY-MM-DD_<topic>_design.md`：
+- 背景与动机
+- 方案对比（至少2-3个方向）
+- 因子定义与计算逻辑
+- 预期IC/IR目标
+- WF验证条件
+- **必须回答："什么条件下不交易？"**（空仓逻辑）
+
+---
+
+## 第2阶段：因子开发与IC验证
+
+### 2.1 因子开发规范
+- 因子是纯计算单元，策略是组合层，两者解耦
+- `calc_factors_*()` 签名必须接受 `extra_data=None`（account_runner传7个参数）
+- 新因子放 `core/strategy_map.py` 注册，不硬编码
+- 因子返回格式：dict `{"strategy_name": pd.Series}`
+
+### 2.2 IC优先验证
+| 指标 | 阈值 | 判定 |
+|------|------|------|
+| \|IC Mean\| > 0.03 且 \|IR\| > 0.3 | 有效，进入WF |
+| \|IC Mean\| < 0.01 或 \|IR\| < 0.1 | 证伪，不进入WF |
+| 0.01-0.03 | 微弱信号，不值得投入WF时间 |
+
+**教训：IC强≠WF强。** v74a行业动量IC很强（IC=0.17, IR=0.97）但WF失败（Sharpe -0.855）。
+
+---
+
+## 第3阶段：WF回测
+
+### 3.1 标准条件（极其重要！）
+- `train=252, test=126, step_days=63`
+- `start='2021-01-01', end='2026-05-31'`
+- `pool=zz1800`
+- 标杆策略: `v39g`（Sharpe 1.297, 16 folds）
+
+### 3.2 WF运行注意事项
+- **不能并行跑两个WF**：OOM被系统杀（每个≈2GB），必须串行
+- **结果存文件**：不用StringIO抑制输出
+- **长任务输出必须重定向到文件**
+
+---
+
+## 第4阶段：参数扫描
+
+### 4.1 核心原则
+1. **先单参数扫趋势，再组合精扫**
+2. **用全量回测（full=True）做初筛**，快20倍
+3. **输出必须存文件**
+
+### 4.2 已知陷阱
+- `run_wf()`不支持`params_override`参数，必须通过adapter._risk_params直接修改
+- `run_wf(full=True)`返回DataFrame不是dict，用`result['test_sharpe'].iloc[0]`取值
+- **绝对不要用StringIO抑制所有输出**——必须存文件
+
+---
+
+## 第5阶段：实盘集成
+
+### 5.1 代码层
+- [ ] `calc_factors_*` 必须接受 `extra_data=None`
+- [ ] `select_stocks_*` 必须支持 `return_all=False`
+- [ ] DEFAULT_PARAMS 包含所有风控参数
+
+### 5.2 注册层
+- [ ] `core/strategy_map.py` 注册策略
+- [ ] `strategy_adapter.py` 添加 `_select_fns/_risk_params/_vXX_select()`
+- [ ] adapter._vXX_select() 必须传 `return_all`
+
+### 5.3 格式层
+- [ ] `format_report.py` 添加策略公式说明
+- [ ] 广度/市场情绪在Top10前显示
+- [ ] return_all从adapter一路传到策略层
+
+### 5.4 文档层
+- [ ] CLAUDE.md 更新策略参数表
+- [ ] RESULTS_LOG.md 追加WF结果
+
+---
+
+## 第6阶段：信号Cron集成
+
+### 6.1 信号报告必须包含
+- ✅ 现金 + 持仓数
+- ✅ 广度/市场情绪（含公式和说明）
+- ✅ 选股Top10得分（含策略公式 + 因子解释）
+- ✅ 卖出/买入计划
+- ✅ 持仓明细
+
+### 6.2 选股过滤（打分前执行）
+- 科创板过滤（688/689）——排序前过滤
+- 涨停过滤——打分不排除，买入计划排除
+- 跨账户去重
+- 卖出又买入优化
+
+---
+
+## 常见错误清单
+
+| 错误 | 后果 | 预防 |
+|------|------|------|
+| calc_factors不接受extra_data | account_runner传7参数报错 | 签名必须有extra_data=None |
+| return_all没从adapter传到策略 | top_scores只返回Top3 | 逐层检查参数传递 |
+| format_report没有策略公式 | 信号只显示"综合评分" | 每加策略必须同步format_report |
+| 科创板过滤在排序后 | Top10数量不足 | 排序前过滤 |
+| 参数扫描用StringIO | 无法事后诊断 | 输出必须存文件 |
+| 两个WF并行 | OOM被杀 | 串行执行 |

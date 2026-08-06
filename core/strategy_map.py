@@ -1305,6 +1305,34 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v75i: v75f + 因子参数扫描（窗口期优化） ──
+    "v75i": {
+        "mode": "custom",
+        "description": "v75i: v75f+因子参数扫描(窗口期优化), 固定v75f权重",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75i_factor_param.select_stocks_v75i",
+        "calc_factors_fn": "scripts.strategies.v75i_factor_param.calc_factors_v75i",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "BREADTH_MA": 20,
+            "BREADTH_HIGH": 0.50,
+            "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.45,
+            "W_VOL_SURGE": 0.30,
+            "W_LIQUIDITY": 0.25,
+            "BREAKOUT_WINDOW": 20,
+            "VOL_SHORT": 5,
+            "VOL_LONG": 20,
+            "LIQ_WINDOW": 20,
+        },
+    },
+
     # ── v76a: v61b+v75a 组合策略（60/40攻守兼备） ──
     "v76a": {
         "mode": "custom",

@@ -675,6 +675,19 @@ class StrategyAdapter:
         }
         self._regime_params["v75h"] = {}
 
+        # ── v75i: v75f + 因子参数扫描（窗口期优化） ──
+        self._select_fns["v75i"] = self._v75i_select
+        self._risk_params["v75i"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.45, "W_VOL_SURGE": 0.30, "W_LIQUIDITY": 0.25,
+            "BREAKOUT_WINDOW": 20, "VOL_SHORT": 5, "VOL_LONG": 20, "LIQ_WINDOW": 20,
+        }
+        self._regime_params["v75i"] = {}
+
         # ── v76a: v61b+v75a 组合策略 ──
         self._select_fns["v76a"] = self._v76a_select
         self._risk_params["v76a"] = {
@@ -1422,6 +1435,21 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v75h(factors, date, close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel, current_holdings,
+                                  merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v75i_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75i 选股: v75f + 因子参数扫描（窗口期优化）"""
+        from scripts.strategies.v75i_factor_param import select_stocks_v75i, calc_factors_v75i
+        if factors is None:
+            factors = calc_factors_v75i(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75i"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v75i(factors, date, close_panel, volume_panel, amount_panel,
                                   high_panel, low_panel, open_panel, current_holdings,
                                   merged_params, sold_recently=sold_recently, return_all=return_all)
 

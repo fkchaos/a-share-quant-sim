@@ -39,12 +39,20 @@ def _load_industry_map(codes):
 
 def calc_factors_v75a(close_panel, volume_panel, amount_panel,
                       high_panel, low_panel, open_panel=None, extra_data=None,
-                      weights=None):
+                      weights=None, windows=None):
     """计算科技趋势增强因子（突破+放量+流动性）
     weights: 可选dict，覆盖默认权重 {'W_BREAKOUT': x, 'W_VOL_SURGE': x, 'W_LIQUIDITY': x}
+    windows: 可选dict，覆盖默认窗口 {'BREAKOUT': 20, 'VOL_SHORT': 5, 'VOL_LONG': 20, 'LIQ': 20}
     """
     codes = close_panel.columns.tolist()
     dates = close_panel.index
+
+    # 窗口参数
+    w = windows or {}
+    brk_win = w.get('BREAKOUT', 20)
+    vol_short = w.get('VOL_SHORT', 5)
+    vol_long = w.get('VOL_LONG', 20)
+    liq_win = w.get('LIQ', 20)
 
     # 1. 行业映射，筛选科技板块
     industry_map = _load_industry_map(codes)
@@ -53,26 +61,26 @@ def calc_factors_v75a(close_panel, volume_panel, amount_panel,
     # 非科技板块设为NaN（不参与排名）
     scores = pd.Series(np.nan, index=codes)
 
-    # 2. 突破分数：当前价格在20日区间中的位置
-    high_20 = high_panel.rolling(20, min_periods=10).max()
-    low_20 = low_panel.rolling(20, min_periods=10).min()
-    range_20 = high_20 - low_20
-    range_20 = range_20.replace(0, np.nan)
-    breakout = (close_panel - low_20) / range_20
+    # 2. 突破分数：当前价格在N日区间中的位置
+    high_N = high_panel.rolling(brk_win, min_periods=brk_win//2).max()
+    low_N = low_panel.rolling(brk_win, min_periods=brk_win//2).min()
+    range_N = high_N - low_N
+    range_N = range_N.replace(0, np.nan)
+    breakout = (close_panel - low_N) / range_N
 
-    # 3. 放量确认：5日均量 / 20日均量
-    vol_5 = volume_panel.rolling(5, min_periods=3).mean()
-    vol_20 = volume_panel.rolling(20, min_periods=10).mean()
-    vol_20 = vol_20.replace(0, np.nan)
-    vol_ratio = vol_5 / vol_20
+    # 3. 放量确认：short日均量 / long日均量
+    vol_s = volume_panel.rolling(vol_short, min_periods=max(2, vol_short//2)).mean()
+    vol_l = volume_panel.rolling(vol_long, min_periods=max(3, vol_long//2)).mean()
+    vol_l = vol_l.replace(0, np.nan)
+    vol_ratio = vol_s / vol_l
 
-    # 4. 流动性：20日均成交额
-    amount_20 = amount_panel.rolling(20, min_periods=10).mean()
+    # 4. 流动性：M日均成交额
+    amount_M = amount_panel.rolling(liq_win, min_periods=max(3, liq_win//2)).mean()
 
     # 5. 最新一天因子值
     bs = breakout.iloc[-1]
     vr = vol_ratio.iloc[-1]
-    liq = amount_20.iloc[-1]
+    liq = amount_M.iloc[-1]
 
     # 6. rank评分（仅科技板块）
     w = weights or DEFAULT_PARAMS

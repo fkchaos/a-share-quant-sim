@@ -98,8 +98,10 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 - `run_wf()`不支持`params_override`参数，必须通过adapter._risk_params直接修改
 - `run_wf(full=True)`返回DataFrame不是dict，用`result['test_sharpe'].iloc[0]`取值
 - **绝对不要用StringIO抑制所有输出**——必须存文件
+- **⚠️ WF内部DEBUG输出必须重定向到/dev/null，不是文件！**（`RCV DBG`每组8000+行，写文件=I/O阻塞，每组从30秒膨胀到50分钟）
 - 因子权重必须归一化（和=1.0），否则改变权重总和会影响选股结果
 - 权重扫描不要跳步：扫完A因子最优值后，固定A再扫B
+- **断电续跑**：结果每完成一组立即写文件，重启时自动跳过已完成组
 
 ---
 
@@ -152,4 +154,6 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 | format_report没有策略公式 | 信号只显示"综合评分" | 每加策略必须同步format_report |
 | 科创板过滤在排序后 | Top10数量不足 | 排序前过滤 |
 | 参数扫描用StringIO | 无法事后诊断 | 输出必须存文件 |
+| WF DEBUG输出写文件 | I/O阻塞，每组从30秒变50分钟 | 重定向到/dev/null，不是文件 |
+| 参数扫描断电 | 结果全丢 | 每组完成立即写文件，重启跳过已完成组 |
 | 两个WF并行 | OOM被杀 | 串行执行 |

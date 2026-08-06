@@ -82,41 +82,175 @@ BREADTH_GRID = [
 
 1. **先单参数扫趋势，再组合精扫**（不要上来就全网格）
 2. **用全量回测（full=True）做初筛**，快20倍
-3. **输出必须存文件**（/tmp/vXX_sweep.log + /tmp/vXX_sweep.txt）
+3. **输出必须存文件**（/tmp/vXX_sweep.txt）
 4. **每轮固定前一轮最优值**
-5. **抑制DEBUG输出到单独文件**（stdout重定向到log，结果写txt）
+5. **⚠️ 抑制WF的DEBUG输出到/dev/null，不是文件！**（见下方说明）
 6. **不要杀正在跑的进程**（除非用户明确要求）
+7. **断电续跑**（见下方流程）
+
+---
+
+## 断电续跑流程（每次扫描必实现）
+
+参数扫描每组可能跑30秒~50分钟，8组总计1~2小时。断电/进程被杀后必须能从断点继续，不能从头跑。
+
+### 实现模式：JSONL逐行追加 + 启动时去重
+
+**文件格式**：结果文件用JSONL（每行一个JSON对象），`append`模式写入。
+
+**启动时**：
+```python
+def load_done():
+    """读取已有结果，按name去重"""
+    done = {}
+    if os.path.exists(OUT):
+        with open(OUT, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('{'):
+                    try:
+                        r = json.loads(line)
+                        done[r['name']] = r
+                    except: pass
+    return done
+
+done = load_done()  # {name: result_dict}
+```
+
+**主循环**：
+```python
+for i, (name, *weights) in enumerate(grid):
+    if name in done:
+        print(f"[{i+1}] {name} — 已完成，跳过 (Sharpe={done[name].get('sharpe','?')})")
+        continue
+    # ... 执行扫描 ...
+    r = run_one(name, *weights)
+    # 立即写入
+    with open(OUT, 'a') as f:
+        f.write(json.dumps(r, ensure_ascii=False) + '\n')
+```
+
+### 关键点
+- **每组完成立即`append`写入**，不是最后一次性写入
+- **用`name`字段去重**，不依赖文件顺序或索引
+- **重启时自动跳过已完成组**，不改任何代码
+- **错误组也写入**（带`error`字段），避免反复重试已知失败项
+
+### 结果文件格式
+```
+{"name":"流动性主导","sharpe":1.6523,"return_pct":142.35,"max_dd_pct":38.21,"elapsed_s":28.3}
+{"name":"均衡偏量","sharpe":1.7102,"return_pct":155.80,"max_dd_pct":35.67,"elapsed_s":31.1}
+{"name":"突破主导","error":"run_wf returned None"}
+```
+
+---
+
+## DEBUG输出抑制（铁律，违反必卡）
+
+WF runner内部会输出大量`RCV DBG risk_check`等调试信息（每组8000+行）。
+**重定向到log文件≠抑制**——写8000行到文件同样I/O阻塞，每组从30秒膨胀到50分钟。
+
+**正确做法**：
+```python
+# ❌ 错误：重定向到文件（I/O阻塞）
+with open(LOG, 'a') as logf, contextlib.redirect_stdout(logf):
+    result = run_wf(...)
+
+# ✅ 正确：重定向到/dev/null（完全抑制I/O）
+with open(os.devnull, 'w') as devnull:
+    old_out, old_err = sys.stdout, sys.stderr
+    sys.stdout = devnull
+    sys.stderr = devnull
+    try:
+        result = run_wf(...)
+    finally:
+        sys.stdout, sys.stderr = old_out, old_err
+
+# ✅ 正确：只打印扫描结果，不打印WF内部输出
+print(f"  Sharpe={result['sharpe']:.4f}")  # 这行正常输出
+```
+
+**原理**：扫描脚本自己的进度信息正常打印，WF runner内部的DEBUG输出彻底静默。两者分离。
 
 ## 脚本模板
 
 ```python
-import sys, warnings, io, contextlib, time
+import sys, os, time, json, warnings, logging
 warnings.filterwarnings('ignore')
+logging.disable(logging.CRITICAL)  # 抑制logging输出
+os.environ['PYTHONWARNINGS'] = 'ignore'
 sys.path.insert(0, '/root/a-share-quant-sim')
 
 from scripts.backtest.wf_runner import run_wf
-from scripts.backtest.strategy_adapter import get_adapter
 
 OUT = '/tmp/vXX_sweep.txt'
-LOG = '/tmp/vXX_sweep_debug.log'
 
-BASE = {"STOP_LOSS": -0.08, "TAKE_PROFIT": 0.30, "HOLD_DAYS_MAX": 15}
+# ── 断电续跑：读取已完成结果 ──
+def load_done():
+    done = {}
+    if os.path.exists(OUT):
+        with open(OUT, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('{'):
+                    try:
+                        r = json.loads(line)
+                        done[r['name']] = r
+                    except: pass
+    return done
 
-def run_one(name, overrides, base=BASE):
-    params = dict(base)
-    params.update(overrides)
-    adapter = get_adapter()
-    adapter._risk_params["vXX"].update(params)
-    with open(LOG, 'a') as logf, contextlib.redirect_stdout(logf), contextlib.redirect_stderr(logf):
-        result = run_wf("vXX", 252, 126, 63)
-    return {
-        "name": name, "params": params,
-        "sharpe": result.get("sharpe", 0),
-        "avg_return": result.get("avg_return", 0),
-        "positive_pct": result.get("positive_pct", 0),
-        "max_dd": result.get("max_dd", 0),
-        "passed": result.get("passed", False),
-    }
+def run_one(name, overrides, base):
+    """修改参数，跑全量回测，返回结果"""
+    # ... 修改 adapter._risk_params 或 DEFAULT_PARAMS ...
+    
+    try:
+        t0 = time.time()
+        # ⚠️ 关键：抑制WF的DEBUG输出到/dev/null
+        with open(os.devnull, 'w') as devnull:
+            old_out, old_err = sys.stdout, sys.stderr
+            sys.stdout = devnull
+            sys.stderr = devnull
+            try:
+                result = run_wf("vXX", full=True)
+            finally:
+                sys.stdout, sys.stderr = old_out, old_err
+        elapsed = time.time() - t0
+
+        if result is not None and hasattr(result, 'iloc'):
+            r = {
+                "name": name, "params": overrides,
+                "sharpe": round(float(result['test_sharpe'].iloc[0]), 4),
+                "return_pct": round(float(result['test_ret'].iloc[0]) * 100, 2),
+                "max_dd_pct": round(float(result['test_dd'].iloc[0]) * 100, 2),
+                "elapsed_s": round(elapsed, 1),
+            }
+        else:
+            r = {"name": name, "error": "run_wf returned None"}
+    finally:
+        # ... 恢复参数 ...
+        pass
+    
+    # ⚠️ 立即追加写入（断电不丢）
+    with open(OUT, 'a') as f:
+        f.write(json.dumps(r, ensure_ascii=False) + '\n')
+    
+    # 打印结果（正常输出，不受devnull影响）
+    if 'error' in r:
+        print(f"  ❌ {r['error']}")
+    else:
+        print(f"  Sharpe={r['sharpe']:.4f}  return={r['return_pct']:.2f}%  dd={r['max_dd_pct']:.2f}%")
+    return r
+
+# ── 主循环（断电续跑） ──
+def main():
+    done = load_done()
+    total = len(GRID)
+    for i, (name, *args) in enumerate(GRID):
+        if name in done:
+            print(f"[{i+1}/{total}] {name} — 已完成，跳过 (Sharpe={done[name].get('sharpe','?')})")
+            continue
+        print(f"[{i+1}/{total}] {name}")
+        run_one(name, *args)
 ```
 
 ## 已知陷阱

@@ -678,8 +678,8 @@ class StrategyAdapter:
         # ── v75j: 流动性因子 + 广度过滤（去掉弱因子） ──
         self._select_fns["v75j"] = self._v75j_select
         self._risk_params["v75j"] = {
-            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.30,
-            "HOLD_DAYS_MAX": 15, "MAX_DAILY_BUY": 3,
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
             "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
             "REBALANCE_DAYS": 10,
             "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,

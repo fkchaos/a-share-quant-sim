@@ -47,8 +47,8 @@ def _load_tech_codes():
 DEFAULT_PARAMS = {
     # 风控参数（与v75f相同）
     "STOP_LOSS": -0.08,
-    "TAKE_PROFIT": 0.30,
-    "HOLD_DAYS_MAX": 15,
+    "TAKE_PROFIT": 0.25,
+    "HOLD_DAYS_MAX": 20,
     "MAX_DAILY_BUY": 3,
     "MAX_POSITION": 0.35,
     "MAX_HOLDINGS": 3,

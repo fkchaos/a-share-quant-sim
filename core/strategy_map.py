@@ -1314,8 +1314,8 @@ STRATEGY_MAP = {
         "calc_factors_fn": "scripts.strategies.v75j_liquidity_only.calc_factors_v75j",
         "params": {
             "STOP_LOSS": -0.08,
-            "TAKE_PROFIT": 0.30,
-            "HOLD_DAYS_MAX": 15,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20,
             "MAX_DAILY_BUY": 3,
             "MAX_POSITION": 0.35,
             "MAX_HOLDINGS": 3,

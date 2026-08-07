@@ -590,7 +590,7 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
     # v75f 广度指标（传到signal输出用于展示）
     breadth = None
-    if strategy_name in ("v75f", "v75g"):
+    if strategy_name in ("v75f", "v75g", "v75j"):
         try:
             from scripts.strategies.v75f_breadth import _calc_breadth
             breadth = _calc_breadth(cp, date, params)

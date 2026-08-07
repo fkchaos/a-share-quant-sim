@@ -84,6 +84,11 @@ def format_signal(data: dict, account_id: int) -> str:
             lines.append("  BREAKOUT=20日区间位置(越接近高点越高), VOL_SURGE=5日均量/20日均量(放量确认)")
             lines.append("  LIQUIDITY=20日均成交额(流动性), 各因子均做百分位rank归一化")
             lines.append("  ⚡ 广度过滤: 科技板块>MA20占比≥50%才买, <30%空仓")
+        elif strategy in ("v75j",):
+            lines.append("  score = LIQUIDITY×1.0 (纯流动性因子)")
+            lines.append("  LIQUIDITY=20日均成交额(流动性), 做百分位rank归一化")
+            lines.append("  ⚡ 广度过滤: 科技板块>MA20占比≥50%才买, <30%空仓")
+            lines.append("  💰 价格过滤: 股价>300元的不买")
         else:
             lines.append("  score = 综合评分")
         for i, t in enumerate(top_scores):

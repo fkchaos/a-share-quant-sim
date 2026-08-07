@@ -53,6 +53,7 @@ DEFAULT_PARAMS = {
     "MAX_POSITION": 0.35,
     "MAX_HOLDINGS": 3,
     "REBALANCE_DAYS": 10,
+    "MAX_STOCK_PRICE": 300,  # 股价上限，超过300的不买
     
     # 择时层参数（广度过滤，与v75f相同）
     "BREADTH_MA": 20,

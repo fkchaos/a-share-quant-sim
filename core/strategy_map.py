@@ -1320,6 +1320,7 @@ STRATEGY_MAP = {
             "MAX_POSITION": 0.35,
             "MAX_HOLDINGS": 3,
             "REBALANCE_DAYS": 10,
+            "MAX_STOCK_PRICE": 300,
             "BREADTH_MA": 20,
             "BREADTH_HIGH": 0.50,
             "BREADTH_LOW": 0.30,

@@ -568,10 +568,16 @@ def _run_signal_impl(account_id, date, strategy_name=None):
         state._sell_penalty_tracker = sell_penalty_tracker
 
     # 选股（用 strategy_adapter 统一接口）
+    # 如果有价格过滤，先获取更多候选（至少10只），避免高价股全被过滤后无股可买
+    _need_price_filter = params.get("MAX_STOCK_PRICE", 0) > 0
     cands = adapter.select(strategy_name, None, date,
                            cp, vp, ap, hp, lp, op,
                            current_holdings=state.holdings,
-                           params=params)
+                           params=params,
+                           return_all=_need_price_filter)
+    # 如果用了return_all但实际需要的数量较少，先截取一个合理上限（避免后续过滤浪费）
+    if _need_price_filter and len(cands) > params.get("MAX_HOLDINGS", 3) * 3:
+        cands = cands[:params.get("MAX_HOLDINGS", 3) * 3]
     # top_scores：用空 holdings 选股，让已持仓也参与打分
     top_scores_raw = adapter.select(strategy_name, None, date,
                                     cp, vp, ap, hp, lp, op,
@@ -608,7 +614,6 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     sell_codes_set = set(sell_codes)
     remaining_after_sell = {c for c in state.holdings if c not in sell_codes_set}
     max_new = max(0, params["MAX_HOLDINGS"] - len(remaining_after_sell))
-    cands = cands[:max_new]
 
     # 估算每只买入预算（用于资金容量过滤和计算股数）
     max_buy = params["MAX_DAILY_BUY"]
@@ -624,6 +629,21 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     position_scale = params.get("POSITION_SCALE", 1.0)
     available = available * regime_mult * position_scale
     per_stock_filter = available / max_buy if max_buy > 0 else available  # 资金容量过滤用
+
+    # 价格过滤：排除股价超过MAX_STOCK_PRICE的股票（打分不过滤，买入计划过滤）
+    max_stock_price = params.get("MAX_STOCK_PRICE", 0)
+    if max_stock_price > 0 and date in cp.index:
+        filtered = []
+        for code, score in cands:
+            if code in cp.columns:
+                price = cp.loc[date, code]
+                if pd.isna(price) or price <= 0:
+                    continue
+                if price > max_stock_price:
+                    logger.info(f"价格过滤排除 {code}: 股价{price:.2f} > 上限{max_stock_price}")
+                    continue
+            filtered.append((code, score))
+        cands = filtered
 
     # 资金容量过滤：买不起（1手都买不起）的票排除
     if date in cp.index:

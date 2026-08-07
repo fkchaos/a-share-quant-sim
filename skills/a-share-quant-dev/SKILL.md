@@ -94,6 +94,25 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 
 **教训：IC强≠WF强。** v74a行业动量IC很强（IC=0.17, IR=0.97）但WF失败（Sharpe -0.855）。
 
+### 2.3 IC-WF脱节诊断（标准化动作）
+
+**当IC分析与WF回测结果矛盾时，必须执行以下检查：**
+
+#### IC强但WF弱：
+- [ ] 因子覆盖率>80%？
+- [ ] 排序周度重叠>50%？
+- [ ] 分年IC稳定？
+- [ ] 选股域一致？
+
+#### IC弱但WF强：
+- [ ] 分年IC牛/熊差异大？
+- [ ] 集中持仓+高止盈？
+- [ ] 锁定特定板块？
+
+#### 核心规则：
+- IC是必要非充分条件。WF结果才是金标准。
+- 全量回测Sharpe高≠WF高。WF分段验证更能反映泛化能力。
+
 ---
 
 ## 第3阶段：WF回测
@@ -108,6 +127,13 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 - **不能并行跑两个WF**：OOM被系统杀（每个≈2GB），必须串行
 - **结果存文件**：不用StringIO抑制输出
 - **长任务输出必须重定向到文件**
+- **⚠️ WF内部DEBUG输出必须重定向到/dev/null，不是文件！**（`RCV DBG`每组8000+行，写文件=I/O阻塞，每组从30秒膨胀到50分钟）
+
+### 3.3 已知陷阱
+- `run_wf()`不支持`params_override`参数，必须通过adapter._risk_params直接修改
+- `run_wf(full=True)`返回DataFrame不是dict，用`result['test_sharpe'].iloc[0]`取值
+- **绝对不要用StringIO抑制所有输出**——必须存文件
+- **⚠️ 全量回测Sharpe高≠WF高**：全量回测容易过拟合，WF才是唯一可信评价标准
 
 ---
 
@@ -137,16 +163,11 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 2. **用全量回测（full=True）做初筛**，快20倍
 3. **输出必须存文件**
 4. **每轮固定前一轮最优值**，不要三轮一起扫（组合爆炸）
+5. **断电续跑**：结果每完成一组立即写文件，重启时自动跳过已完成组
 
 ### 4.5 已知陷阱
-- `run_wf()`不支持`params_override`参数，必须通过adapter._risk_params直接修改
-- `run_wf(full=True)`返回DataFrame不是dict，用`result['test_sharpe'].iloc[0]`取值
-- **绝对不要用StringIO抑制所有输出**——必须存文件
-- **⚠️ WF内部DEBUG输出必须重定向到/dev/null，不是文件！**（`RCV DBG`每组8000+行，写文件=I/O阻塞，每组从30秒膨胀到50分钟）
 - 因子权重必须归一化（和=1.0），否则改变权重总和会影响选股结果
 - 权重扫描不要跳步：扫完A因子最优值后，固定A再扫B
-- **断电续跑**：结果每完成一组立即写文件，重启时自动跳过已完成组
-- **⚠️ 全量回测Sharpe高≠WF高**：全量回测容易过拟合，WF才是唯一可信评价标准
 - **⚠️ calc_factors必须接受动态权重参数**：否则WF验证时权重不生效，扫描结果无法验证
 - **⚠️ calc_factors必须从params参数读取动态参数（权重/窗口等），不能读模块级DEFAULT_PARAMS**
 - **⚠️ adapter调用calc_factors时必须传入merged_params**（否则动态参数不生效）
@@ -165,18 +186,48 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 - [ ] DEFAULT_PARAMS 包含所有风控参数
 
 ### 5.2 注册层
-- [ ] `core/strategy_map.py` 注册策略
-- [ ] `strategy_adapter.py` 添加 `_select_fns/_risk_params/_vXX_select()`
+- [ ] `core/strategy_map.py` 注册策略（mode/params/select_fn/calc_factors_fn）
+- [ ] `strategy_adapter.py` 添加：
+  - `_select_fns["vXX"]` 注册
+  - `_risk_params["vXX"]` 风控参数
+  - `_regime_params["vXX"]` regime参数（如有）
+  - `_vXX_select()` 选股方法
 - [ ] adapter._vXX_select() 必须传 `return_all`
 
 ### 5.3 格式层
-- [ ] `format_report.py` 添加策略公式说明
-- [ ] 广度/市场情绪在Top10前显示
-- [ ] return_all从adapter一路传到策略层
+- [ ] `format_report.py` 添加策略公式说明（在format_signal函数中）
+  - 格式：`elif strategy in ("vXX",):` + 公式文本 + 因子解释
+- [ ] format_report.py需要适配新策略的特殊字段（如广度/情绪/regime）
+- [ ] select_stocks函数必须支持`return_all`参数，且从adapter层一路传到策略层
+  - adapter._vXX_select → select_stocks_vXX → 返回Top10候选（非仅Top3）
 
 ### 5.4 文档层
 - [ ] CLAUDE.md 更新策略参数表
-- [ ] RESULTS_LOG.md 追加WF结果
+- [ ] docs/strategy/RESULTS_LOG.md 追加WF结果
+- [ ] docs/experiments/ 设计文档
+
+### 5.5 Cron层（实盘）
+- [ ] 信号cron prompt更新策略名
+- [ ] 执行cron prompt更新策略名
+- [ ] 收盘报告cron更新策略说明
+
+### 5.6 已知陷阱
+- `calc_factors_*` 必须接受 `extra_data=None`——否则account_runner.py传7参数会报错
+- format_report.py 必须有策略公式说明——否则信号报告只显示"综合评分"
+- strategy_adapter._risk_params 是dict，直接修改即可（不是返回副本）
+- 改参数必须同时改 strategy_map.py 和策略文件 DEFAULT_PARAMS
+- select_stocks的`return_all`参数必须从adapter层一路传到策略层，否则top_scores只返回Top3
+- 策略切换后必须验证信号cron格式——检查：持仓明细、现金、公式说明、Top10得分、市场情绪/广度
+- 涨停过滤在打分阶段不排除（保留用于展示），在生成买入计划时排除
+- 跨账户去重需在账户params_json中设置`CROSS_ACCOUNT_DEDUP: true`
+- 卖出又买入同一股票时，应从卖出列表移除（避免白交手续费）
+- 科创板过滤（688/689）必须在排序前执行，不能排完再过滤导致Top10数量不足
+- 信号cron格式一致性：切换策略后，format_report.py必须同步更新新策略的公式说明，否则显示"综合评分"
+- 广度/市场情绪显示：v75f等带广度过滤的策略，信号报告必须在Top10前显示广度公式和当前值
+- 参数扫描：用全量回测（full=True）而非WF做参数扫描，快20倍；但最优组合必须用WF最终验证
+- calc_factors_v75f之前缺extra_data参数导致account_runner传7参数报TypeError——信号cron返回error状态
+- 全量回测run_wf(full=True)返回DataFrame不是dict——取值用result['test_sharpe'].iloc[0]而非result['sharpe']
+- 广度值需要从策略层传到plan再到signal输出——在account_runner.py里单独调用_calc_breadth并加到plan dict
 
 ---
 
@@ -199,13 +250,6 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 
 ## 执行前检查清单（关键操作前必须逐条确认）
 
-### WF回测检查清单
-- [ ] 已加载skill确认具体步骤
-- [ ] 输出已重定向到文件或/dev/null（不是StringIO）
-- [ ] 已确认不是并行运行（OOM风险）
-- [ ] 已确认quiet=True（默认抑制DEBUG输出）
-- [ ] 已确认参数传递正确（adapter→calc_factors）
-
 ### 输入标准化检查清单（阶段0）
 - [ ] 输入类型已识别（stock/timing/risk）
 - [ ] 元数据已填充（所有必填字段）
@@ -215,6 +259,13 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 - [ ] 输入ID已生成（唯一标识）
 - [ ] 来源已标记（internal/external/复盘发现）
 - [ ] 已存储到 `alpha-research/inputs/` 标准位置
+
+### WF回测检查清单
+- [ ] 已加载skill确认具体步骤
+- [ ] 输出已重定向到文件或/dev/null（不是StringIO）
+- [ ] 已确认不是并行运行（OOM风险）
+- [ ] 已确认quiet=True（默认抑制DEBUG输出）
+- [ ] 已确认参数传递正确（adapter→calc_factors）
 
 ### 参数扫描检查清单
 - [ ] 已确认扫描顺序：因子权重→择时参数→风控参数
@@ -246,3 +297,12 @@ description: A股量化策略开发全流程。Use when developing new strategy.
 | calc_factors读DEFAULT_PARAMS | 扫描参数不生效，所有组结果相同 | calc_factors必须从params参数读取动态值 |
 | adapter不传params给calc_factors | 同上，参数修改无法传递 | adapter调用calc_factors时必须传入merged_params |
 | 两个WF并行 | OOM被杀 | 串行执行 |
+
+---
+
+## 附录：经验教训参考
+
+详细的经验教训、案例分析、择时方法对比，请参考：
+- `~/.hermes/skills/ic-wf-disconnect/SKILL.md` — IC与WF矛盾诊断案例集
+- `~/.hermes/skills/wf-param-sweep/SKILL.md` — 参数扫描详细流程和陷阱
+- `~/.hermes/skills/strategy-integration/SKILL.md` — 策略集成详细检查清单

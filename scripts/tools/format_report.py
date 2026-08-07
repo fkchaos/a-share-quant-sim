@@ -105,24 +105,26 @@ def format_signal(data: dict, account_id: int) -> str:
         for i, t in enumerate(top_scores):
             lines.append(f"  {i+1}. {t['code']} {t.get('name','')} — {t.get('score',0):.4f}")
 
+    if sells or buys or holds:
+        lines.append("📋 操作计划:")
     if sells:
-        lines.append(f"🔴 卖出 {len(sells)} 只:")
+        lines.append(f"  🔴 卖出 {len(sells)} 只:")
         for s in sells:
             hd = s.get('hold_days', 0)
             hd_str = f" 持{hd}天" if hd else ""
-            lines.append(f"  {s['code']} {s.get('name','')} — {s.get('shares','')}股{hd_str} ({s.get('reason','')})")
+            lines.append(f"    {s['code']} {s.get('name','')} — {s.get('shares','')}股{hd_str} ({s.get('reason','')})")
 
     if buys:
-        lines.append(f"🟢 买入 {len(buys)} 只:")
+        lines.append(f"  🟢 买入 {len(buys)} 只:")
         for b in buys:
-            lines.append(f"  {b['code']} {b.get('name','')} — {b.get('shares','')}股 @ {b.get('price',0):.2f}")
+            lines.append(f"    {b['code']} {b.get('name','')} — {b.get('shares','')}股 @ {b.get('price',0):.2f}")
 
     if holds:
-        lines.append(f"🟡 持有 {len(holds)} 只:")
+        lines.append(f"  🟡 持有 {len(holds)} 只:")
         for h in holds:
             hd = h.get('hold_days', 0)
             hd_str = f" 持{hd}天" if hd else ""
-            lines.append(f"  {h['code']} {h.get('name','')} — {h.get('shares','')}股 @ {h.get('price',0):.2f}{hd_str}")
+            lines.append(f"    {h['code']} {h.get('name','')} — {h.get('shares','')}股 @ {h.get('price',0):.2f}{hd_str}")
 
     if skipped:
         lines.append(f"⏭️ 跳过 {skipped} 只（资金不足/风控）")

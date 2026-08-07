@@ -52,7 +52,18 @@ def format_signal(data: dict, account_id: int) -> str:
 
     lines.append(f"现金: ¥{cash:,.0f}  持仓: {holdings} 只")
     lines.append("─" * 30)
+    # 策略逻辑说明
+    strategy = data.get("strategy", "")
+    if strategy in ("v75j",):
+        lines.append("🧠 策略: v75j — 流动性单因子 + 广度过滤")
+        lines.append("  逻辑: 只用流动性因子(LIQUIDITY)选股, 广度过滤控制买入时机")
+        lines.append("  选股: 按20日均成交额排名, 越高越好(流动性好)")
+        lines.append("  择时: 科技板块>MA20占比≥50%才买, <30%强制空仓")
+        lines.append("  风控: 止损-8%, 止盈25%, 最长持仓20天")
+        lines.append("  过滤: 股价>300元不买(高价股买不起)")
+        lines.append("─" * 30)
 
+    # 广度/市场情绪（v75f/v75g/v75j）
     # 广度/市场情绪（v75f/v75g）
     breadth = data.get("breadth")
     if breadth is not None:

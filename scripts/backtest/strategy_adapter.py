@@ -675,6 +675,18 @@ class StrategyAdapter:
         }
         self._regime_params["v75h"] = {}
 
+        # ── v75j: 流动性因子 + 广度过滤（去掉弱因子） ──
+        self._select_fns["v75j"] = self._v75j_select
+        self._risk_params["v75j"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+        }
+        self._regime_params["v75j"] = {}
+
         # ── v75i: v75f + 因子参数扫描（窗口期优化） ──
         self._select_fns["v75i"] = self._v75i_select
         self._risk_params["v75i"] = {
@@ -1435,8 +1447,23 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v75h(factors, date, close_panel, volume_panel, amount_panel,
-                                  high_panel, low_panel, open_panel, current_holdings,
-                                  merged_params, sold_recently=sold_recently, return_all=return_all)
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v75j_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75j 选股: 流动性因子 + 广度过滤（去掉突破/放量弱因子）"""
+        from scripts.strategies.v75j_liquidity_only import select_stocks_v75j, calc_factors_v75j
+        if factors is None:
+            factors = calc_factors_v75j(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75j"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v75j(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
 
     def _v75i_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,

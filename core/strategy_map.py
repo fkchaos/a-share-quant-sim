@@ -1305,6 +1305,30 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v75j: 流动性因子 + 广度过滤（去掉弱因子） ──
+    "v75j": {
+        "mode": "custom",
+        "description": "v75j: 流动性单因子+广度过滤，去掉突破/放量（IC<0.03）",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75j_liquidity_only.select_stocks_v75j",
+        "calc_factors_fn": "scripts.strategies.v75j_liquidity_only.calc_factors_v75j",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.30,
+            "HOLD_DAYS_MAX": 15,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "BREADTH_MA": 20,
+            "BREADTH_HIGH": 0.50,
+            "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0,
+            "W_VOL_SURGE": 0.0,
+            "W_LIQUIDITY": 1.0,
+        },
+    },
+
     # ── v75i: v75f + 因子参数扫描（窗口期优化） ──
     "v75i": {
         "mode": "custom",

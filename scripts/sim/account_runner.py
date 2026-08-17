@@ -375,7 +375,7 @@ def run_signal(account_id, date, strategy_name=None):
             ],
             "top_scores": [
                 {"code": c, "name": name_map.get(c, ""), "score": round(s, 4)}
-                for c, s in plan.get("top_scores_raw", [])[:10]
+                for c, s in (sorted(plan.get("top_scores_raw", {}).items(), key=lambda x: -x[1])[:15 if (plan.get("strategy", strategy_name) or "").startswith("v61") else 10] if isinstance(plan.get("top_scores_raw"), dict) else list(plan.get("top_scores_raw", []))[:15 if (plan.get("strategy", strategy_name) or "").startswith("v61") else 10])
             ],
             "holds": [
                 {"code": h["code"], "name": h.get("name") or name_map.get(h["code"], ""), "shares": h.get("current_shares", 0), "price": h.get("price", 0), "cost_price": h.get("cost_price", 0), "score": h.get("score", 0), "hold_days": h.get("hold_days", 0)}

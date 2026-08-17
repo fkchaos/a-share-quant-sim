@@ -46,3 +46,4 @@ config/mcporter.json
 # 运行时临时数据
 data/v44_param_scan.json
 scripts/data/portfolio/trade_plan_*.json
+data/external/valuation_daily.csv

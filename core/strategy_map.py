@@ -1131,6 +1131,25 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v61c: 换手率+小市值 + 到期续持优化 ──
+    "v61c": {
+        "mode": "custom",
+        "description": "v61c 到期续持: 止损-8%/止盈+25%, 到期在Top15内续持, WF夏普2.530",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v61c_turnover_size.select_stocks_v61c",
+        "calc_factors_fn": "scripts.strategies.v61c_turnover_size.calc_factors_v61c",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 5,
+            "SELL_OUT_OF": 15,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+        },
+    },
+
     # ── v74a: 行业动量增强（v61b + 行业动量因子） ──
     "v74a": {
         "mode": "custom",
@@ -1327,6 +1346,60 @@ STRATEGY_MAP = {
             "W_BREAKOUT": 0.0,
             "W_VOL_SURGE": 0.0,
             "W_LIQUIDITY": 1.0,
+        },
+    },
+
+    # ── v75k: v75j + 纳斯达克隔夜择时 ──
+    "v75k": {
+        "mode": "custom",
+        "description": "v75k: v75j + QQQ隔夜择时，纳指跌>3%不开仓/跌1~3%减半",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75k_nasdaq_timing.select_stocks_v75k",
+        "calc_factors_fn": "scripts.strategies.v75k_nasdaq_timing.calc_factors_v75k",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20,
+            "BREADTH_HIGH": 0.50,
+            "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0,
+            "W_VOL_SURGE": 0.0,
+            "W_LIQUIDITY": 1.0,
+            "QQQ_GATE_STRONG": -0.03,
+            "QQQ_GATE_MILD": -0.01,
+        },
+    },
+
+    # ── v75l: v75j + QQQ + 广度双择时（OR组合） ──
+    "v75l": {
+        "mode": "custom",
+        "description": "v75l: v75j + QQQ隔夜+广度双择时，任一触发不开仓",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v75l_qqq_breadth_combo.select_stocks_v75l",
+        "calc_factors_fn": "scripts.strategies.v75l_qqq_breadth_combo.calc_factors_v75l",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20,
+            "BREADTH_HIGH": 0.50,
+            "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0,
+            "W_VOL_SURGE": 0.0,
+            "W_LIQUIDITY": 1.0,
+            "QQQ_GATE_STRONG": -0.03,
+            "QQQ_GATE_MILD": -0.01,
         },
     },
 

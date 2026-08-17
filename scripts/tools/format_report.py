@@ -82,7 +82,7 @@ def format_signal(data: dict, account_id: int) -> str:
     if top_scores:
         strategy = data.get("strategy", "")
         lines.append(f"📊 选股Top{len(top_scores)}得分:")
-        if strategy in ("v61b", "v61"):
+        if strategy in ("v61b", "v61c", "v61"):
             lines.append("  score = low_turnover_rank + small_cap_rank (满分2.0)")
             lines.append("  low_turnover_rank=5日平均换手率的百分位排名, 换手越低得分越高")
             lines.append("  small_cap_rank=流通市值的百分位排名, 市值越小得分越高")

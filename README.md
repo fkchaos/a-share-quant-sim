@@ -120,7 +120,7 @@ live disagree. It does not remove look-ahead bias you write into the factor code
 | Data | Ingestion, adjusted prices, trading calendar, universe construction, local cache |
 | Factors | Reusable factor library (momentum, size, liquidity, turnover, sentiment) with an IC evaluation harness |
 | Scoring | Cross-sectional multi-factor ranking, configurable weights |
-| Strategies | Pluggable adapters. Two are currently running on two separate simulated accounts (`v61b`, `v68`) |
+| Strategies | Pluggable adapters. Two are currently running on two separate simulated accounts (`v61c`, `v75j`) |
 | Validation | Backtest engine + walk-forward runner with rolling origin folds |
 | Simulation | Daily paper-trading runner producing a research signal report |
 | Docs | Deploy guide, user manual, architecture notes, full experiment logs |

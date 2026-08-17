@@ -582,6 +582,34 @@ class StrategyAdapter:
         }
         self._regime_params["v61b"] = {}
 
+        # ── v61c: 换手率+小市值 + 到期续持优化 ──
+        self._overlay_scripts["v61c"] = {
+            "module": "scripts.backtest.v61c_risk_scan",
+            "entry_func": "run_wf_overlay",
+            "select_func": "select_stocks",
+            "check_risk_func": "check_risk",
+            "signal_func": "run_signal",
+            "params": {
+                "REBALANCE_DAYS": 5,
+                "TOP_N": 5,
+                "STOP_LOSS": -0.08,
+                "TAKE_PROFIT": 0.25,
+                "HOLD_DAYS_MAX": 5,
+                "SELL_OUT_OF": 15,
+                "SENTIMENT_WINDOW": 30,
+                "SENTIMENT_THRESHOLD": 5.0,
+                "SENTIMENT_COLD_MODE": True,
+            }
+        }
+        self._select_fns["v61c"] = self._v61c_select
+        self._risk_params["v61c"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 5, "MAX_DAILY_BUY": 5,
+            "SELL_OUT_OF": 15, "MAX_POSITION": 0.25, "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+        }
+        self._regime_params["v61c"] = {}
+
         # ── v74a: 行业动量增强（v61b + 行业动量因子） ──
         self._select_fns["v74a"] = self._v74a_select
         self._risk_params["v74a"] = {
@@ -686,6 +714,32 @@ class StrategyAdapter:
             "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
         }
         self._regime_params["v75j"] = {}
+
+        # ── v75k: v75j + 纳斯达克隔夜择时 ──
+        self._select_fns["v75k"] = self._v75k_select
+        self._risk_params["v75k"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+            "QQQ_GATE_STRONG": -0.03, "QQQ_GATE_MILD": -0.01,
+        }
+        self._regime_params["v75k"] = {}
+
+        # ── v75l: v75j + QQQ + 广度双择时（OR组合） ──
+        self._select_fns["v75l"] = self._v75l_select
+        self._risk_params["v75l"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+            "QQQ_GATE_STRONG": -0.03, "QQQ_GATE_MILD": -0.01,
+        }
+        self._regime_params["v75l"] = {}
 
         # ── v75i: v75f + 因子参数扫描（窗口期优化） ──
         self._select_fns["v75i"] = self._v75i_select
@@ -1315,6 +1369,22 @@ class StrategyAdapter:
         
         return candidates
 
+    def _v61c_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v61c 选股: 换手率+小市值 + 到期续持优化"""
+        from scripts.strategies.v61c_turnover_size import select_stocks_v61c, calc_factors_v61c
+        if factors is None:
+            factors = calc_factors_v61c(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v61c"])
+        if params:
+            merged_params.update(params)
+        candidates = select_stocks_v61c(factors, date, close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel, current_holdings,
+                                       merged_params, sold_recently=sold_recently)
+        return candidates
+
     def _v74a_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,
                     sold_recently=None, return_all=False):
@@ -1464,6 +1534,36 @@ class StrategyAdapter:
         return select_stocks_v75j(factors, date, close_panel, volume_panel, amount_panel,
                                    high_panel, low_panel, open_panel, current_holdings,
                                    merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v75k_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75k 选股: v75j + 纳斯达克隔夜择时"""
+        from scripts.strategies.v75k_nasdaq_timing import select_stocks_v75k, calc_factors_v75k
+        if factors is None:
+            factors = calc_factors_v75k(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75k"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v75k(factors, date, close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel, current_holdings,
+                                  merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v75l_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75l 选股: v75j + QQQ + 广度双择时（OR组合）"""
+        from scripts.strategies.v75l_qqq_breadth_combo import select_stocks_v75l, calc_factors_v75l
+        if factors is None:
+            factors = calc_factors_v75l(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75l"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v75l(factors, date, close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel, current_holdings,
+                                  merged_params, sold_recently=sold_recently, return_all=return_all)
 
     def _v75i_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,

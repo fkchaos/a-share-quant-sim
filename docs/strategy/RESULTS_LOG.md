@@ -1747,3 +1747,67 @@ factor-factory 交付了 f0002a 特质波动率（IVOL）因子，在 zz1000 池
 - 冗余度结果：`/tmp/v81_redundancy.json`
 - Regime结果：`/tmp/v81_regime.json`
 
+
+---
+
+## f0001a 隔夜-日内反转因子验证（2026-08-18）
+
+### 背景
+factor-factory 交付了 f0001a 隔夜-日内反转因子，在 zz1000 池 RankIC=0.031，IR=0.355。我们之前 v77 只用了 overnight 成分（IC=-0.01），需要验证完整因子是否有效。
+
+### 因子定义
+```python
+overnight = open[t] / close[t-1] - 1
+intraday = close[t] / open[t] - 1
+factor = overnight - intraday  # 做多"高开低走"的票
+```
+
+### 与v77的区别
+| | v77 | f0001a |
+|---|---|---|
+| 定义 | overnight = open[t]/close[t-1]-1 | overnight - intraday |
+| 方向 | 取负（做多低隔夜收益） | 正向（做多高隔夜-日内差值） |
+| IC | -0.0099 ❌ | 0.0191 ⚠️ |
+
+### IC分析结果（zz1800池）
+| 指标 | 数值 | 判定 |
+|------|------|------|
+| IC均值 | 0.0191 | ⚠️ <0.03 |
+| IC标准差 | 0.1399 | — |
+| IR | 0.1367 | ⚠️ <0.3 |
+| P(>0) | 55.2% | ✅ >50% |
+
+### 分年IC
+| 年份 | IC均值 | IR |
+|------|--------|-----|
+| 2020 | 0.0253 | 0.22 |
+| 2021 | 0.0193 | 0.17 |
+| 2022 | 0.0319 | 0.22 |
+| 2023 | 0.0197 | 0.16 |
+| 2024 | -0.0068 | -0.04 |
+| 2025 | 0.0292 | 0.20 |
+| 2026 | 0.0117 | 0.08 |
+
+### 冗余度检查
+| 因子对 | 相关系数 | 判定 |
+|--------|---------|------|
+| f0001a vs IVOL | 0.023 | ✅ 独立 |
+| f0001a vs Turnover20 | -0.016 | ✅ 独立 |
+
+### 分Regime IC
+| Regime | IC均值 | IR | 样本 |
+|--------|--------|-----|------|
+| risk_on | 0.0192 | 0.14 | 440天 |
+| risk_off | 0.0175 | 0.12 | 883天 |
+
+### 结论
+**IC微弱（0.019 < 0.03阈值），不进入WF。** 比factor-factory结果低（0.031），可能原因：我们未做行业中性化。但独立性好，可作为组合辅助因子（权重<0.15）。
+
+### 文件
+- IC分析：`scripts/tools/f0001a_ic_analysis.py`
+- 冗余度检查：`scripts/tools/f0001a_redundancy_check.py`
+- Regime分析：`scripts/tools/f0001a_regime_analysis.py`
+- IC结果：`/tmp/f0001a_ic.json`
+- 冗余度结果：`/tmp/f0001a_redundancy.json`
+- Regime结果：`/tmp/f0001a_regime.json`
+

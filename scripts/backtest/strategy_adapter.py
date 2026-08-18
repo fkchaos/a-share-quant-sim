@@ -765,6 +765,18 @@ class StrategyAdapter:
         }
         self._regime_params["v76a"] = {}
 
+        # ── v81: IVOL低波溢价因子（外部因子验证） ──
+        self._select_fns["v81"] = self._v81_select
+        self._risk_params["v81"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "IVOL_WINDOW": 20,
+        }
+        self._regime_params["v81"] = {}
+
         # ── v70: 中盘域动量策略（100-500亿市值） ──
         self._select_fns["v70"] = self._v70_select
         self._risk_params["v70"] = {
@@ -1595,6 +1607,21 @@ class StrategyAdapter:
         return select_stocks_v76a(factors, date, close_panel, volume_panel, amount_panel,
                                   high_panel, low_panel, open_panel, current_holdings,
                                   merged_params, sold_recently=sold_recently)
+
+    def _v81_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v81 选股: IVOL低波溢价因子 + 广度过滤"""
+        from scripts.strategies.v81_ivol import select_stocks_v81, calc_factors_v81
+        if factors is None:
+            factors = calc_factors_v81(close_panel, volume_panel, amount_panel,
+                                       high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v81"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v81(factors, date, close_panel, volume_panel, amount_panel,
+                                  high_panel, low_panel, open_panel, current_holdings,
+                                  merged_params, sold_recently=sold_recently, return_all=return_all)
 
     def _v70_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,

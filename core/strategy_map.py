@@ -1451,6 +1451,29 @@ STRATEGY_MAP = {
         },
     },
 
+    # ── v81: IVOL低波溢价因子（外部因子验证） ──
+    "v81": {
+        "mode": "custom",
+        "description": "v81 IVOL低波溢价: 特质波动率因子+广度过滤",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v81_ivol.select_stocks_v81",
+        "calc_factors_fn": "scripts.strategies.v81_ivol.calc_factors_v81",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20,
+            "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35,
+            "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10,
+            "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20,
+            "BREADTH_HIGH": 0.50,
+            "BREADTH_LOW": 0.30,
+            "IVOL_WINDOW": 20,
+        },
+    },
+
     # ── v70: 中盘域动量策略（100-500亿市值） ──
     "v70": {
         "mode": "custom",

@@ -14,20 +14,20 @@
 - **设计文档**: `docs/experiments/2026-08-19_v83_ic_root_cause_plan.md`
 - **下一步**: R4数据源对比（需QMT账号获取Wind数据）, R5综合验证
 
-### B02: QMT接入 — 等券商政策确认
-- **状态**: ⏳ 等主公确认
+### B02: QMT接入 — 已确认大QMT，适配层已写好
+- **状态**: ✅ 适配层代码就绪，等Windows环境联调
 - **影响**: 实盘迁移
-- **已就绪**: Provider架构（SimProvider已实现），Python 3.6.8兼容性已确认
-- **待确认**: miniQMT停服后xtquant外部调用是否可用 / 大QMT内置Python版本
+- **已就绪**: Provider架构 + qmt_adapter/(data/trading/skeleton) + knowledge知识库16个文件
+- **已确认**: 大QMT，Python 3.6，init()+handlebar()模式
 - **设计文档**: `docs/experiments/2026-08-19_qmt_migration_plan.md`
-- **下一步**: 确认后写QMTProvider + demo验证
+- **下一步**: 拿到QMT环境后联调测试（B05）
 
-### B03: QMTProvider实现
-- **状态**: ⏳ 依赖B02
-- **影响**: 实盘交易执行
-- **前置**: B02确认接入方式
-- **设计文档**: `docs/experiments/2026-08-19_qmt_trading_provider_design.md`
-- **下一步**: 实现 `core/providers/qmt_provider.py` + passorder封装
+### B03: QMT联调测试
+- **状态**: ⏳ 依赖QMT环境
+- **影响**: 验证适配层在真实QMT环境下工作
+- **前置**: Windows + QMT客户端 + 券商账号
+- **步骤**: 复制骨架到QMT编辑器 → 验证行情获取 → 验证passorder下单
+- **文档**: `docs/qmt/knowledge/`（API参考）
 
 ---
 

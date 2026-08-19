@@ -116,6 +116,10 @@ core/           — 共享引擎（account, db, strategy_map, factors, trading�
   trading.py      — 交易门面层（直接模式/Provider模式切换）
   trading_provider.py — Provider基类接口
   provider_factory.py — Provider工厂函数
+qmt_adapter/    — QMT适配层（大QMT Python 3.6环境）
+  data.py         — QMT行情→我们格式的转换器
+  trading.py      — passorder封装+账户查询封装
+  strategy_skeleton.py — init()+handlebar()策略骨架
 scripts/strategies/ — 策略文件：
   - v61_turnover_size.py      # v61b基础（低换手小票因子）
   - v61b_turnover_size.py     # v61b叠加信号
@@ -134,6 +138,7 @@ scripts/factors/    — 因子研究脚本（v82/v83 IC分析）
 scripts/tools/      — 工具（init_project.py, update_daily_data_async.py, format_report.py）
 docs/               — 正式文档
 docs/experiments/   — 实验文档（设计+结果+计划）
+docs/qmt/knowledge/ — QMT API知识库（16个文件，交易/行情/枚举/示例/FAQ）
 data/               — SQLite 数据库（quant_stocks.db + quant_accounts.db）
 alpha-research/     — 因子研究（独立目录，外部研究工具，不移植代码）
   reports/xuntou/   — 迅投因子看板数据存档

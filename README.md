@@ -86,10 +86,14 @@ flowchart TD
     E --> F["Backtest runner"]
     E --> G["Walk-forward runner<br/>rolling train / test folds"]
     E --> H["Paper-trading runner<br/>simulated accounts, daily"]
+    H --> T["Trading Provider<br/>SimProvider / QMTProvider"]
+    T --> S["Sim DB"]
+    T --> Q["QMT live"]
     F --> L["Experiment logs"]
     G --> L
     H --> R["Daily research signal report"]
     style E stroke:#3fb950,stroke-width:3px
+    style T stroke:#f0883e,stroke-width:3px
 ```
 
 ### The part that matters: one code path
@@ -121,6 +125,7 @@ live disagree. It does not remove look-ahead bias you write into the factor code
 | Factors | Reusable factor library (momentum, size, liquidity, turnover, sentiment) with an IC evaluation harness |
 | Scoring | Cross-sectional multi-factor ranking, configurable weights |
 | Strategies | Pluggable adapters. Two are currently running on two separate simulated accounts (`v61c`, `v75j`) |
+| Trading | **Provider architecture**: SimProvider (paper) / QMTProvider (live via XunTou QMT, pending) |
 | Validation | Backtest engine + walk-forward runner with rolling origin folds |
 | Simulation | Daily paper-trading runner producing a research signal report |
 | Docs | Deploy guide, user manual, architecture notes, full experiment logs |
@@ -231,8 +236,7 @@ into off-the-shelf backtest engines:
 
 <br/>
 
-**Can I trade real money with this?** No. It is a research and simulation system. It has no
-brokerage connection and no order-routing code.
+**Can I trade real money with this?** Migration to XunTou QMT live trading is in progress. The Provider architecture is ready; QMTProvider will be implemented once the brokerage integration path is confirmed. Currently paper trading only.
 
 **Can I use it for US or other markets?** The architecture is market-agnostic; the data layer
 is A-share specific. You would need to replace the ingestion adapter and relax the T+1 and

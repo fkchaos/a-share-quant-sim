@@ -75,10 +75,14 @@ flowchart TD
     E --> F["回测 runner"]
     E --> G["Walk-Forward runner<br/>滚动训练 / 测试折"]
     E --> H["模拟盘 runner<br/>模拟账户 · 每日运行"]
+    H --> T["交易Provider<br/>SimProvider / QMTProvider"]
+    T --> S["模拟盘DB"]
+    T --> Q["QMT实盘"]
     F --> L["实验日志"]
     G --> L
     H --> R["每日研究信号报告"]
     style E stroke:#3fb950,stroke-width:3px
+    style T stroke:#f0883e,stroke-width:3px
 ```
 
 ### 最关键的一点：同一条代码路径
@@ -107,6 +111,7 @@ flowchart TD
 | 因子 | 可复用因子库（动量、市值、流动性、换手、情绪）+ IC 评估工具 |
 | 打分 | 横截面多因子排序，权重可配 |
 | 策略 | 可插拔适配器。当前有两个策略在两个独立模拟账户上运行（`v61c`、`v75j`） |
+| 交易 | **Provider架构**：SimProvider（模拟盘）/ QMTProvider（QMT实盘，待实现） |
 | 验证 | 回测引擎 + 滚动起点的 Walk-Forward runner |
 | 模拟 | 每日模拟盘 runner，产出研究信号报告 |
 | 文档 | 部署指南、使用手册、架构说明、完整实验日志 |
@@ -181,7 +186,7 @@ flowchart TD
 
 <br/>
 
-**能拿它做实盘吗？** 不能。它是研究与模拟系统，没有券商连接，也没有报单代码。
+**能拿它做实盘吗？** 正在迁移到迅投QMT实盘平台。Provider架构已就绪，等券商确认接入方式后实现QMTProvider。当前为模拟盘。
 
 **能用在美股或其他市场吗？** 架构与市场无关，数据层是 A 股专用的。你需要替换接入适配器，
 并放宽执行模型里的 T+1 与涨跌停约束。做一个可插拔的数据源层是很受欢迎的贡献。

@@ -102,13 +102,20 @@
 9. **wf_runner.py 默认 test=252**，需要手动指定 test=126 step=63 才是标准 16 folds
 10. **strategy_adapter.get_risk_params() 返回副本**，直接改 adapter._risk_params['v39g']
 11. **⚠️ 腾讯K线API volume 单位是手（1手=100股），不是股！** 计算换手率需 `volume * 100 / float_shares`，否则偏差100倍
+12. **⚠️ 迅投因子看板IC数据不能直接复现** — 与我们的IC差10倍以上，原因未明（API加密、计算方法不透明）。外部因子数据仅作方向参考，必须在自己池子重验
+13. **⚠️ miniQMT已停服（2026.7.6）** — 只能用大QMT内置Python 3.6.8，或等券商确认xtquant外部调用是否可用
+14. **⚠️ Python 3.6.8兼容性** — 不能用 `:=` walrus、`dict | dict`、f-string `=`号、`pd.DataFrame.map()`，新代码必须兼容3.6.8
 
 ---
 
 ## 项目结构
 
 ```
-core/           — 共享引擎（account, db, strategy_map, factors）
+core/           — 共享引擎（account, db, strategy_map, factors, trading）
+  providers/      — 交易Provider（sim_provider=模拟盘, qmt_provider=QMT实盘）
+  trading.py      — 交易门面层（直接模式/Provider模式切换）
+  trading_provider.py — Provider基类接口
+  provider_factory.py — Provider工厂函数
 scripts/strategies/ — 策略文件：
   - v61_turnover_size.py      # v61b基础（低换手小票因子）
   - v61b_turnover_size.py     # v61b叠加信号
@@ -123,10 +130,13 @@ scripts/backtest/   — WF框架：
   - strategy_adapter.py       # 策略适配器（选股+风控，overlay注册）
   - v61b_risk_scan.py         # v61b overlay信号/回测入口
 scripts/sim/        — 模拟盘执行（account_runner.py）
+scripts/factors/    — 因子研究脚本（v82/v83 IC分析）
 scripts/tools/      — 工具（init_project.py, update_daily_data_async.py, format_report.py）
 docs/               — 正式文档
+docs/experiments/   — 实验文档（设计+结果+计划）
 data/               — SQLite 数据库（quant_stocks.db + quant_accounts.db）
 alpha-research/     — 因子研究（独立目录，外部研究工具，不移植代码）
+  reports/xuntou/   — 迅投因子看板数据存档
 ```
 
 ## 实验编号规则
@@ -139,6 +149,8 @@ alpha-research/     — 因子研究（独立目录，外部研究工具，不�
 - v61x: 低换手小票系列（v61b为当前账户1策略）
 - v62-68x: 中短线策略探索（v68为当前账户2策略）
 - v69+: ETF轮动/行业动量等新方向
+- v82x: 迅投因子看板因子验证（8因子全部无效）
+- v83x: 迅投IC差异根因排查（R1-R3排除5个可能）
 - 所有有价值的实验方向对应一个 todo 项
 
 ## 汇报风格

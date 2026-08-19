@@ -39,7 +39,8 @@ import numpy as np
 # 确保项目根目录在 path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.account import PortfolioState, buy, sell, portfolio_value
+from core.account import PortfolioState, portfolio_value
+from core.trading import buy, sell  # 通过门面层，支持provider切换
 from core.config import TradingCosts
 from core.db import get_kline, get_all_codes, get_tradeable_codes, get_account, list_accounts, create_account, switch_strategy, upsert_account
 from core.strategy_map import load_strategy, list_strategy_names
@@ -180,7 +181,7 @@ def load_account(account_id, stale_days=30):
             "hold_days": hd,
             "added_at": added,
             "entry_date": added[:10] if added else str(datetime.now().date()),
-            "tp_taken": json.loads(h.get("tp_taken", "[]")) if isinstance(h.get("tp_taken"), str) else [],
+            "tp_taken": (lambda v: [] if v in (None, "N", "null", "") else (json.loads(v) if isinstance(v, str) else v))(h.get("tp_taken")),
             "highest_profit": 0.0,
         }
 

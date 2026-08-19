@@ -1,6 +1,6 @@
 # 部署指南
 
-> 最后更新：2026-07-29（双账户运行：账户1 v61b + 账户2 v68）
+> 最后更新：2026-08-19（双账户运行：账户1 v61c + 账户2 v75j）
 
 零基础部署，5 分钟跑通。
 
@@ -128,23 +128,87 @@ print(pm.health_check_all())  # {'tencent': True, 'baostock': True}
 
 ---
 
+## 4.5 交易Provider架构（sim ↔ QMT切换）
+
+项目采用 **Provider模式** 实现交易执行层的解耦。策略代码只认 `TradingProvider` 接口，不关心底层是模拟盘还是QMT实盘。
+
+### 架构概览
+
+```
+策略代码 (account_runner.py)
+    ↓
+core/trading.py          ← 交易门面层（统一入口）
+    ↓
+core/provider_factory.py ← 工厂函数，根据config选择Provider
+    ↓
+core/trading_provider.py ← 基类接口（buy/sell/get_positions/...）
+    ↓
+core/providers/
+  ├── sim_provider.py    ← 模拟盘（基于JSON持久化）
+  └── qmt_provider.py    ← QMT实盘（待实现）
+```
+
+### 切换到QMT
+
+修改账户配置文件（如 `data/portfolio/2.json`）：
+
+```json
+{
+  "provider": "qmt",
+  "qmt": {
+    "account_id": "8800000001",
+    "xt_addr": "127.0.0.1:58610"
+  }
+}
+```
+
+在 `scripts/sim/account_runner.py` 中通过工厂创建Provider：
+
+```python
+from core.provider_factory import create_provider
+provider = create_provider(config)  # config['provider'] = 'qmt'
+```
+
+### ⚠️ QMT开发注意
+
+- **Python 3.6.8 兼容**：QMT客户端（迅投xtquant）要求 Python 3.6.8，Provider代码必须兼容3.6语法
+- **当前状态**：QMT Provider尚未实现（`provider_factory.py` 中 `provider_type == 'qmt'` 会抛出 `NotImplementedError`）
+- **开发顺序**：先确认券商政策 → 实现 `core/providers/qmt_provider.py` → 继承 `TradingProvider` → 测试
+- **回退**：随时可改回 `provider: sim` 切回模拟盘，无需改动策略代码
+
+### 模拟盘（默认）
+
+```python
+config = {
+    'provider': 'sim',
+    'sim': {
+        'account_id': '2',
+        'portfolio_dir': 'data/portfolio',
+        'initial_cash': 100000,
+    }
+}
+provider = create_provider(config)  # 返回 SimProvider
+```
+
+---
+
 ## 5. 跑回测
 
-> ✅ v68 回测入口：`python scripts/backtest/wf_runner.py --strategy v68`
+> ✅ v75j 回测入口：`python scripts/backtest/wf_runner.py --strategy v75j`
 > 旧入口 `run_backtest.py` 已废弃（依赖已删除的 core/scoring.py）。
 
 ```bash
 # 全量回测（不做 WF 切分，直接跑全部历史数据）
-python scripts/backtest/wf_runner.py --strategy v68 --full
+python scripts/backtest/wf_runner.py --strategy v75j --full
 
 # WF 回测（默认 4 folds，约 50 秒）
-python scripts/backtest/wf_runner.py --strategy v68
+python scripts/backtest/wf_runner.py --strategy v75j
 
 # 指定训练/测试/滑动窗口
-python scripts/backtest/wf_runner.py --strategy v68 --train 252 --test 126 --step 63
+python scripts/backtest/wf_runner.py --strategy v75j --train 252 --test 126 --step 63
 
 # 指定回测区间
-python scripts/backtest/wf_runner.py --strategy v68 --start 2023-01-01 --end 2025-12-31
+python scripts/backtest/wf_runner.py --strategy v75j --start 2023-01-01 --end 2025-12-31
 ```
 
 # 参数扫描脚本已归档到 archive/，当前使用 strategy_map.py params 统一管理
@@ -153,7 +217,7 @@ python scripts/backtest/wf_runner.py --strategy v68 --start 2023-01-01 --end 202
 python scripts/sim/account_runner.py --account-id 2 report_only
 ```
 
-输出在 `data/backtest_results/` 目录下，包含 wf_v68_latest.json、NAV 曲线、交易记录。
+输出在 `data/backtest_results/` 目录下，包含 wf_v75j_latest.json、NAV 曲线、交易记录。
 
 ---
 
@@ -172,11 +236,11 @@ python scripts/sim/account_runner.py list
 ======================================================================
 ID  名称          策略        现金          初始资金      更新时间
 ----------------------------------------------------------------------
- 1   账户1         v61b       ¥  100,000  ¥  100,000  2026-07-29 10:00:00
- 2   账户2         v68        ¥  100,000  ¥  100,000  2026-07-29 10:00:00
+ 1   账户1         v61c       ¥  100,000  ¥  100,000  2026-08-19 10:00:00
+ 2   账户2         v75j       ¥  100,000  ¥  100,000  2026-08-19 10:00:00
 ======================================================================
-可用策略: v11b, v27, v28, v61b, v68, v20c
-活跃策略: v61b, v68
+可用策略: v11b, v27, v28, v61c, v75j, v20c
+活跃策略: v61c, v75j
 ```
 
 ### 5.2 创建新账户
@@ -186,7 +250,7 @@ ID  名称          策略        现金          初始资金      更新时间
 python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000
 
 # 创建账户并绑定策略
-python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 100000 --strategy v68
+python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 100000 --strategy v75j
 
 # 强制覆盖已有账户（清空持仓和交易记录后重建）
 python scripts/sim/account_runner.py create --account-id 4 --name "我的账户" --cash 500000 --force
@@ -197,8 +261,8 @@ python scripts/sim/account_runner.py create --account-id 4 --name "我的账户"
 ### 5.3 切换策略
 
 ```bash
-# 将账户4切换为 v68 策略
-python scripts/sim/account_runner.py switch --account-id 4 --strategy v68
+# 将账户4切换为 v75j 策略
+python scripts/sim/account_runner.py switch --account-id 4 --strategy v75j
 
 # 切换到 v11b
 python scripts/sim/account_runner.py switch --account-id 4 --strategy v11b
@@ -240,16 +304,16 @@ python scripts/sim/account_runner.py create --account-id 2 --name "账户2" --ca
 模拟盘 = 信号生成 + 执行 + 报告，三步。
 
 ```bash
-# 账户1（v61b）信号生成
+# 账户1（v61c）信号生成
 python scripts/sim/account_runner.py run --account-id 1 intraday_signal
 
-# 账户2（v68）信号生成
+# 账户2（v75j）信号生成
 python scripts/sim/account_runner.py run --account-id 2 intraday_signal
 
-# 账户1（v61b）执行交易
+# 账户1（v61c）执行交易
 python scripts/sim/account_runner.py run --account-id 1 intraday_execute
 
-# 账户2（v68）执行交易
+# 账户2（v75j）执行交易
 python scripts/sim/account_runner.py run --account-id 2 intraday_execute
 
 # 收盘报告
@@ -257,8 +321,8 @@ python scripts/sim/account_runner.py run --account-id 1 report_only
 python scripts/sim/account_runner.py run --account-id 2 report_only
 
 # 临时指定策略（覆盖账户绑定的策略，用于测试）
-python scripts/sim/account_runner.py run --account-id 1 --strategy v61b intraday_signal
-python scripts/sim/account_runner.py run --account-id 2 --strategy v68 intraday_signal
+python scripts/sim/account_runner.py run --account-id 1 --strategy v61c intraday_signal
+python scripts/sim/account_runner.py run --account-id 2 --strategy v75j intraday_signal
 ```
 
 旧脚本（`sim_account1/2/3.py`）保留作为备份，不再被 cron 调用。
@@ -286,21 +350,21 @@ crontab -e
 31 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 5 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/tools/update_daily_data_async.py 2>/dev/null | python3 scripts/tools/format_report.py --type data_update
 
-# 账户1-上午信号（v61b）
-45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
+# 账户1-上午信号（v61c）
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61c && python3 scripts/sim/account_runner.py run --account-id 1 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 1
 
-# 账户2-上午信号（v68）
-45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
+# 账户2-上午信号（v75j）
+45 11 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v75j && python3 scripts/sim/account_runner.py run --account-id 2 intraday_signal 2>/dev/null | python3 scripts/tools/format_report.py --type signal --account 2
 
-# 账户1-下午执行（v61b）
-0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 1
+# 账户1-下午执行（v61c）
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61c && python3 scripts/sim/account_runner.py run --account-id 1 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 1
 
-# 账户2-下午执行（v68）
-0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
+# 账户2-下午执行（v75j）
+0 13 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v75j && python3 scripts/sim/account_runner.py run --account-id 2 intraday_execute 2>/dev/null | python3 scripts/tools/format_report.py --type execute --account 2
 
 # 收盘报告
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61b && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
-30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v68 && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 1 --strategy v61c && python3 scripts/sim/account_runner.py run --account-id 1 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 1
+30 15 * * 1-5 cd /path/to/a-share-quant-sim && python3 scripts/sim/account_runner.py switch --account-id 2 --strategy v75j && python3 scripts/sim/account_runner.py run --account-id 2 report_only 2>/dev/null | python3 scripts/tools/format_report.py --type report --account 2
 ```
 
 **查看报告**：直接看 crontab 输出（`>> data/portfolio/account_runner.log` 或用 `mail` 转发）。
@@ -327,10 +391,10 @@ hermes cron pause <job_id>
 | 任务 | 时间 | 策略 |
 |------|------|------|
 | 数据更新(每半小时) | 9:01-11:31,13:01-15:31 工作日 | — |
-| 账户1-上午信号 | 11:45 工作日 | v61b |
-| 账户1-下午执行 | 13:00 工作日 | v61b |
-| 账户2-上午信号 | 11:45 工作日 | v68 |
-| 账户2-下午执行 | 13:00 工作日 | v68 |
+| 账户1-上午信号 | 11:45 工作日 | v61c |
+| 账户1-下午执行 | 13:00 工作日 | v61c |
+| 账户2-上午信号 | 11:45 工作日 | v75j |
+| 账户2-下午执行 | 13:00 工作日 | v75j |
 | 收盘报告 | 16:00 工作日 | — |
 
 **已暂停任务：** 账户3 尾盘信号/执行(v20c)、Cron监控-巡检/心跳、每日记忆整理
@@ -344,8 +408,8 @@ data/
 ├── quant_stocks.db       # 股票数据（K线、股票池、技术指标）
 ├── quant_accounts.db     # 账户数据（持仓、交易记录）
 └── portfolio/            # 交易计划 + 日志
-    ├── trade_plan_v61b.json
-    ├── trade_plan_v68.json
+    ├── trade_plan_v61c.json
+    ├── trade_plan_v75j.json
     ├── sim_account1.log
     ├── sim_account2.log
     └── account_runner.log
@@ -357,9 +421,10 @@ data/
 
 | 策略 | 风格 | 特点 | 状态 |
 |------|------|------|------|
-| v61b | 低换手小票 | SL=-8%/TP=+25%/HOLD=5天/MAX_POS=0.25 | ✅ 运行中（账户1，10万） |
-| v68 | 多因子评分（动量+illiq+size） | SL=-5%/TP=+5%/HOLD=3天/MAX_POS=0.2 | ✅ 运行中（账户2，10万） |
-| v39g | 多因子评分（小市值+动量确认） | WF 夏普 1.297，已被 v68 替代 | 🔬 参考 |
+| v61c | 低换手小票（到期续持） | SL=-8%/TP=+25%/HOLD=5天/MAX_POS=0.25，WF夏普2.530 | ✅ 运行中（账户1，10万） |
+| v75j | 流动性单因子+广度过滤 | 去掉突破/放量弱因子，纯流动性驱动 | ✅ 运行中（账户2，10万） |
+| v75k | v75j + 纳斯达克择时 | QQQ隔夜跌>3%不开仓/跌1~3%减半 | 🔬 参考 |
+| v39g | 多因子评分（小市值+动量确认） | WF 夏普 1.297，已被 v75j 替代 | 🔬 参考 |
 | v11b | 多因子 Ensemble | 最保守，多组选股并集 | ⏸️ 暂停 |
 | v20c | 尾盘缩量 | 面板 bug 修复后失效（-67%） | ❌ 已退役 |
 
@@ -367,7 +432,7 @@ data/
 
 ```bash
 # 直接修改 DB 绑定
-sqlite3 data/quant_accounts.db "UPDATE account SET strategy='v68' WHERE id=2;"
+sqlite3 data/quant_accounts.db "UPDATE account SET strategy='v75j' WHERE id=2;"
 ```
 
 改完后无需重启，下次信号生成时自动生效。
@@ -383,21 +448,18 @@ sqlite3 data/quant_accounts.db "UPDATE account SET strategy='v68' WHERE id=2;"
 2. `scripts/backtest/strategy_adapter.py` → `_risk_params`
 3. `scripts/backtest/wf_runner.py` → `_calc_factors()` 中的参数使用
 
-|| 策略 | 关键参数（v68） | 说明 ||
+|| 策略 | 关键参数（v75j） | 说明 ||
 ||------|-----------------|------||
-| STOP_LOSS | -0.05 | 止损 5% |
-| TAKE_PROFIT | 0.05 | 止盈 5% |
-| HOLD_DAYS_MAX | 3 | 最长持有 3 天 |
-| MAX_DAILY_BUY | 4 | 每天最多买 4 只 |
-| MAX_POSITION | 0.20 | 单只最大 20% 仓位 |
-| MAX_HOLDINGS | 5 | 最多持有 5 只 |
-| W_MOM | 0.35 | 动量因子权重 |
-| W_ILLIQ | 0.15 | 非流动性因子权重 |
-| W_SIZE | 0.35 | 规模因子权重 |
+STOP_LOSS | -0.08 | 止损 8% |
+TAKE_PROFIT | 0.25 | 止盈 25% |
+HOLD_DAYS_MAX | 5 | 最长持有 5 天 |
+MAX_DAILY_BUY | 4 | 每天最多买 4 只 |
+MAX_POSITION | 0.25 | 单只最大 25% 仓位 |
+MAX_HOLDINGS | 5 | 最多持有 5 只 |
 
 改完后跑回测验证，再提交代码。
 
-验证：`python3 -c "from core.strategy_map import load_strategy; s=load_strategy('v68'); print(s['params']['MAX_POSITION'])"`
+验证：`python3 -c "from core.strategy_map import load_strategy; s=load_strategy('v75j'); print(s['params']['MAX_POSITION'])"`
 
 ---
 

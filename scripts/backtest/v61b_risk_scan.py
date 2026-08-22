@@ -3,6 +3,7 @@
 import sys, os, json
 sys.path.insert(0, '/root/a-share-quant-sim')
 import sqlite3, numpy as np, pandas as pd
+from scripts.strategies.score_delta import save_scores, get_yesterday_scores, rerank_by_delta
 
 RESULT_FILE = '/root/a-share-quant-sim/scripts/backtest/v61b_risk_results.json'
 
@@ -499,6 +500,15 @@ def run_signal(account_id, date, params, state, panels):
             date if isinstance(date, str) else date.strftime('%Y-%m-%d')
         )
         scores = calc_scores(date, data)
+        
+        # ── 保存分数到DB（供明天增速排序用）──
+        save_scores('v61c', date, scores, top_n=50)
+        
+        # ── 用分数增速二次排序 ──
+        yesterday_scores = get_yesterday_scores('v61c', date, codes=scores.index)
+        if len(yesterday_scores) > 10:  # 有足够历史数据才启用增速排序
+            scores = rerank_by_delta(scores, yesterday_scores, top_m=20)
+        
         candidates = scores.head(top_n * 2).index.tolist()
         
         # 排除已持有和将卖出的

@@ -960,10 +960,11 @@ python scripts/tools/init_project.py --db-only
 
 ### Q: 回测结果全是负数 / 和之前记录不一致
 
-1. 检查选股池是否正确排除了科创板（688/689 前缀）：
+1. 检查科创板过滤是否符合预期（默认排除，`--no-exclude-star` 放开）：
 ```bash
+# 查看选股池中科创板数量
 sqlite3 data/quant_stocks.db "SELECT COUNT(*) FROM stock_pool WHERE code LIKE '688%';"
-# 应该返回 0
+# WF默认会过滤688/689，如需含科创板需加 --no-exclude-star
 ```
 
 2. 检查数据是否最新：

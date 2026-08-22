@@ -1,20 +1,12 @@
 #!/usr/bin/env python3
-"""v75j: 流动性因子 + 广度过滤
+"""v75m: 流动性因子 + 广度过滤 + 分数增速二次排序
 
-基于v75f，去掉突破和放量因子（IC<0.03，弱信号），
-只保留流动性因子（IC=-0.054，有效）+ 广度过滤。
+基于v75j，增加score_delta机制：
+- 存储每天top50的分数
+- 第二天在top20内用分数增速（今天score - 昨天score）二次排序
+- 选出"正在变好"的股票，而不是"已经最好"的
 
-设计目的：
-1. 验证"去掉弱因子后是否更好"
-2. 固化因子筛选流程（先IC筛选，再构建策略）
-
-IC分析结果：
-- 突破: IC=-0.014, IR=-0.08 → ❌ 不通过（|IC|<0.03）
-- 放量: IC=-0.011, IR=-0.06 → ❌ 不通过（|IC|<0.03）
-- 流动性: IC=-0.054, IR=-0.31 → ✅ 通过（|IC|>0.03, |IR|>0.3）
-- 广度: 择时因子，v75f已验证有效
-
-v75j = 流动性单因子（W_LIQUIDITY=1.0）+ 广度过滤
+目的：验证"分数增速"是否能捕捉短期动量加速
 """
 
 import numpy as np
@@ -93,9 +85,9 @@ def _calc_breadth(close_panel, date, params):
     return above / total if total > 0 else 1.0
 
 
-def calc_factors_v75j(close_panel, volume_panel, amount_panel, 
+def calc_factors_v75m(close_panel, volume_panel, amount_panel, 
                       high_panel, low_panel, open_panel=None, extra_data=None):
-    """计算v75j因子：只用流动性因子（W_LIQUIDITY=1.0）"""
+    """计算v75m因子：只用流动性因子（W_LIQUIDITY=1.0）"""
     weights = {
         'W_BREAKOUT': 0.0,
         'W_VOL_SURGE': 0.0,
@@ -106,10 +98,10 @@ def calc_factors_v75j(close_panel, volume_panel, amount_panel,
                              weights=weights)
 
 
-def select_stocks_v75j(factors, date, close_panel, volume_panel, amount_panel,
+def select_stocks_v75m(factors, date, close_panel, volume_panel, amount_panel,
                        high_panel, low_panel, open_panel, current_holdings,
                        params=None, sold_recently=None, return_all=False):
-    """选股：流动性因子排序 + 广度过滤"""
+    """选股：流动性因子排序 + 广度过滤 + 分数增速二次排序"""
     if params is None:
         params = DEFAULT_PARAMS
     
@@ -121,15 +113,33 @@ def select_stocks_v75j(factors, date, close_panel, volume_panel, amount_panel,
     if breadth < low_thresh:
         return []
     
+    # 获取scores
+    if isinstance(factors, dict):
+        scores = list(factors.values())[0]
+    else:
+        scores = factors
+    
+    # 保存分数到DB（回测模式跳过，实盘才写）
+    save_scores('v75m', date, scores, top_n=50, skip_db=params.get('SKIP_DB_WRITE', False))
+    
+    # 用分数增速二次排序
+    lookback_days = params.get('SCORE_DELTA_LOOKBACK', 1)
+    yesterday_scores = get_yesterday_scores('v75m', date, codes=scores.index, skip_db=params.get('SKIP_DB_WRITE', False), lookback_days=lookback_days)
+    if len(yesterday_scores) > 10:  # 有足够历史数据才启用增速排序
+        scores = rerank_by_delta(scores, yesterday_scores, top_m=20)
+    
+    # 构造factors供select_stocks_v75a使用
+    reranked_factors = {"v75m": scores}
+    
     # 线性减仓（中间区域）
     if breadth < high_thresh:
         p = dict(params)
         p["MAX_HOLDINGS"] = max(1, int(params.get("MAX_HOLDINGS", 3) * breadth / high_thresh))
-        return select_stocks_v75a(factors, date, close_panel, volume_panel, amount_panel,
+        return select_stocks_v75a(reranked_factors, date, close_panel, volume_panel, amount_panel,
                                   high_panel, low_panel, open_panel, current_holdings,
                                   p, sold_recently=sold_recently, return_all=return_all)
     
     # 满仓区域
-    return select_stocks_v75a(factors, date, close_panel, volume_panel, amount_panel,
+    return select_stocks_v75a(reranked_factors, date, close_panel, volume_panel, amount_panel,
                               high_panel, low_panel, open_panel, current_holdings,
                               params, sold_recently=sold_recently, return_all=return_all)

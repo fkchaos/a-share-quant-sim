@@ -289,7 +289,7 @@ SQLite 双库分离，`core/db.py` 统一管理连接：
 ### 6.3 核心函数
 
 - `get_kline(code)` / `get_index_kline(code)` — 读取K线
-- `get_tradeable_codes()` — 可交易股票池（排除科创板/北交所）
+- `get_tradeable_codes()` — 可交易股票池（全量，不排除板块）
 - `load_panel_from_db(start, end)` — 加载面板数据（回测用）
 - `get_account(id)` / `upsert_account(id, ...)` — 账户读写
 - `get_holdings(id)` / `upsert_holding(...)` — 持仓读写

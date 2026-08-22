@@ -87,7 +87,7 @@ class RiskLimits:
 @dataclass
 class MarketFilter:
     include_prefixes: tuple = ('6', '0', '3')          # 沪主板/深主板/创业板
-    exclude_prefixes: tuple = ('688', '8', '4', '2')   # 科创板/北交所/三板/B股
+    exclude_prefixes: tuple = ('8', '4', '2')          # 北交所/三板/B股（科创板已放开）
     exclude_delisted: bool  = True                      # 自动排除退市股
     delist_max_gap:   int   = 30                        # 超过30天无数据视为退市
 ```

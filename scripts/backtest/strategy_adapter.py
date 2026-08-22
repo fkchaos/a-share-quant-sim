@@ -610,6 +610,16 @@ class StrategyAdapter:
         }
         self._regime_params["v61c"] = {}
 
+        # ── v61d: v61c + 放开科创板/北交所 ──
+        self._select_fns["v61d"] = self._v61d_select
+        self._risk_params["v61d"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 5, "MAX_DAILY_BUY": 5,
+            "SELL_OUT_OF": 15, "MAX_POSITION": 0.25, "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+        }
+        self._regime_params["v61d"] = {}
+
         # ── v74a: 行业动量增强（v61b + 行业动量因子） ──
         self._select_fns["v74a"] = self._v74a_select
         self._risk_params["v74a"] = {
@@ -714,6 +724,80 @@ class StrategyAdapter:
             "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
         }
         self._regime_params["v75j"] = {}
+
+        # ── v75m: v75j + 分数增速二次排序 ──
+        self._select_fns["v75m"] = self._v75m_select
+        self._risk_params["v75m"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+        }
+        self._regime_params["v75m"] = {}
+
+        # ── v75n: v75j + 放开科创板/北交所 ──
+        self._select_fns["v75n"] = self._v75n_select
+        self._risk_params["v75n"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+        }
+        self._regime_params["v75n"] = {}
+
+        # ── v84a: v75n + 纯科技板块过滤 ──
+        self._select_fns["v84a"] = self._v84a_select
+        self._risk_params["v84a"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+        }
+        self._regime_params["v84a"] = {}
+
+        # ── v75p: v75n + 更严格广度择时 ──
+        self._select_fns["v75p"] = self._v75p_select
+        self._risk_params["v75p"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.40,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+        }
+        self._regime_params["v75p"] = {}
+
+        # ── v85a: 板块动量+流动性双因子（含科创板） ──
+        self._select_fns["v85a"] = self._v85a_select
+        self._risk_params["v85a"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0,
+            "W_LIQUIDITY": 0.5, "W_SECTOR_MOM": 0.5, "SECTOR_MOM_WINDOW": 20,
+        }
+        self._regime_params["v85a"] = {}
+
+        # ── v85b: 广度动态仓位管理 ──
+        self._select_fns["v85b"] = self._v85b_select
+        self._risk_params["v85b"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_FULL": 0.60,
+            "BREADTH_HALF": 0.40, "BREADTH_MIN": 0.20,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 1.0,
+        }
+        self._regime_params["v85b"] = {}
 
         # ── v75k: v75j + 纳斯达克隔夜择时 ──
         self._select_fns["v75k"] = self._v75k_select
@@ -1397,6 +1481,22 @@ class StrategyAdapter:
                                        merged_params, sold_recently=sold_recently)
         return candidates
 
+    def _v61d_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v61d 选股: v61c逻辑+含科创板"""
+        from scripts.strategies.v61d_turnover_size import select_stocks_v61d, calc_factors_v61d
+        if factors is None:
+            factors = calc_factors_v61d(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v61d"])
+        if params:
+            merged_params.update(params)
+        candidates = select_stocks_v61d(factors, date, close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel, current_holdings,
+                                        merged_params, sold_recently=sold_recently)
+        return candidates
+
     def _v74a_select(self, factors, date, close_panel, volume_panel, amount_panel,
                     high_panel, low_panel, open_panel, current_holdings, params,
                     sold_recently=None, return_all=False):
@@ -1544,6 +1644,99 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v75j(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v75n_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75n 选股: v75j逻辑+含科创板"""
+        from scripts.strategies.v75n_no_star_filter import select_stocks_v75n, calc_factors_v75n
+        if factors is None:
+            factors = calc_factors_v75n(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75n"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v75n(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v84a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v84a 选股: 流动性因子限定科技板块+含科创板"""
+        from scripts.strategies.v84a_tech_only import select_stocks_v84a, calc_factors_v84a
+        if factors is None:
+            factors = calc_factors_v84a(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v84a"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v84a(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v75p_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75p 选股: 流动性因子+更严格广度择时"""
+        from scripts.strategies.v75p_breadth_focus import select_stocks_v75p, calc_factors_v75p
+        if factors is None:
+            factors = calc_factors_v75p(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75p"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v75p(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v85a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v85a 选股: 板块动量+流动性双因子"""
+        from scripts.strategies.v85a_sector_momentum import select_stocks_v85a, calc_factors_v85a
+        if factors is None:
+            factors = calc_factors_v85a(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v85a"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v85a(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v85b_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v85b 选股: 广度动态仓位管理"""
+        from scripts.strategies.v85b_dynamic_position import select_stocks_v85b, calc_factors_v85b
+        if factors is None:
+            factors = calc_factors_v85b(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v85b"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v85b(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v75m_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v75m 选股: v75j + 分数增速二次排序"""
+        from scripts.strategies.v75m_score_delta import select_stocks_v75m, calc_factors_v75m
+        if factors is None:
+            factors = calc_factors_v75m(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v75m"])
+        if params:
+            merged_params.update(params)
+        # WF回测模式使用内存缓存
+        if not hasattr(self, '_is_live') or not self._is_live:
+            merged_params['SKIP_DB_WRITE'] = True
+        return select_stocks_v75m(factors, date, close_panel, volume_panel, amount_panel,
                                    high_panel, low_panel, open_panel, current_holdings,
                                    merged_params, sold_recently=sold_recently, return_all=return_all)
 

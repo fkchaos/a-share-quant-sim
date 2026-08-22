@@ -29,7 +29,8 @@ from scripts.backtest.strategy_adapter import get_adapter
 
 
 def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
-           start_date='2021-01-01', end_date='2026-05-31', full=False, pool_override=None):
+           start_date='2021-01-01', end_date='2026-05-31', full=False, pool_override=None,
+           exclude_star=True):
     """
     运行 Walk-Forward 验证，或全量回测。
     交易逻辑使用 core/account.py 的 buy/sell，与模拟盘完全一致。
@@ -103,17 +104,19 @@ def run_wf(strategy_name, train_days=252, test_days=126, step_days=63,
     close_panel, volume_panel, amount_panel = tpl[0], tpl[1], tpl[2]
     open_panel, high_panel, low_panel = tpl[3], tpl[4], tpl[5]
 
-    # 排除科创板(688/689)
-    exclude_prefixes = ('688', '689')
-    cols_to_keep = [c for c in close_panel.columns if not c.startswith(exclude_prefixes)]
-    close_panel = close_panel[cols_to_keep]
-    volume_panel = volume_panel[cols_to_keep]
-    amount_panel = amount_panel[cols_to_keep]
-    open_panel = open_panel[cols_to_keep]
-    high_panel = high_panel[cols_to_keep]
-    low_panel = low_panel[cols_to_keep]
-
-    print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只 (已排除科创板)")
+    # 排除科创板(688/689) —— 默认排除，--no-exclude-star 可放开
+    if exclude_star:
+        exclude_prefixes = ('688', '689')
+        cols_to_keep = [c for c in close_panel.columns if not c.startswith(exclude_prefixes)]
+        close_panel = close_panel[cols_to_keep]
+        volume_panel = volume_panel[cols_to_keep]
+        amount_panel = amount_panel[cols_to_keep]
+        open_panel = open_panel[cols_to_keep]
+        high_panel = high_panel[cols_to_keep]
+        low_panel = low_panel[cols_to_keep]
+        print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只 (已排除科创板)")
+    else:
+        print(f"  Panel: {close_panel.shape[0]} 天 × {close_panel.shape[1]} 只 (含科创板)")
     print(f"  耗时 {time.time()-t0:.1f}s")
 
     # ── 加载ETF面板（v46 行业轮动需要）──
@@ -746,9 +749,11 @@ def main():
     parser.add_argument("--end", default="2026-05-31", help="回测结束日期")
     parser.add_argument("--full", action="store_true", help="全量回测模式（不做 WF 切分，跑全部数据）")
     parser.add_argument("--pool", default=None, help="覆盖策略股票池 (zz800/zz1800/full_a)")
+    parser.add_argument("--no-exclude-star", action="store_true", help="不排除科创板(688/689)，默认排除")
     args = parser.parse_args()
 
-    run_wf(args.strategy, args.train, args.test, args.step, args.start, args.end, full=args.full, pool_override=args.pool)
+    run_wf(args.strategy, args.train, args.test, args.step, args.start, args.end,
+           full=args.full, pool_override=args.pool, exclude_star=not args.no_exclude_star)
 
 
 def _get_etf_price(code, date):

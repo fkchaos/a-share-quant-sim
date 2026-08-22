@@ -105,6 +105,7 @@
 12. **⚠️ 迅投因子看板IC数据不能直接复现** — 与我们的IC差10倍以上，原因未明（API加密、计算方法不透明）。外部因子数据仅作方向参考，必须在自己池子重验
 13. **⚠️ miniQMT已停服（2026.7.6）** — 只能用大QMT内置Python 3.6.8，或等券商确认xtquant外部调用是否可用
 14. **⚠️ Python 3.6.8兼容性** — 不能用 `:=` walrus、`dict | dict`、f-string `=`号、`pd.DataFrame.map()`，新代码必须兼容3.6.8
+15. **⚠️ 科创板(688/689)过滤分层** — 数据源层已放开（`get_tradeable_codes`返回全量），WF层默认过滤（`--no-exclude-star`可放开），策略层v75a硬编码过滤（新策略v75n绕过）。回测含科创板时需同时满足：①WF不过滤 ②策略不排除 ③数据已回补
 
 ---
 
@@ -124,10 +125,13 @@ scripts/strategies/ — 策略文件：
   - v61_turnover_size.py      # v61b基础（低换手小票因子）
   - v61b_turnover_size.py     # v61b叠加信号
   - v61c_turnover_size.py     # v61c到期续持优化
+  - v61d_turnover_size.py     # v61d含科创板（搭配--no-exclude-star）
   - v68.py                    # v68（v67优化版，情绪择时）
   - v39g_optimized.py         # v39g基准策略
   - v39c_pv_resonance.py      # v39c-g/i共用因子
   - v58a_breakout.py          # 突破策略
+  - v75j_liquidity_only.py    # v75j流动性单因子（账户2策略）
+  - v75n_no_star_filter.py    # v75n含科创板（搭配--no-exclude-star）
   - ...（更多见 scripts/strategies/）
 scripts/backtest/   — WF框架：
   - wf_runner.py              # Walk-Forward运行器 + --full全量回测

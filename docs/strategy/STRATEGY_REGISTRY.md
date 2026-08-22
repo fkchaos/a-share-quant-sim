@@ -45,6 +45,72 @@
 
 ---
 
+### v61c — 低换手小票+到期续持（⭐ 当前运行，账户1）
+
+| 维度 | 值 |
+|------|-----|
+| **选股池** | 中证1800（默认排除科创板，可通过 --no-exclude-star 放开） |
+| **核心因子** | 低换手率 + 小市值（等权评分） |
+| **止损/止盈** | -8% / +25% |
+| **持有期** | max 5天，到期在Top15内则续持 |
+| **调仓频率** | 每5天 |
+| **最大持仓** | 5只 |
+
+**策略文件：** `scripts/strategies/v61c_turnover_size.py`
+
+---
+
+### v75j — 流动性单因子+广度过滤（⭐ 当前运行，账户2）
+
+| 维度 | 值 |
+|------|-----|
+| **选股池** | 中证1800（默认排除科创板，可通过 --no-exclude-star 放开） |
+| **核心因子** | 流动性（IC=-0.054，通过）+ 广度过滤（择时层） |
+| **已排除因子** | 突破(IC=-0.014)、放量(IC=-0.011) |
+| **止损/止盈** | -8% / +25% |
+| **持有期** | max 20天 |
+| **调仓频率** | 每10天 |
+| **最大持仓** | 3只 |
+| **WF Sharpe** | 2.043 |
+
+**策略文件：** `scripts/strategies/v75j_liquidity_only.py`
+
+---
+
+### v61d — v61c + 含科创板/北交所（🧪 实验）
+
+| 维度 | 值 |
+|------|-----|
+| **选股池** | 中证1800（含科创板，搭配 --no-exclude-star 运行） |
+| **因子/逻辑** | 与v61c完全一致 |
+| **用途** | 验证放开科创板对低换手小票策略的影响 |
+
+**运行方式：**
+```bash
+python scripts/backtest/wf_runner.py --strategy v61d --train 252 --test 126 --step 63 --no-exclude-star
+```
+
+**策略文件：** `scripts/strategies/v61d_turnover_size.py`
+
+---
+
+### v75n — v75j + 含科创板/北交所（🧪 实验）
+
+| 维度 | 值 |
+|------|-----|
+| **选股池** | 中证1800（含科创板，搭配 --no-exclude-star 运行） |
+| **因子/逻辑** | 与v75j一致（流动性因子+广度过滤），但选股函数不排除688/689 |
+| **用途** | 验证放开科创板对科技趋势策略的影响 |
+
+**运行方式：**
+```bash
+python scripts/backtest/wf_runner.py --strategy v75n --train 252 --test 126 --step 63 --no-exclude-star
+```
+
+**策略文件：** `scripts/strategies/v75n_no_star_filter.py`
+
+---
+
 ### v39i — 动态 MOM_THRESHOLD（⚠️ 历史策略）
 
 | 维度 | 值 |
@@ -240,22 +306,32 @@
 ```bash
 python scripts/backtest/wf_runner.py --strategy <name> [options]
 
---strategy   策略名 (必填)
---train      训练期天数 (默认: 252)
---test       测试期天数 (默认: 252)
---step       滑动步长 (默认: 252)
---start      回测起始日期
---end        回测结束日期
---full       全量回测模式（不做 WF 切分）
---pool       覆盖策略股票池 (zz800/zz1800/full_a)
+--strategy       策略名 (必填)
+--train          训练期天数 (默认: 252)
+--test           测试期天数 (默认: 252)
+--step           滑动步长 (默认: 252)
+--start          回测起始日期
+--end            回测结束日期
+--full           全量回测模式（不做 WF 切分）
+--pool           覆盖策略股票池 (zz800/zz1800/full_a)
+--no-exclude-star  不排除科创板(688/689)，默认排除
+```
+
+**`--no-exclude-star` 用法**：
+```bash
+# 默认行为：排除科创板
+python wf_runner.py --strategy v75j --train 252 --test 126 --step 63
+
+# 含科创板回测
+python wf_runner.py --strategy v75n --train 252 --test 126 --step 63 --no-exclude-star
 ```
 
 **`--pool` 用法**：
 ```bash
-# 用 zz800（708只排除科创板）跑 v39g
+# 用 zz800 跑 v39g
 python wf_runner.py --strategy v39g --full --pool zz800
 
-# 用 zz1800（1586只排除科创板）跑 v39g
+# 用 zz1800 跑 v39g
 python wf_runner.py --strategy v39g --full --pool zz1800
 
 # 不传 --pool，使用 strategy_map 中配置的 pool（v39g/v39i 默认 zz1800）

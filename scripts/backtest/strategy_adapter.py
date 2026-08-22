@@ -799,6 +799,32 @@ class StrategyAdapter:
         }
         self._regime_params["v85b"] = {}
 
+        # ── v86a: 5日EMA因子 + 广度过滤（Factor Factory第二批） ──
+        self._select_fns["v86a"] = self._v86a_select
+        self._risk_params["v86a"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 0.0,
+            "W_EMA": 1.0, "EMA_WINDOW": 5,
+        }
+        self._regime_params["v86a"] = {}
+
+        # ── v86b: 资金流量因子 + 广度过滤（Factor Factory第二批） ──
+        self._select_fns["v86b"] = self._v86b_select
+        self._risk_params["v86b"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 20, "MAX_DAILY_BUY": 3,
+            "MAX_POSITION": 0.35, "MAX_HOLDINGS": 3,
+            "REBALANCE_DAYS": 10, "MAX_STOCK_PRICE": 300,
+            "BREADTH_MA": 20, "BREADTH_HIGH": 0.50, "BREADTH_LOW": 0.30,
+            "W_BREAKOUT": 0.0, "W_VOL_SURGE": 0.0, "W_LIQUIDITY": 0.0,
+            "W_MONEY_FLOW": 1.0, "MONEY_FLOW_WINDOW": 20,
+        }
+        self._regime_params["v86b"] = {}
+
         # ── v75k: v75j + 纳斯达克隔夜择时 ──
         self._select_fns["v75k"] = self._v75k_select
         self._risk_params["v75k"] = {
@@ -1644,6 +1670,36 @@ class StrategyAdapter:
         if params:
             merged_params.update(params)
         return select_stocks_v75j(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v86a_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None, return_all=False):
+        """v86a 选股: 5日EMA因子 + 广度过滤（Factor Factory第二批）"""
+        from scripts.strategies.v86a_ema5 import select_stocks_v86a, calc_factors_v86a
+        if factors is None:
+            factors = calc_factors_v86a(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v86a"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v86a(factors, date, close_panel, volume_panel, amount_panel,
+                                   high_panel, low_panel, open_panel, current_holdings,
+                                   merged_params, sold_recently=sold_recently, return_all=return_all)
+
+    def _v86b_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                     high_panel, low_panel, open_panel, current_holdings, params,
+                     sold_recently=None, return_all=False):
+        """v86b 选股: 资金流量因子 + 广度过滤（Factor Factory第二批）"""
+        from scripts.strategies.v86b_money_flow import select_stocks_v86b, calc_factors_v86b
+        if factors is None:
+            factors = calc_factors_v86b(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        merged_params = dict(self._risk_params["v86b"])
+        if params:
+            merged_params.update(params)
+        return select_stocks_v86b(factors, date, close_panel, volume_panel, amount_panel,
                                    high_panel, low_panel, open_panel, current_holdings,
                                    merged_params, sold_recently=sold_recently, return_all=return_all)
 

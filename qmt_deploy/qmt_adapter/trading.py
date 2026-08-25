@@ -30,7 +30,9 @@ def _find_account_from_frames():
     frame = sys._getframe(1)
     while frame is not None:
         if 'account' in frame.f_globals:
-            return frame.f_globals['account']
+            val = frame.f_globals['account']
+            if val and val != 'test':
+                return val
         frame = frame.f_back
     return None
 
@@ -39,16 +41,22 @@ class QmtAccount(object):
     """QMT account operations wrapper."""
 
     def __init__(self, C):
-        # Get account_id by walking up call stack to find QMT's global 'account'
+        # 1. Try QMT global 'account' variable (from model trading config)
         account = _find_account_from_frames()
 
-        if account:
-            self.account_id = account
-        elif hasattr(C, 'account_id'):
-            self.account_id = C.account_id
-        else:
-            raise ValueError("Cannot find account ID. Set 'account' in QMT strategy config.")
+        # 2. Fallback to config
+        if not account:
+            try:
+                from .config import ACCOUNT_CONFIG
+                account = ACCOUNT_CONFIG.get('account_id', '')
+            except Exception:
+                pass
 
+        # 3. Last resort
+        if not account:
+            account = 'SIMTEST'
+
+        self.account_id = account
         self.C = C
 
     def _query(self, query_type):

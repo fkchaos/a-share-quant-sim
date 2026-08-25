@@ -106,6 +106,8 @@
 13. **⚠️ miniQMT已停服（2026.7.6）** — 只能用大QMT内置Python 3.6.8，或等券商确认xtquant外部调用是否可用
 14. **⚠️ Python 3.6.8兼容性** — 不能用 `:=` walrus、`dict | dict`、f-string `=`号、`pd.DataFrame.map()`，新代码必须兼容3.6.8
 15. **⚠️ 科创板(688/689)过滤分层** — 数据源层已放开（`get_tradeable_codes`返回全量），WF层默认过滤（`--no-exclude-star`可放开），策略层v75a硬编码过滤（新策略v75n绕过）。回测含科创板时需同时满足：①WF不过滤 ②策略不排除 ③数据已回补
+16. **⚠️ QMT adapter重写不能简化策略逻辑** — 重写qmt_adapter时必须完整移植原有选股逻辑（v61c低换手+小市值、v75j科技趋势+流动性+广度过滤），不能只用市值/流动性排序简化版。参考原始策略：`scripts/strategies/v61_turnover_size.py`和`v75j_liquidity_only.py`
+17. **⚠️ QMT回测看不到交易记录** — passorder调用成功但回测界面无记录，可能是回测初始资金/账户配置问题，需在QMT界面确认。详见`docs/qmt/QMT_ADAPTER_TODO.md`
 
 ---
 

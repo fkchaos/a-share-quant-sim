@@ -99,14 +99,21 @@ def get_close_price(C, code):
 def get_close_prices_batch(C, stock_list):
     """Get close prices for multiple stocks."""
     try:
+        print('[DATA] get_market_data_ex: fields=["close"], stocks={}, count={}'.format(
+            len(stock_list), 1))
         data = C.get_market_data_ex(
             ['close'], stock_list, period='1d', count=1,
             subscribe=False
         )
+        print('[DATA] got data for {} / {} stocks'.format(len(data), len(stock_list)))
         result = {}
         for code in stock_list:
             if code in data and len(data[code]) > 0:
                 result[code] = data[code]['close'].iloc[-1]
+        print('[DATA] prices extracted: {}'.format(len(result)))
         return result
-    except Exception:
+    except Exception as e:
+        print('[DATA] get_close_prices_batch ERROR: {}'.format(e))
+        import traceback
+        traceback.print_exc()
         return {}

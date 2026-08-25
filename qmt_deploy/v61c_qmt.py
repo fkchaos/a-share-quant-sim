@@ -42,6 +42,12 @@ def init(C):
     from qmt_adapter.qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
     print('[INIT] stocks=%d, float_shares=%d' % (len(ZZ1800_STOCKS), len(FLOAT_SHARES)))
     
+    # 注入QMT内置函数到trading模块
+    import qmt_adapter.trading as _trading
+    _trading.get_trade_detail_data = get_trade_detail_data
+    _trading.passorder = passorder
+    _trading.get_last_order_id = get_last_order_id
+    
     g.initialized = True
     print('[INIT] done')
 

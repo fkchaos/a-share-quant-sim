@@ -43,7 +43,7 @@ def init(C):
 
 def handlebar(C):
     """Main with debug output."""
-    global _last_trade_date, _today_buys
+    global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list, _rebalance_days
 
     # Refresh state in case module was reloaded
     if _account is None:

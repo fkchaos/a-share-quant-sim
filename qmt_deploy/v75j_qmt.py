@@ -75,7 +75,7 @@ def init(C):
     print('[INIT] tech stocks=%d' % len(tech_codes))
     
     g.initialized = True
-    print('[INIT] done')
+    print('[INIT] done, will run on each bar')
 
 
 def handlebar(C):
@@ -85,9 +85,6 @@ def handlebar(C):
     
     bar_date = timetag_to_datetime(C.get_bar_timetag(C.barpos), '%Y%m%d%H%M%S')
     today = bar_date[:8]
-    
-    if not C.is_last_bar():
-        return
     
     g.day_count += 1
     

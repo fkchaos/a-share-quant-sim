@@ -56,9 +56,6 @@ def handlebar(C):
     today = bar_date[:8]  # YYYYMMDD
     
     # 回测模式：只在最后一根执行
-    if not C.is_last_bar():
-        return
-    
     g.day_count += 1
     
     # 交易时间检查（实盘用）

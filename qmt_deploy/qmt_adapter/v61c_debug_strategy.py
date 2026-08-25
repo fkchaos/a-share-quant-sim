@@ -115,31 +115,41 @@ def _select_stocks(C):
         if code in FLOAT_SHARES:
             candidates.append(code)
 
+    print('[SELECT] candidates with float_shares: {}'.format(len(candidates)))
+    if candidates:
+        print('[SELECT] first 5: {}'.format(candidates[:5]))
+
     if not candidates:
+        print('[SELECT] no candidates, returning empty')
         return []
 
     # Get close prices
     prices = get_close_prices_batch(C, candidates)
+    print('[SELECT] got prices for {} stocks'.format(len(prices)))
 
     # Score: lower turnover (proxy: amount/float_shares) + smaller market cap (proxy: price*float_shares)
     scored = []
     for code in candidates:
-        if code not in prices or prices[code] <= 0:
+        if code not in prices:
+            continue
+        if prices[code] <= 0:
             continue
         fs = FLOAT_SHARES.get(code, 0)
         if fs <= 0:
             continue
         price = prices[code]
-        # Small cap score (lower is better, rank later)
         mcap = price * fs
-        # Use price as proxy for simplicity
         scored.append((code, mcap))
 
+    print('[SELECT] scored: {}'.format(len(scored)))
+
     if not scored:
+        print('[SELECT] no scored stocks, returning empty')
         return []
 
     # Rank by market cap (ascending = smaller cap first)
     scored.sort(key=lambda x: x[1])
     ranked = [code for code, _ in scored]
 
+    print('[SELECT] ranked top 5: {}'.format(ranked[:5]))
     return ranked

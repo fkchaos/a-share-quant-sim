@@ -69,22 +69,28 @@ def execute_buy(C, account, target_weight):
     from .config import MARKET_CONFIG
 
     available = account.get_cash()
+    print('[EXEC] available cash: {}'.format(available))
     if available < 10000:
+        print('[EXEC] cash too low, skip')
         return
 
     total_value = account.get_total_value()
+    print('[EXEC] total value: {}'.format(total_value))
     if total_value <= 0:
         return
 
     for code, weight in target_weight.items():
         buy_amount = total_value * weight
         buy_amount = min(buy_amount, available * 0.95)
+        print('[EXEC] {} weight={} buy_amount={:.0f}'.format(code, weight, buy_amount))
 
         if buy_amount < 5000:
+            print('[EXEC] {} amount too low, skip'.format(code))
             continue
 
         from .data import get_close_price
         price = get_close_price(C, code)
+        print('[EXEC] {} price={}'.format(code, price))
         if price <= 0:
             continue
 

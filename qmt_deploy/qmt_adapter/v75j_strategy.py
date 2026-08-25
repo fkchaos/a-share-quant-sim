@@ -20,7 +20,7 @@ def init(C):
     
     # v75j: tech board + ZZ1800
     C.stock_pool = ZZ1800_STOCKS
-    C.stock_list = list(C.stock_pool.keys())
+    C.stock_list = list(C.stock_pool)
     C.account = QmtAccount(C)
     
     C.hold_days = {}

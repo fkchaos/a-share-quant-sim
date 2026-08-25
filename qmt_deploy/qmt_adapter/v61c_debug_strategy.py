@@ -45,6 +45,18 @@ def handlebar(C):
     """Main with debug output."""
     global _last_trade_date, _today_buys
 
+    # Refresh state in case module was reloaded
+    if _account is None:
+        from .qmt_data import ZZ1800_STOCKS
+        from .trading import QmtAccount
+        from .config import RISK_CONFIG, REBALANCE_CONFIG
+        from . import qmt_runner
+        qmt_runner.qmt_init(C)
+        _stock_pool = ZZ1800_STOCKS
+        _stock_list = _stock_pool
+        _account = QmtAccount(C)
+        _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
+
     today = datetime.now().strftime('%Y-%m-%d')
     if _last_trade_date == today:
         return

@@ -9,13 +9,6 @@ import pandas as pd
 
 def init(C):
     """Init with debug output."""
-    # Force reload all qmt_adapter modules to clear stale .pyc cache
-    import importlib
-    import sys
-    for mod_name in list(sys.modules.keys()):
-        if mod_name.startswith('qmt_adapter.'):
-            del sys.modules[mod_name]
-
     from .qmt_data import ZZ1800_STOCKS
     from .trading import QmtAccount
     from .config import RISK_CONFIG, REBALANCE_CONFIG

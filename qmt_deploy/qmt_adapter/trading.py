@@ -1,4 +1,17 @@
 #coding:gbk
+import sys
+
+
+def _get_qmt_func(name):
+    """从调用者全局空间获取QMT内置函数"""
+    frame = sys._getframe(2)
+    while frame:
+        if name in frame.f_globals:
+            return frame.f_globals[name]
+        frame = frame.f_back
+    return None
+
+
 """
 qmt_adapter/trading.py — QMT交易适配层
 ========================================
@@ -64,9 +77,10 @@ class QmtAccount(object):
         list
             QMT返回的对象列表
         """
-        return get_trade_detail_data(
-            self.account_id, self.account_type, query_type
-        )
+        func = _get_qmt_func('get_trade_detail_data')
+        if func is None:
+            raise RuntimeError('get_trade_detail_data not found')
+        return func(self.account_id, self.account_type, query_type)
 
     def get_cash(self):
         """获取可用资金。

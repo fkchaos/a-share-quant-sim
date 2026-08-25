@@ -48,57 +48,60 @@ def init(C):
 def handlebar(C):
     """Main with debug output."""
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list, _rebalance_days
+    try:
+        # Refresh state in case module was reloaded
+        if _account is None:
+            from .qmt_data import ZZ1800_STOCKS
+            from .trading import QmtAccount
+            from .config import RISK_CONFIG, REBALANCE_CONFIG
+            from . import qmt_runner
+            qmt_runner.qmt_init(C)
+            _stock_pool = ZZ1800_STOCKS
+            _stock_list = _stock_pool
+            _account = QmtAccount(C)
+            _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
 
-    # Refresh state in case module was reloaded
-    if _account is None:
-        from .qmt_data import ZZ1800_STOCKS
-        from .trading import QmtAccount
-        from .config import RISK_CONFIG, REBALANCE_CONFIG
+        print('[DEBUG] handlebar start, account={}'.format(_account.account_id if _account else 'None'))
+
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        # Update hold days
+        for code in list(_hold_days.keys()):
+            _hold_days[code] = _hold_days.get(code, 0) + 1
+
         from . import qmt_runner
-        qmt_runner.qmt_init(C)
-        _stock_pool = ZZ1800_STOCKS
-        _stock_list = _stock_pool
-        _account = QmtAccount(C)
-        _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
 
-    # Use bar datetime instead of datetime.now() for backtest compatibility
-    today = C.timedict.get('RebarTime', '').strftime('%Y-%m-%d') if hasattr(C, 'timedict') and hasattr(C.timedict, 'get') else datetime.now().strftime('%Y-%m-%d')
+        # Risk check
+        qmt_runner.check_risk(C, _account, _hold_days)
 
-    print('[{}] Processing...'.format(today))
+        # Check rebalance
+        is_rebal = qmt_runner.is_rebalance_day(C, _rebalance_days)
 
-    # Update hold days
-    for code in list(_hold_days.keys()):
-        _hold_days[code] = _hold_days.get(code, 0) + 1
+        if not is_rebal:
+            print('[{}] Not rebalance day, skip'.format(today))
+            return
 
-    from . import qmt_runner
+        # Stock selection
+        selected = _select_stocks(C)
 
-    # Risk check
-    qmt_runner.check_risk(C, _account, _hold_days)
+        if not selected:
+            print('[{}] No stocks selected'.format(today))
+            return
 
-    # Check rebalance
-    is_rebal = qmt_runner.is_rebalance_day(C, _rebalance_days)
+        print('[{}] Selected: {}'.format(today, selected[:5]))
 
-    if not is_rebal:
-        print('[{}] Not rebalance day, skip'.format(today))
-        return
+        # Target weight
+        max_pos = 0.25
+        max_holdings = 5
+        target = {}
+        for code in selected[:max_holdings]:
+            target[code] = max_pos / len(selected[:max_holdings])
 
-    # Stock selection
-    selected = _select_stocks(C)
-
-    if not selected:
-        print('[{}] No stocks selected'.format(today))
-        return
-
-    print('[{}] Selected: {}'.format(today, selected[:5]))
-
-    # Target weight
-    max_pos = 0.25
-    max_holdings = 5
-    target = {}
-    for code in selected[:max_holdings]:
-        target[code] = max_pos / len(selected[:max_holdings])
-
-    qmt_runner.execute_buy(C, _account, target)
+        qmt_runner.execute_buy(C, _account, target)
+    except Exception as e:
+        print('[ERROR] handlebar exception: {}'.format(e))
+        import traceback
+        traceback.print_exc()
 
 
 def _select_stocks(C):

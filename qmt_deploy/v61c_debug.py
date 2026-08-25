@@ -122,7 +122,7 @@ def handlebar(C):
         ['open', 'high', 'low', 'close', 'volume', 'amount'],
         stock_list,
         period='1d',
-        count=30,
+        count=MARKET_CONFIG['count'],
         subscribe=True,
     )
     print('[SELECT] got data for %d/%d stocks' % (len(data), len(stock_list)))

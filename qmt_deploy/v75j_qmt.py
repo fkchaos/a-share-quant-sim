@@ -12,6 +12,7 @@ import pandas as pd
 from datetime import datetime
 
 from qmt_adapter.trading import QmtAccount
+from qmt_adapter.config import MARKET_CONFIG
 from qmt_adapter.qmt_data import FLOAT_SHARES, INDUSTRY_MAP
 
 # ¿Æ¼¼°å¿é
@@ -144,7 +145,7 @@ def handlebar(C):
         ['open', 'high', 'low', 'close', 'volume', 'amount'],
         tech_codes[:100],
         period='1d',
-        count=30,
+        count=MARKET_CONFIG['count'],
         subscribe=True,
     )
     

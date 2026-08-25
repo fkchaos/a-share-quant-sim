@@ -71,8 +71,8 @@ def load_kline(C, stock_list, days=120):
     for code in stock_list:
         try:
             klines = C.get_market_data_ex(
-                [code], period=period, count=count,
-                dividend_type=dividend_type
+                ['open', 'high', 'low', 'close', 'volume', 'amount'], [code], period=period, count=count,
+                subscribe=False
             )
             if code in klines and len(klines[code]) > 0:
                 result[code] = qmt_to_our_format(klines[code], period)
@@ -86,8 +86,8 @@ def get_close_price(C, code):
     """Get latest close price for a stock."""
     try:
         data = C.get_market_data_ex(
-            [code], period='1d', count=1,
-            dividend_type='front'
+            ['close'], [code], period='1d', count=1,
+            subscribe=False
         )
         if code in data and len(data[code]) > 0:
             return data[code]['close'].iloc[-1]
@@ -100,8 +100,8 @@ def get_close_prices_batch(C, stock_list):
     """Get close prices for multiple stocks."""
     try:
         data = C.get_market_data_ex(
-            stock_list, period='1d', count=1,
-            dividend_type='front'
+            ['close'], stock_list, period='1d', count=1,
+            subscribe=False
         )
         result = {}
         for code in stock_list:

@@ -116,6 +116,7 @@ def handlebar(C):
     
     # 获取股票池行情
     stock_list = ZZ1800_STOCKS[:200]  # 先取前200只测试
+    print('[SELECT] stock_list=%d, rebalance_days=%d' % (len(stock_list), days_since_rebalance))
     data = C.get_market_data_ex(
         ['open', 'high', 'low', 'close', 'volume', 'amount'],
         stock_list,
@@ -123,9 +124,20 @@ def handlebar(C):
         count=30,
         subscribe=False,
     )
+    print('[SELECT] got data for %d stocks' % len(data))
     
     # 计算因子并选股
     candidates = []
+    for code in stock_list[:5]:  # 只看前5只
+        print('[DEBUG] checking %s...' % code, end='')
+        if code in g.holdings:
+            print('held')
+            continue
+        if code not in data:
+            print('no data')
+            continue
+        print('len=%d' % len(data[code]))
+    
     for code in stock_list:
         if code in g.holdings:
             continue

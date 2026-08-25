@@ -1,7 +1,7 @@
 #coding:gbk
 """
-v61c_qmt.py - v61c QMT实盘版
-换手率+小市值，ZZ1800股票池，静态数据。
+v75j_qmt.py - v75j QMT实盘版
+流动性单因子 + 广度过滤，科技板块专用。
 
 Python 3.6.8兼容。
 """
@@ -12,53 +12,82 @@ import pandas as pd
 from datetime import datetime
 
 from qmt_adapter.trading import QmtAccount
-from qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
+from qmt_adapter.qmt_data import FLOAT_SHARES, INDUSTRY_MAP
 
-# 全局状态（QMT要求）
+# 科技板块
+TECH_SECTORS = ['电子', '计算机', '通信', '传媒']
+
+# 全局状态
 class G():
     pass
 g = G()
 g.initialized = False
-g.holdings = {}  # {code: {'shares': n, 'cost': p, 'entry_day': d}}
+g.holdings = {}
 g.day_count = 0
 g.last_rebalance_day = -999
 
 # 策略参数
 STOP_LOSS = -0.08
 TAKE_PROFIT = 0.25
-HOLD_DAYS_MAX = 5
-SELL_OUT_OF = 15
-MAX_HOLDINGS = 5
-REBALANCE_DAYS = 5
+HOLD_DAYS_MAX = 20
+MAX_DAILY_BUY = 3
+MAX_POSITION = 0.35
+MAX_HOLDINGS = 3
+REBALANCE_DAYS = 10
+BREADTH_MA = 20
+BREADTH_HIGH = 0.50
+BREADTH_LOW = 0.30
 ACCOUNT_ID = 'testS'
 ACCOUNT_TYPE = 'stock'
 
 
+def _get_tech_codes():
+    """获取科技板块股票"""
+    codes = []
+    for code, industry in INDUSTRY_MAP.items():
+        if industry in TECH_SECTORS:
+            codes.append(code)
+    return codes
+
+
+def _calc_breadth(close_panel, tech_codes):
+    """计算广度：科技股收盘价>MA20比例"""
+    above = 0
+    total = 0
+    for code in tech_codes:
+        if code not in close_panel:
+            continue
+        close = close_panel[code]
+        if len(close) < BREADTH_MA:
+            continue
+        ma = np.nanmean(close[-BREADTH_MA:])
+        if close[-1] > ma:
+            above += 1
+        total += 1
+    return above / total if total > 0 else 1.0
+
+
 def init(C):
     """QMT初始化"""
-    print('[INIT] v61c QMT starting...')
+    print('[INIT] v75j QMT starting...')
     
-    # 测试数据加载
-    from qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
-    print('[INIT] stocks=%d, float_shares=%d' % (len(ZZ1800_STOCKS), len(FLOAT_SHARES)))
+    tech_codes = _get_tech_codes()
+    print('[INIT] tech stocks=%d' % len(tech_codes))
     
     g.initialized = True
-    print('[INIT] done')
+    print('[INIT] done, will run on each bar')
 
 
 def handlebar(C):
-    """QMT主循环 - 每根K线调用"""
+    """QMT主循环"""
     if not g.initialized:
         return
     
-    # 获取当前日期
     bar_date = timetag_to_datetime(C.get_bar_timetag(C.barpos), '%Y%m%d%H%M%S')
-    today = bar_date[:8]  # YYYYMMDD
+    today = bar_date[:8]
     
-    # 回测模式：只在最后一根执行
     g.day_count += 1
     
-    # 交易时间检查（实盘用）
     now = datetime.now()
     now_time = now.strftime('%H%M%S')
     if now_time < '093000' or now_time > '150000':
@@ -66,11 +95,10 @@ def handlebar(C):
     
     print('[%s] day=%d holdings=%d' % (today, g.day_count, len(g.holdings)))
     
-    # 获取账户信息
     acct = QmtAccount(C, ACCOUNT_ID, ACCOUNT_TYPE)
     cash = acct.get_cash()
     
-    # 风控检查（止损/止盈/到期）
+    # 风控检查
     sell_codes = []
     for code, info in list(g.holdings.items()):
         data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
@@ -91,7 +119,6 @@ def handlebar(C):
         elif hold_days >= HOLD_DAYS_MAX:
             sell_codes.append((code, 'HOLD_DAYS'))
     
-    # 执行卖出
     for code, reason in sell_codes:
         if code in g.holdings:
             shares = g.holdings[code]['shares']
@@ -99,7 +126,7 @@ def handlebar(C):
             print('[SELL] %s %s %s' % (code, reason, bar_date))
             del g.holdings[code]
     
-    # 选股（调仓日执行）
+    # 调仓日
     days_since_rebalance = g.day_count - g.last_rebalance_day
     if days_since_rebalance < REBALANCE_DAYS:
         return
@@ -107,50 +134,62 @@ def handlebar(C):
     if len(g.holdings) >= MAX_HOLDINGS:
         return
     
-    # 获取股票池行情
-    stock_list = ZZ1800_STOCKS[:200]  # 先取前200只测试
+    # 获取科技板块股票
+    tech_codes = _get_tech_codes()
+    if not tech_codes:
+        return
+    
+    # 获取行情
     data = C.get_market_data_ex(
         ['open', 'high', 'low', 'close', 'volume', 'amount'],
-        stock_list,
+        tech_codes[:100],
         period='1d',
         count=30,
         subscribe=False,
     )
     
-    # 计算因子并选股
+    # 计算广度
+    close_panel = {}
+    for code in tech_codes[:100]:
+        if code in data and len(data[code]) > 0:
+            close_panel[code] = data[code]['close'].values
+    
+    breadth = _calc_breadth(close_panel, tech_codes[:100])
+    print('[BREADTH] %.2f' % breadth)
+    
+    # 广度过滤
+    if breadth < BREADTH_LOW:
+        print('[SKIP] breadth too low')
+        return
+    
+    # 线性减仓
+    actual_holdings = MAX_HOLDINGS
+    if breadth < BREADTH_HIGH:
+        actual_holdings = max(1, int(MAX_HOLDINGS * breadth / BREADTH_HIGH))
+    
+    # 选股：流动性因子
     candidates = []
-    for code in stock_list:
+    for code in tech_codes[:100]:
         if code in g.holdings:
             continue
         if code not in data or len(data[code]) < 20:
             continue
         
         df = data[code]
-        close = df['close'].values
-        volume = df['volume'].values
         amount = df['amount'].values
         
-        # 流通股本
-        float_sh = FLOAT_SHARES.get(code, 0)
-        if float_sh <= 0:
+        # 流动性：20日均成交额（负向，越低流动性越差=溢价）
+        avg_amount = np.nanmean(amount[-20:])
+        if avg_amount <= 0:
             continue
         
-        # 换手率（负向）
-        turnover = volume * 100.0 / float_sh
-        avg_turnover = np.nanmean(turnover[-5:])
-        
-        # 市值（负向）
-        market_cap = close[-1] * float_sh
-        
-        # 综合评分（低换手+小市值=高分）
-        score = -avg_turnover * 0.5 - market_cap * 0.5e-12
+        score = -avg_amount
         candidates.append((code, score))
     
-    # 按评分排序
     candidates.sort(key=lambda x: x[1], reverse=True)
     
     # 买入
-    buy_count = min(MAX_HOLDINGS - len(g.holdings), len(candidates))
+    buy_count = min(actual_holdings - len(g.holdings), len(candidates))
     for i in range(buy_count):
         code, score = candidates[i]
         data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
@@ -158,7 +197,6 @@ def handlebar(C):
             continue
         price = data[code]['close'].values[-1]
         
-        # 计算买入数量
         available = cash * 0.95 / (buy_count - i)
         shares = int(available / price / 100) * 100
         if shares <= 0:

@@ -12,7 +12,7 @@ import pandas as pd
 from datetime import datetime
 
 from qmt_adapter.trading import QmtAccount
-from qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
+from qmt_adapter.qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
 
 # 全局状态（QMT要求）
 class G():
@@ -39,7 +39,7 @@ def init(C):
     print('[INIT] v61c QMT starting...')
     
     # 测试数据加载
-    from qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
+    from qmt_adapter.qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
     print('[INIT] stocks=%d, float_shares=%d' % (len(ZZ1800_STOCKS), len(FLOAT_SHARES)))
     
     g.initialized = True
@@ -133,13 +133,11 @@ def handlebar(C):
         # 流通股本
         float_sh = FLOAT_SHARES.get(code, 0)
         if float_sh <= 0:
-            print('[SKIP] %s no float_shares' % code)
             continue
         
         # 换手率（负向）
         turnover = volume * 100.0 / float_sh
         avg_turnover = np.nanmean(turnover[-5:])
-        print('[FACTOR] %s turnover=%.4f' % (code, avg_turnover))
         
         # 市值（负向）
         market_cap = close[-1] * float_sh

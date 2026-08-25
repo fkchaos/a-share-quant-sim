@@ -35,7 +35,7 @@ def check_risk(C, account, holding_days):
     hd = RISK_CONFIG['hold_days_max']
 
     from .trading import QmtAccount
-    positions = account.get_positions()
+    positions = account.get_holdings()
 
     for code, p in positions.items():
         shares = p['shares']
@@ -68,7 +68,7 @@ def execute_buy(C, account, target_weight):
     """Common buy execution."""
     from .config import MARKET_CONFIG
 
-    available = account.get_available_cash()
+    available = account.get_cash()
     if available < 10000:
         return
 

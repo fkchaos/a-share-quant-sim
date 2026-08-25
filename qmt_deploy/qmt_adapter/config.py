@@ -1,18 +1,18 @@
 #coding:gbk
 """
-QMTå…¬å…±é…ç½®
-æ‰€æœ‰ç­–ç•¥æ–‡ä»¶importè¿™ä¸ªæ¨¡å—è·å–ç»Ÿä¸€é…ç½®
+QMT¹«¹²ÅäÖÃ
+ËùÓĞ²ßÂÔÎÄ¼şimportÕâ¸öÄ£¿é»ñÈ¡Í³Ò»ÅäÖÃ
 """
 
-# è¡Œæƒ…æ•°æ®é…ç½®
+# ĞĞÇéÊı¾İÅäÖÃ
 MARKET_CONFIG = {
-    'period': '1d',        # Kçº¿å‘¨æœŸ
-    'count': 30,           # è·å–Kçº¿æ•°é‡
-    'subscribe': True,     # è‡ªåŠ¨ä¸‹è½½æ•°æ®ï¼ˆFalse=åªè¯»æœ¬åœ°ï¼‰
-    'dividend_type': 'front',  # å¤æƒæ–¹å¼ï¼šfront=å‰å¤æƒ
+    'period': '1d',        # KÏßÖÜÆÚ
+    'count': 30,           # »ñÈ¡KÏßÊıÁ¿
+    'subscribe': True,     # ×Ô¶¯ÏÂÔØÊı¾İ£¨False=Ö»¶Á±¾µØ£©
+    'dividend_type': 'front',  # ¸´È¨·½Ê½£ºfront=Ç°¸´È¨
 }
 
-# é»˜è®¤è´¦æˆ·é…ç½®
+# Ä¬ÈÏÕË»§ÅäÖÃ
 ACCOUNT_CONFIG = {
     'account_id': 'testS',
     'account_type': 'stock',

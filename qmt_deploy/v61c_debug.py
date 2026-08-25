@@ -115,8 +115,9 @@ def handlebar(C):
         return
     
     # 获取股票池行情
-    stock_list = ZZ1800_STOCKS[:200]  # 先取前200只测试
-    print('[SELECT] stock_list=%d, rebalance_days=%d' % (len(stock_list), days_since_rebalance))
+    stock_list = ZZ1800_STOCKS[:200]
+    print('[SELECT] stock_list=%d, days_since_rebalance=%d' % (len(stock_list), days_since_rebalance))
+    
     data = C.get_market_data_ex(
         ['open', 'high', 'low', 'close', 'volume', 'amount'],
         stock_list,
@@ -124,70 +125,77 @@ def handlebar(C):
         count=30,
         subscribe=False,
     )
-    print('[SELECT] got data for %d stocks' % len(data))
+    print('[SELECT] got data for %d/%d stocks' % (len(data), len(stock_list)))
+    
+    # 逐只检查数据情况（前10只）
+    for code in stock_list[:10]:
+        if code in data:
+            df = data[code]
+            print('[DEBUG] %s: type=%s, len=%s, cols=%s' % (code, type(df).__name__, len(df) if hasattr(df, '__len__') else 'N/A', list(df.columns) if hasattr(df, 'columns') else 'N/A'))
+        else:
+            print('[DEBUG] %s: NO DATA' % code)
     
     # 计算因子并选股
     candidates = []
-    for code in stock_list[:5]:  # 只看前5只
-        print('[DEBUG] checking %s...' % code, end='')
-        if code in g.holdings:
-            print('held')
-            continue
-        if code not in data:
-            print('no data')
-            continue
-        print('len=%d' % len(data[code]))
+    skipped_no_data = 0
+    skipped_no_float = 0
+    processed = 0
     
     for code in stock_list:
         if code in g.holdings:
             continue
-        if code not in data or len(data[code]) < 20:
+        if code not in data:
+            skipped_no_data += 1
+            continue
+        df = data[code]
+        if len(df) < 20:
+            skipped_no_data += 1
             continue
         
-        df = data[code]
         close = df['close'].values
         volume = df['volume'].values
-        amount = df['amount'].values
         
-        # 流通股本
         float_sh = FLOAT_SHARES.get(code, 0)
         if float_sh <= 0:
-            print('[SKIP] %s no float_shares' % code)
+            skipped_no_float += 1
             continue
         
-        # 换手率（负向）
+        processed += 1
         turnover = volume * 100.0 / float_sh
         avg_turnover = np.nanmean(turnover[-5:])
-        print('[FACTOR] %s turnover=%.4f' % (code, avg_turnover))
-        
-        # 市值（负向）
         market_cap = close[-1] * float_sh
-        
-        # 综合评分（低换手+小市值=高分）
         score = -avg_turnover * 0.5 - market_cap * 0.5e-12
         candidates.append((code, score))
     
-    # 按评分排序
+    print('[SELECT] processed=%d, skipped_no_data=%d, skipped_no_float=%d, candidates=%d' % (processed, skipped_no_data, skipped_no_float, len(candidates)))
+    
     candidates.sort(key=lambda x: x[1], reverse=True)
+    if candidates:
+        print('[SELECT] top5: %s' % [(c, round(s, 6)) for c, s in candidates[:5]])
     
     # 买入
     buy_count = min(MAX_HOLDINGS - len(g.holdings), len(candidates))
+    print('[BUY] buy_count=%d, cash=%.2f, holdings=%d' % (buy_count, cash, len(g.holdings)))
+    
     for i in range(buy_count):
         code, score = candidates[i]
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
-        if code not in data or len(data[code]) == 0:
+        data2 = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
+        if code not in data2 or len(data2[code]) == 0:
+            print('[BUY] %s no price data, skip' % code)
             continue
-        price = data[code]['close'].values[-1]
+        price = data2[code]['close'].values[-1]
         
-        # 计算买入数量
         available = cash * 0.95 / (buy_count - i)
         shares = int(available / price / 100) * 100
+        print('[BUY] %s price=%.2f, available=%.2f, shares=%d' % (code, price, available, shares))
+        
         if shares <= 0:
+            print('[BUY] %s shares=0, skip' % code)
             continue
         
         acct.buy(code, shares, price=price, reason='AUTO')
         g.holdings[code] = {'shares': shares, 'cost': price, 'entry_day': g.day_count}
-        print('[BUY] %s %d @%.2f %s' % (code, shares, price, bar_date))
+        print('[BUY] %s %d @%.2f %s OK' % (code, shares, price, bar_date))
         cash -= shares * price
     
     g.last_rebalance_day = g.day_count

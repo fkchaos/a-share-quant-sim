@@ -59,10 +59,6 @@ def handlebar(C):
         _account = QmtAccount(C)
         _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
 
-    # Skip non-last bars in backtest
-    if not C.is_last_bar():
-        return
-
     today = datetime.now().strftime('%Y-%m-%d')
     if _last_trade_date == today:
         return

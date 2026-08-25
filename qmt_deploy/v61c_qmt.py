@@ -58,11 +58,12 @@ def handlebar(C):
     # 回测模式：只在最后一根执行
     g.day_count += 1
     
-    # 交易时间检查（实盘用）
-    now = datetime.now()
-    now_time = now.strftime('%H%M%S')
-    if now_time < '093000' or now_time > '150000':
-        return
+    # 交易时间检查（仅实盘用，回测跳过）
+    # if not C.is_replay_mode():
+    #     now = datetime.now()
+    #     now_time = now.strftime('%H%M%S')
+    #     if now_time < '093000' or now_time > '150000':
+    #         return
     
     print('[%s] day=%d holdings=%d' % (today, g.day_count, len(g.holdings)))
     

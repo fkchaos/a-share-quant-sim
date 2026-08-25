@@ -34,10 +34,10 @@ def check_risk(C, account, holding_days):
     tp = RISK_CONFIG['take_profit']
     hd = RISK_CONFIG['hold_days_max']
 
-    from .trading import QmtAccount
-    positions = account.get_holdings()
+    positions = account.get_holdings()  # returns list
 
-    for code, p in positions.items():
+    for p in positions:
+        code = p['code']
         shares = p['shares']
         if shares <= 0:
             continue
@@ -99,14 +99,17 @@ def get_market_data(C, stock_list):
 
 def is_rebalance_day(C, rebalance_days):
     """Check if today is a rebalance day."""
-    from .trading import _get_qmt_func
+    from .trading import _get_qmt_func, _find_account_from_frames, _find_account_type_from_frames
     _get_qmt_func()
     from .trading import get_trade_detail_data
-    from xtquant.xttype import StockAccount
 
-    account_id = C.account_id
-    account = StockAccount(account_id, "STOCK")
-    trades = get_trade_detail_data(account, "trade", "", 1)
+    account_id = _find_account_from_frames()
+    account_type = _find_account_type_from_frames()
+
+    if not account_id:
+        return True
+
+    trades = get_trade_detail_data(account_id, account_type, "stockorders")
 
     if not trades:
         return True

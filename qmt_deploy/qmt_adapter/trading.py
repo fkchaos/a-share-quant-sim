@@ -33,15 +33,29 @@ def _find_account_from_frames():
             val = frame.f_globals['account']
             if val and val != 'test':
                 return val
+        if 'accountType' in frame.f_globals:
+            pass  # found it, will use later
         frame = frame.f_back
     return None
+
+
+def _find_account_type_from_frames():
+    """Walk up the call stack to find 'accountType'."""
+    frame = sys._getframe(1)
+    while frame is not None:
+        if 'accountType' in frame.f_globals:
+            return frame.f_globals['accountType']
+        frame = frame.f_back
+    return 'STOCK'
 
 
 class QmtAccount(object):
     """QMT account operations wrapper."""
 
     def __init__(self, C):
-        # 1. Try QMT global 'account' variable (from model trading config)
+        self.C = C
+
+        # 1. Try QMT global 'account' variable
         account = _find_account_from_frames()
 
         # 2. Fallback to config
@@ -56,15 +70,13 @@ class QmtAccount(object):
         if not account:
             account = 'SIMTEST'
 
-        self.account_id = account
-        self.C = C
+        self.account_id = str(account)
+        self.account_type = _find_account_type_from_frames()
 
     def _query(self, query_type):
         """Query trade details."""
         _init_functions()
-        from xtquant.xttype import StockAccount
-        account = StockAccount(self.account_id, "STOCK")
-        return get_trade_detail_data(account, "stock", query_type)
+        return get_trade_detail_data(self.account_id, self.account_type, query_type)
 
     def get_cash(self):
         """Get available cash."""
@@ -74,7 +86,7 @@ class QmtAccount(object):
         return accounts[0].m_dAvailable
 
     def get_holdings(self):
-        """Get current holdings."""
+        """Get current holdings as list of dicts."""
         positions = self._query("stockpositions")
         holdings = []
         for p in positions:
@@ -108,47 +120,35 @@ class QmtAccount(object):
         return accounts[0].m_dStockValue + accounts[0].m_dFundValue
 
     def buy(self, stock_code, shares, price=-1, reason='BUY'):
-        """Buy order."""
+        """Buy order. stock_code must have exchange suffix like '600000.SH'."""
         _init_functions()
-        from xtquant.xttype import StockAccount
-        account = StockAccount(self.account_id, "STOCK")
-        code = stock_code.split('.')[0]
-        exchange = stock_code.split('.')[1] if '.' in stock_code else 'SH'
-        market = 1 if exchange == 'SH' else 0
-
         passorder(
-            23,
-            1101,
-            account,
-            code,
-            11,
-            price,
-            shares,
-            reason,
-            2,
-            reason,
-            self.C
+            23,                  # opType: buy
+            1101,                # orderType
+            self.account_id,     # account ID string
+            stock_code,          # full code with suffix
+            14,                  # prType: latest price
+            -1,                  # price: -1 for latest
+            shares,              # volume
+            reason,              # strategy name
+            1,                   # quickOrder: 1=fast
+            reason,              # userOrderId
+            self.C               # ContextInfo
         )
 
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
         """Sell order."""
         _init_functions()
-        from xtquant.xttype import StockAccount
-        account = StockAccount(self.account_id, "STOCK")
-        code = stock_code.split('.')[0]
-        exchange = stock_code.split('.')[1] if '.' in stock_code else 'SH'
-        market = 1 if exchange == 'SH' else 0
-
         passorder(
-            24,
+            24,                  # opType: sell
             1101,
-            account,
-            code,
-            11,
-            price,
+            self.account_id,
+            stock_code,
+            14,
+            -1,
             shares,
             reason,
-            2,
+            1,
             reason,
             self.C
         )

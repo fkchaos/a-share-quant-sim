@@ -1,112 +1,152 @@
 #coding:gbk
 """
-v75j_strategy.py - v75j策略逻辑
-流动性单因子 + 广度过滤，科技板块专用。
+v75j_strategy.py - V75J Strategy Logic
+
+Tech trend + liquidity factor + breadth filter.
+Only implements stock selection.
 """
-import numpy as np
 import pandas as pd
-
-from qmt_adapter.qmt_runner import (
-    g, qmt_init, check_risk, execute_buy, get_market_data, is_rebalance_time,
-    ZZ1800_STOCKS, FLOAT_SHARES,
-)
-from qmt_adapter.config import ACCOUNT_CONFIG
-
-# 策略参数
-PARAMS = {
-    'STOP_LOSS': -0.08,
-    'TAKE_PROFIT': 0.25,
-    'HOLD_DAYS_MAX': 20,
-    'MAX_HOLDINGS': 3,
-    'REBALANCE_DAYS': 10,
-    'BREADTH_MA': 20,
-    'BREADTH_HIGH': 0.50,
-    'BREADTH_LOW': 0.30,
-}
-
-# 科技板块
-TECH_SECTORS = ['电子', '计算机', '通信', '传媒']
-_tech_codes = None
-
-
-def _load_tech_codes():
-    global _tech_codes
-    if _tech_codes is not None:
-        return _tech_codes
-    from qmt_adapter.qmt_data import INDUSTRY_MAP
-    _tech_codes = [code for code, ind in INDUSTRY_MAP.items() if ind in TECH_SECTORS]
-    return _tech_codes
-
-
-def _calc_breadth(C):
-    """广度：多少科技股收盘价>MA20"""
-    codes = _load_tech_codes()
-    ma_period = PARAMS['BREADTH_MA']
-    
-    above = 0
-    total = 0
-    for c in codes[:100]:  # 取前100只科技股
-        data = C.get_market_data_ex(['close'], [c], period='1d', count=ma_period, subscribe=False)
-        if c not in data or len(data[c]) < ma_period:
-            continue
-        close = data[c]['close'].values
-        total += 1
-        ma = np.nanmean(close)
-        if close[-1] > ma:
-            above += 1
-    
-    return above / total if total > 0 else 1.0
+import numpy as np
 
 
 def init(C):
-    qmt_init(C)
-    print('[INIT] v75j strategy ready, tech stocks=%d' % len(_load_tech_codes()))
+    """Init: load ZZ1800 and tech board."""
+    from .qmt_data import ZZ1800_STOCKS
+    from .trading import QmtAccount
+    from .config import ACCOUNT_CONFIG, RISK_CONFIG, REBALANCE_CONFIG
+    from . import qmt_runner
+    
+    qmt_runner.qmt_init(C)
+    
+    # v75j: tech board + ZZ1800
+    C.stock_pool = ZZ1800_STOCKS
+    C.stock_list = list(C.stock_pool.keys())
+    C.account = QmtAccount(C)
+    
+    C.hold_days = {}
+    C.last_rebalance_date = None
+    C.today_buys = 0
+    C.last_trade_date = None
+    C.rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 10)
 
 
 def handlebar(C):
-    if not g.initialized:
+    """Main: stock selection -> target -> execute."""
+    from datetime import datetime
+    from . import qmt_runner
+    from .config import ACCOUNT_CONFIG, RISK_CONFIG
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    if C.last_trade_date == today:
+        return
+    C.last_trade_date = today
+    
+    # Update hold days
+    for code in list(C.hold_days.keys()):
+        C.hold_days[code] = C.hold_days.get(code, 0) + 1
+    
+    # Risk check
+    qmt_runner.check_risk(C, C.account, C.hold_days)
+    
+    # Check rebalance
+    is_rebal = qmt_runner.is_rebalance_day(C, C.rebalance_days)
+    
+    if not is_rebal:
         return
     
-    bar_date = timetag_to_datetime(C.get_bar_timetag(C.barpos), '%Y%m%d%H%M%S')
-    today = bar_date[:8]
-    g.day_count += 1
-    
-    # 风控检查
-    acct = QmtAccount(C, ACCOUNT_CONFIG['account_id'], ACCOUNT_CONFIG['account_type'])
-    check_risk(C, acct, bar_date, today, PARAMS)
-    
-    # 广度过滤
+    # Breadth filter
     breadth = _calc_breadth(C)
-    if breadth < PARAMS['BREADTH_LOW']:
+    
+    if breadth < 0.30:
         return
     
-    # 调仓判断
-    days_since_rebalance = g.day_count - g.last_rebalance_day
-    if not is_rebalance_time(days_since_rebalance, PARAMS['REBALANCE_DAYS']):
-        return
-    if len(g.holdings) >= PARAMS['MAX_HOLDINGS']:
+    # Stock selection
+    selected = _select_stocks(C)
+    
+    if not selected:
         return
     
-    # 获取科技股行情
-    tech_codes = _load_tech_codes()[:100]
-    data = get_market_data(C, tech_codes)
+    # Target weight
+    max_pos = 0.35
+    max_holdings = 3
+    target = {}
+    for code in selected[:max_holdings]:
+        target[code] = max_pos / len(selected[:max_holdings])
     
-    # 选股：流动性因子
-    candidates = []
-    for code in tech_codes:
-        if code in g.holdings:
+    qmt_runner.execute_buy(C, C.account, target)
+
+
+def _calc_breadth(C):
+    """Calculate market breadth: ratio of stocks above MA20."""
+    from .data import load_kline
+    from .qmt_data import FLOAT_SHARES
+    
+    sample_size = min(50, len(C.stock_list))
+    sample_codes = C.stock_list[:sample_size]
+    all_data = load_kline(C, sample_codes)
+    
+    above_ma = 0
+    total = 0
+    
+    for code, df in all_data.items():
+        if len(df) < 20:
             continue
-        if code not in data or len(data[code]) < 20:
+        total += 1
+        close = df['close']
+        ma20 = close.rolling(20).mean()
+        if close.iloc[-1] > ma20.iloc[-1]:
+            above_ma += 1
+    
+    if total == 0:
+        return 0.5
+    
+    return above_ma / total
+
+
+def _select_stocks(C):
+    """Stock selection: tech trend + liquidity."""
+    from .data import load_kline
+    from .qmt_data import FLOAT_SHARES
+    
+    all_data = load_kline(C, C.stock_list)
+    
+    scores = []
+    for code in C.stock_list:
+        if code not in FLOAT_SHARES or FLOAT_SHARES[code] <= 0:
+            continue
+        if code not in all_data or len(all_data[code]) < 20:
             continue
         
-        amount = data[code]['amount'].values
-        avg_amount = np.nanmean(amount[-20:])
+        df = all_data[code]
         
-        candidates.append((code, avg_amount))
+        # Momentum (20d return)
+        if 'close' in df.columns and len(df) >= 20:
+            mom = (df['close'].iloc[-1] / df['close'].iloc[-20] - 1) * 100
+        else:
+            mom = 0
+        
+        # Liquidity (lower turnover is better)
+        if 'amount' in df.columns:
+            avg_amount = df['amount'].tail(20).mean()
+            float_shares = FLOAT_SHARES[code]
+            avg_turnover = avg_amount / float_shares / 100
+        else:
+            avg_turnover = 999
+        
+        scores.append({
+            'code': code,
+            'momentum': mom,
+            'turnover': avg_turnover,
+        })
     
-    candidates.sort(key=lambda x: x[1], reverse=True)
+    if not scores:
+        return []
     
-    # 买入
-    cash = acct.get_cash()
-    cash = execute_buy(C, acct, candidates, cash, bar_date, PARAMS['MAX_HOLDINGS'])
-    g.last_rebalance_day = g.day_count
+    df = pd.DataFrame(scores)
+    df['mom_rank'] = df['momentum'].rank(ascending=True, pct=True)
+    df['liq_rank'] = df['turnover'].rank(ascending=False, pct=True)
+    df['score'] = 0.45 * df['mom_rank'] + 0.30 * df['liq_rank']
+    
+    df = df.sort_values('score', ascending=False)
+    
+    return df.head(5)['code'].tolist()

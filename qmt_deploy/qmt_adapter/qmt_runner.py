@@ -1,117 +1,118 @@
 #coding:gbk
 """
-qmt_runner.py - QMT通用运行器
-封装QMT环境的初始化、全局状态、风控检查等通用逻辑。
-策略文件只需实现选股逻辑。
+qmt_runner.py - QMT Common Runner
+
+Encapsulates QMT environment init, global state, risk control etc.
+Strategy files only need to implement stock selection logic.
 """
 import sys
-import numpy as np
-import pandas as pd
-from datetime import datetime
 
-from qmt_adapter.trading import QmtAccount
-from qmt_adapter.config import MARKET_CONFIG, ACCOUNT_CONFIG
-from qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
-
-
-# 全局状态
-class G():
-    pass
-g = G()
-g.initialized = False
-g.holdings = {}
-g.day_count = 0
-g.last_rebalance_day = -999
-
+_qmt_initialized = False
 
 def qmt_init(C):
-    """QMT通用初始化"""
-    # 注入QMT内置函数到trading模块
-    import qmt_adapter.trading as _trading
-    _trading.get_trade_detail_data = get_trade_detail_data
-    _trading.passorder = passorder
-    _trading.get_last_order_id = get_last_order_id
+    """Common QMT initialization."""
+    global _qmt_initialized
+    if _qmt_initialized:
+        return
     
-    g.initialized = True
-    print('[INIT] QMT runner ready')
+    from . import trading
+    frame = sys._getframe(1)
+    caller_globals = frame.f_globals
+    
+    for name in ['get_trade_detail_data', 'passorder', 'get_last_order_id']:
+        if name in caller_globals:
+            setattr(trading, name, caller_globals[name])
+    
+    _qmt_initialized = True
 
-
-def check_risk(C, acct, bar_date, today, params):
-    """通用风控检查：止损/止盈/到期"""
-    stop_loss = params.get('STOP_LOSS', -0.08)
-    take_profit = params.get('TAKE_PROFIT', 0.25)
-    hold_days_max = params.get('HOLD_DAYS_MAX', 10)
+def check_risk(C, account, holding_days):
+    """Common risk control: stop loss / take profit / max hold days."""
+    from .config import RISK_CONFIG
+    sl = RISK_CONFIG['stop_loss']
+    tp = RISK_CONFIG['take_profit']
+    hd = RISK_CONFIG['hold_days_max']
     
-    sell_codes = []
-    for code, info in list(g.holdings.items()):
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
-        if code not in data or len(data[code]) == 0:
-            continue
-        current_price = data[code]['close'].values[-1]
-        cost = info.get('cost', 0)
-        if cost <= 0:
-            continue
-        
-        pnl = (current_price - cost) / cost
-        hold_days = g.day_count - info.get('entry_day', g.day_count)
-        
-        if pnl <= stop_loss:
-            sell_codes.append((code, 'STOP_LOSS'))
-        elif pnl >= take_profit:
-            sell_codes.append((code, 'TAKE_PROFIT'))
-        elif hold_days >= hold_days_max:
-            sell_codes.append((code, 'HOLD_DAYS'))
+    from .trading import QmtAccount
+    positions = account.get_positions()
     
-    for code, reason in sell_codes:
-        if code in g.holdings:
-            shares = g.holdings[code]['shares']
-            acct.sell(code, shares, price=-1, reason=reason)
-            print('[SELL] %s %s %s' % (code, reason, bar_date))
-            del g.holdings[code]
-
-
-def execute_buy(C, acct, candidates, cash, bar_date, max_holdings, reason='AUTO'):
-    """通用买入执行"""
-    buy_count = min(max_holdings - len(g.holdings), len(candidates))
-    if buy_count <= 0:
-        return cash
-    
-    print('[BUY] buy_count=%d, cash=%.2f' % (buy_count, cash))
-    
-    for i in range(buy_count):
-        code, score = candidates[i]
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
-        if code not in data or len(data[code]) == 0:
-            print('[BUY] %s no price, skip' % code)
-            continue
-        price = data[code]['close'].values[-1]
-        
-        available = cash * 0.95 / (buy_count - i)
-        shares = int(available / price / 100) * 100
-        print('[BUY] %s price=%.2f, shares=%d' % (code, price, shares))
-        
+    for code, p in positions.items():
+        shares = p['shares']
         if shares <= 0:
             continue
         
-        acct.buy(code, shares, price=price, reason=reason)
-        g.holdings[code] = {'shares': shares, 'cost': price, 'entry_day': g.day_count}
-        print('[BUY] OK: %s %d @%.2f' % (code, shares, price))
-        cash -= shares * price
+        hold_days = holding_days.get(code, 0)
+        cost_price = p.get('avg_cost', 0)
+        
+        from .data import get_close_price
+        cur_price = get_close_price(C, code)
+        if cur_price <= 0 or cost_price <= 0:
+            continue
+        
+        pnl = (cur_price - cost_price) / cost_price
+        
+        if pnl < sl:
+            account.sell_all(code)
+            continue
+        
+        if pnl > tp:
+            account.sell_all(code)
+            continue
+        
+        if hold_days >= hd:
+            account.sell_all(code)
+
+def execute_buy(C, account, target_weight):
+    """Common buy execution."""
+    from .trading import QmtAccount
+    from .config import MARKET_CONFIG
     
-    return cash
+    available = account.get_available_cash()
+    if available < 10000:
+        return
+    
+    total_value = account.get_total_value()
+    if total_value <= 0:
+        return
+    
+    for code, weight in target_weight.items():
+        buy_amount = total_value * weight
+        buy_amount = min(buy_amount, available * 0.95)
+        
+        if buy_amount < 5000:
+            continue
+        
+        from .data import get_close_price
+        price = get_close_price(C, code)
+        if price <= 0:
+            continue
+        
+        account.buy(code, buy_amount, price)
 
+def get_market_data(C, stock_list):
+    """Get market data."""
+    from .data import load_kline
+    return load_kline(C, stock_list)
 
-def get_market_data(C, stock_list, count=None):
-    """获取行情数据"""
-    if count is None:
-        count = MARKET_CONFIG['count']
-    return C.get_market_data_ex(
-        ['open', 'high', 'low', 'close', 'volume', 'amount'],
-        stock_list, period=MARKET_CONFIG['period'],
-        count=count, subscribe=MARKET_CONFIG['subscribe'],
-    )
-
-
-def is_rebalance_time(days_since_rebalance, rebalance_days):
-    """判断是否调仓日"""
-    return days_since_rebalance >= rebalance_days
+def is_rebalance_day(C, rebalance_days):
+    """Check if today is a rebalance day."""
+    from .trading import _get_qmt_func
+    _get_qmt_func()
+    from .trading import get_trade_detail_data
+    from xtquant.xttype import StockAccount
+    
+    account_id = C.account_id
+    account = StockAccount(account_id, "STOCK")
+    trades = get_trade_detail_data(account, "trade", "", 1)
+    
+    if not trades:
+        return True
+    
+    from datetime import datetime
+    last_trade = max(trades, key=lambda t: t.ordertime if hasattr(t, "ordertime") else "")
+    if hasattr(last_trade, "ordertime") and last_trade.ordertime:
+        last_date = last_trade.ordertime.date()
+        today = datetime.now().date()
+        days_diff = (today - last_date).days
+        return days_diff >= rebalance_days
+    
+    return True

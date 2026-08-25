@@ -1,237 +1,166 @@
 #coding:gbk
+"""
+trading.py - QMT Trading Adapter
+
+Wraps passorder + account queries, provides same interface as SimProvider.
+NOTE: Runs in QMT built-in Python 3.6, must be 3.6.8 compatible.
+Encoding declaration must be #coding:gbk (QMT requirement).
+"""
 import sys
 
 
-def _get_qmt_func(name):
-    """从调用者全局空间获取QMT内置函数"""
-    frame = sys._getframe(2)
-    while frame:
-        if name in frame.f_globals:
-            return frame.f_globals[name]
-        frame = frame.f_back
-    return None
+def _get_qmt_func():
+    """Get QMT built-in functions from caller global namespace."""
+    frame = sys._getframe(1)
+    caller_globals = frame.f_globals
+    
+    needed = ['get_trade_detail_data', 'passorder', 'get_last_order_id']
+    for name in needed:
+        if name in caller_globals:
+            globals()[name] = caller_globals[name]
 
 
-"""
-qmt_adapter/trading.py — QMT交易适配层
-========================================
-封装passorder下单 + 账户查询，提供和我们SimProvider一致的接口。
-
-注意: 本文件运行在QMT内置Python 3.6环境中，必须兼容3.6.8。
-      编码声明必须是 #coding:gbk（QMT要求）。
-"""
-#coding:gbk
-
-
-# ── 交易常量 ─────────────────────────────────────────────────────
-STOCK_BUY = 23       # 买入
-STOCK_SELL = 24      # 卖出
-ORDER_TYPE = 1101    # 普通交易
-PRICE_TYPE = 5       # 最新价
-# PRICE_TYPE = 14    # 对手价（对方一档价格）
+# -- Trading Constants
+STOCK_BUY = 23       # Buy
+STOCK_SELL = 24      # Sell
+ORDER_TYPE = 1101    # Normal order
+PRICE_TYPE = 5       # Latest price
+# PRICE_TYPE = 14    # Opponent price
 
 
 class QmtAccount(object):
-    """QMT账户操作封装。
-
-    Usage::
-
-        acct = QmtAccount(C, 'testS', 'stock')
-        cash = acct.get_cash()
-        holdings = acct.get_holdings()
-        acct.buy('600000.SH', 100, reason='TEST')
-    """
-
-    def __init__(self, C, account_id='testS', account_type='stock'):
-        """
-        Parameters
-        ----------
-        C : ContextInfo
-            QMT策略上下文
-        account_id : str
-            资金账号
-        account_type : str
-            'stock' / 'credit'
-        """
+    """QMT Account operations wrapper."""
+    
+    def __init__(self, C):
         self.C = C
-        self.account_id = account_id
-        self.account_type = account_type
-        # 买入/卖出代码（两融不同）
-        if account_type == 'stock':
-            self.buy_code = STOCK_BUY
-            self.sell_code = STOCK_SELL
-        else:
-            self.buy_code = 33
-            self.sell_code = 34
-
+        self.account_id = C.account_id
+        self.stock_account = C.stock_account
+        self.buy_code = STOCK_BUY
+        self.sell_code = STOCK_SELL
+    
     def _query(self, query_type):
-        """查询交易明细。
-
-        Parameters
-        ----------
-        query_type : str
-            'account' / 'position' / 'deal' / 'order'
-
-        Returns
-        -------
-        list
-            QMT返回的对象列表
-        """
-        func = _get_qmt_func('get_trade_detail_data')
-        if func is None:
-            raise RuntimeError('get_trade_detail_data not found')
-        return func(self.account_id, self.account_type, query_type)
-
+        """Query trade details."""
+        _get_qmt_func()
+        from xtquant.xttype import StockAccount
+        account = StockAccount(self.account_id, "STOCK")
+        return get_trade_detail_data(account, "trade", "", query_type)
+    
     def get_cash(self):
-        """获取可用资金。
-
-        Returns
-        -------
-        float
-            可用资金（元）
-        """
-        accounts = self._query('account')
-        if not accounts:
-            return 0.0
-        return float(accounts[0].m_dAvailable)
-
+        """Get available cash."""
+        _get_qmt_func()
+        from xtquant.xttype import StockAccount
+        account = StockAccount(self.account_id, "STOCK")
+        details = get_trade_detail_data(account, "asset", "", 0)
+        if details:
+            return details[0].m_nCash
+        return 0
+    
     def get_holdings(self):
-        """获取当前持仓。
-
-        Returns
-        -------
-        dict
-            {stock_code: shares} 如 {'600000.SH': 1000}
-        """
-        positions = self._query('position')
-        result = {}
-        for p in positions:
-            code = p.m_strInstrumentID + '.' + p.m_strExchangeID
-            vol = p.m_nCanUseVolume  # 可用数量
+        """Get current positions."""
+        positions = {}
+        details = self._query(1)
+        for p in details:
+            code = p.m_strInstrumentID
+            vol = p.m_nCanUseVolume  # Available volume
             if vol > 0:
-                result[code] = vol
-        return result
-
+                positions[code] = vol
+        return positions
+    
     def get_position_detail(self, stock_code):
-        """获取单只股票的持仓详情。
-
-        Returns
-        -------
-        dict or None
-            {'shares': int, 'cost_price': float, 'market_value': float}
-        """
-        positions = self._query('position')
+        """Get position details for single stock."""
+        _get_qmt_func()
+        from xtquant.xttype import StockAccount
+        account = StockAccount(self.account_id, "STOCK")
+        positions = get_trade_detail_data(account, "stock", stock_code, 0)
+        
         for p in positions:
-            code = p.m_strInstrumentID + '.' + p.m_strExchangeID
-            if code == stock_code:
+            if p.m_strInstrumentID == stock_code:
                 return {
-                    'shares': p.m_nCanUseVolume,
-                    'cost_price': getattr(p, 'm_dSettlementPrice', 0),
-                    'market_value': getattr(p, 'm_dMarketValue', 0),
+                    'shares': p.m_nVolume,
+                    'available': p.m_nCanUseVolume,
+                    'cost_price': p.m_dSettlementPrice,
+                    'market_value': p.m_dMarketValue,
                 }
         return None
-
+    
     def buy(self, stock_code, shares, price=-1, reason='BUY'):
-        """买入下单。
-
-        Parameters
-        ----------
-        stock_code : str
-            股票代码, 如 '600000.SH'
-        shares : int
-            买入股数（会向下取整到100的整数倍）
-        price : float
-            委托价格, 0=最新价
-        reason : str
-            备注
-
-        Returns
-        -------
-        bool
-            是否成功发起委托
-        """
-        shares = int(shares / 100) * 100
+        """Place buy order."""
         if shares <= 0:
             return False
-
+        
+        shares = (shares // 100) * 100
+        if shares <= 0:
+            return False
+        
+        _get_qmt_func()
+        from xtquant.xttype import StockAccount
+        account = StockAccount(self.account_id, "STOCK")
+        
+        if price <= 0:
+            from .data import get_close_price
+            price = get_close_price(self.C, stock_code)
+            if price <= 0:
+                return False
+        
         passorder(
-            self.buy_code,           # opType: 买入
-            ORDER_TYPE,              # orderType: 普通交易
-            self.account_id,         # accountid
-            stock_code,              # orderCode
-            PRICE_TYPE,              # prType: 最新价
-            price,                   # price
+            self.buy_code,           # opType: buy
+            ORDER_TYPE,              # orderType: normal
+            self.account_id,         # account
+            stock_code,              # stock code
+            0,                       # exchanged
             shares,                  # volume
-            reason,                  # strategyName
-            0,                       # quickTrade: 0=逐K线生效
-            reason,                  # userOrderId
-            self.C,                  # ContextInfo
+            price,                   # price
+            reason,                  # remark
+            PRICE_TYPE,              # prType: latest
+            [],                      # orders
+            0,                       # quickTrade: per bar
         )
         return True
-
+    
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
-        """卖出下单。
-
-        Parameters
-        ----------
-        stock_code : str
-        shares : int
-            卖出股数
-        price : float
-            委托价格, 0=最新价
-        reason : str
-
-        Returns
-        -------
-        bool
-        """
+        """Place sell order."""
         if shares <= 0:
             return False
-
+        
+        _get_qmt_func()
+        from xtquant.xttype import StockAccount
+        account = StockAccount(self.account_id, "STOCK")
+        
+        if price <= 0:
+            from .data import get_close_price
+            price = get_close_price(self.C, stock_code)
+            if price <= 0:
+                return False
+        
         passorder(
-            self.sell_code,
-            ORDER_TYPE,
-            self.account_id,
-            stock_code,
-            PRICE_TYPE,
-            price,
-            shares,
-            reason,
-            0,
-            reason,
-            self.C,
+            self.sell_code,          # opType: sell
+            ORDER_TYPE,              # orderType: normal
+            self.account_id,         # account
+            stock_code,              # stock code
+            0,                       # exchanged
+            shares,                  # volume
+            price,                   # price
+            reason,                  # remark
+            PRICE_TYPE,              # prType: latest
+            [],                      # orders
+            0,                       # quickTrade: per bar
         )
         return True
-
+    
     def sell_all(self, stock_code, price=-1, reason='SELL_ALL'):
-        """全仓卖出。
-
-        Returns
-        -------
-        bool
-        """
+        """Sell all shares."""
         holdings = self.get_holdings()
-        if stock_code not in holdings:
-            return False
-        return self.sell(stock_code, holdings[stock_code], price, reason)
-
+        if stock_code in holdings:
+            return self.sell(stock_code, holdings[stock_code], price, reason)
+        return False
+    
     def buy_value(self, stock_code, target_value, price, reason='BUY'):
-        """按目标金额买入（自动计算股数）。
-
-        Parameters
-        ----------
-        stock_code : str
-        target_value : float
-            目标买入金额（元）
-        price : float
-            当前价格
-        reason : str
-
-        Returns
-        -------
-        bool
-        """
+        """Buy by target amount (auto-calc shares)."""
         if price <= 0:
             return False
+        
         shares = int(target_value / price / 100) * 100
+        if shares <= 0:
+            return False
+        
         return self.buy(stock_code, shares, price, reason)

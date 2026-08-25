@@ -1,154 +1,112 @@
 #coding:gbk
 """
-qmt_adapter/data.py — QMT数据适配层
-======================================
-将QMT的get_market_data_ex()返回值转换为我们load_panel_from_db()的格式。
+data.py - QMT Market Data -> Our Format
 
-注意: 本文件运行在QMT内置Python 3.6环境中，必须兼容3.6.8。
-      编码声明必须是 #coding:gbk（QMT要求）。
+Converts QMT K-line data to our standard format.
+NOTE: Runs in QMT built-in Python 3.6, must be 3.6.8 compatible.
 """
-#coding:gbk
-
-import numpy as np
 import pandas as pd
+import numpy as np
+from datetime import datetime
 
 
-def qmt_to_our_format(qmt_data, stock_code):
-    """将QMT get_market_data_ex()的单股结果转换为我们的DataFrame格式。
-
-    QMT返回: DataFrame, 列名 ['open','high','low','close','volume','amount']
-             索引是日期字符串 'YYYYMMDD' 或时间戳
-    我们需要: DataFrame, 列 = ['date','open','high','low','close','vol','amt']
-             索引是整数RangeIndex
-
-    Parameters
-    ----------
-    qmt_data : dict
-        QMT get_market_data_ex() 返回的 dict, key=stock_code, value=DataFrame
-    stock_code : str
-        股票代码, 如 '600000.SH'
-
-    Returns
-    -------
-    pd.DataFrame
-        我们格式的行情数据, 列 = [date, open, high, low, close, vol, amt]
+def qmt_to_our_format(klines, period='1d'):
     """
-    if stock_code not in qmt_data:
+    Convert QMT K-line data to our standard format.
+    
+    QMT returns: [open, high, low, close, volume, amount, ...
+    Our format: DataFrame with columns [open, high, low, close, vol, amount]
+                index = date
+    """
+    if not klines:
         return pd.DataFrame()
-
-    df = qmt_data[stock_code].copy()
-
-    # QMT列名 → 我们列名
-    col_map = {
-        'open': 'open',
-        'high': 'high',
-        'low': 'low',
-        'close': 'close',
-        'volume': 'vol',
-        'amount': 'amt',
-    }
-    df = df.rename(columns=col_map)
-
-    # 确保有date列
-    if 'date' not in df.columns:
-        df['date'] = df.index.astype(str)
-
-    # 重置索引
-    df = df.reset_index(drop=True)
-
-    # 只保留需要的列
-    want_cols = ['date', 'open', 'high', 'low', 'close', 'vol', 'amt']
-    have_cols = [c for c in want_cols if c in df.columns]
-    df = df[have_cols]
-
+    
+    data = []
+    for k in klines:
+        try:
+            if hasattr(k, 'time'):
+                dt = datetime.fromtimestamp(k.time)
+            else:
+                dt = datetime.now()
+            
+            row = {
+                'open': k.open if hasattr(k, 'open') else 0,
+                'high': k.high if hasattr(k, 'high') else 0,
+                'low': k.low if hasattr(k, 'low') else 0,
+                'close': k.close if hasattr(k, 'close') else 0,
+                'vol': k.volume if hasattr(k, 'volume') else 0,
+                'amount': k.amount if hasattr(k, 'amount') else 0,
+            }
+            data.append((dt, row))
+        except Exception:
+            continue
+    
+    if not data:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame([r for _, r in data], index=[d for d, _ in data])
+    df.index.name = 'date'
     return df
 
 
-def load_kline_from_qmt(C, stock_list, period='1d', count=120):
-    """从QMT加载K线数据，返回我们格式的DataFrame。
-
-    Parameters
-    ----------
-    C : ContextInfo
-        QMT策略上下文对象
-    stock_list : list of str
-        股票代码列表, 如 ['600000.SH', '000001.SZ']
-    period : str
-        K线周期, '1d' / '1m' / '5m' 等
-    count : int
-        加载的K线根数
-
-    Returns
-    -------
-    pd.DataFrame
-        我们格式的行情, 列 = [date, open, high, low, close, vol, amt]
-        如果多股, 按stock代码分组返回dict
-    """
-    # QMT获取数据（回测用subscribe=False加速）
-    qmt_data = C.get_market_data_ex(
-        ['open', 'high', 'low', 'close', 'volume', 'amount'],
-        stock_list,
-        period=period,
-        count=count,
-        subscribe=False,
-    )
-
-    # 转换格式
-    if len(stock_list) == 1:
-        return qmt_to_our_format(qmt_data, stock_list[0])
-    else:
-        return {code: qmt_to_our_format(qmt_data, code) for code in stock_list}
-
-
-def get_close_series(C, stock_code, count=120):
-    """获取收盘价序列（numpy array），用于因子计算。
-
-    Parameters
-    ----------
-    C : ContextInfo
-    stock_code : str
-    count : int
-
-    Returns
-    -------
-    np.ndarray
-        收盘价数组，从旧到新
-    """
-    data = C.get_market_data_ex(
-        ['close'],
-        [stock_code],
-        period='1d',
-        count=count,
-        subscribe=False,
-    )
-    if stock_code not in data:
-        return np.array([])
-    return data[stock_code]['close'].values
-
-
-def get_multi_close(C, stock_list, count=120):
-    """获取多股收盘价DataFrame，用于横截面打分。
-
-    Parameters
-    ----------
-    C : ContextInfo
-    stock_list : list of str
-    count : int
-
-    Returns
-    -------
-    pd.DataFrame
-        索引=日期, 列=股票代码, 值=收盘价
-    """
-    data = C.get_market_data_ex(
-        ['close'],
-        stock_list,
-        period='1d',
-        count=count,
-        subscribe=False,
-    )
+def load_kline(C, stock_list, days=120):
+    """Load K-line data for multiple stocks from QMT."""
+    from .config import MARKET_CONFIG
+    period = MARKET_CONFIG.get('period', '1d')
+    dividend_type = MARKET_CONFIG.get('dividend_type', 'front')
+    count = MARKET_CONFIG.get('count', -1)
+    
+    subscribe = MARKET_CONFIG.get('subscribe', True)
+    if subscribe:
+        from .trading import _get_qmt_func
+        _get_qmt_func()
+        from .trading import get_trade_detail_data
+        for code in stock_list:
+            try:
+                C.subscribe_quote(code, period=period, count=-1)
+            except Exception:
+                pass
+    
     result = {}
     for code in stock_list:
-        if code in data:
-            result[code] = data[code]['close'].values
-    return pd.DataFrame(result)
+        try:
+            klines = C.get_market_data_ex(
+                [code], period=period, count=count,
+                dividend_type=dividend_type
+            )
+            if code in klines and len(klines[code]) > 0:
+                result[code] = qmt_to_our_format(klines[code], period)
+        except Exception:
+            continue
+    
+    return result
+
+
+def get_close_price(C, code):
+    """Get latest close price for a stock."""
+    try:
+        data = C.get_market_data_ex(
+            [code], period='1d', count=1,
+            dividend_type='front'
+        )
+        if code in data and len(data[code]) > 0:
+            return data[code]['close'].iloc[-1]
+    except Exception:
+        pass
+    return 0.0
+
+
+def get_close_prices_batch(C, stock_list):
+    """Get close prices for multiple stocks."""
+    try:
+        data = C.get_market_data_ex(
+            stock_list, period='1d', count=1,
+            dividend_type='front'
+        )
+        result = {}
+        for code in stock_list:
+            if code in data and len(data[code]) > 0:
+                result[code] = data[code]['close'].iloc[-1]
+        return result
+    except Exception:
+        return {}

@@ -1,85 +1,116 @@
 #coding:gbk
 """
-v61c_strategy.py - v61c策略逻辑
-使用qmt_runner封装通用逻辑，只实现选股部分。
+v61c_strategy.py - V61C Strategy Logic
+
+Low turnover + small cap factors. Only implements stock selection.
+Risk control and execution handled by qmt_runner.
 """
-import numpy as np
 import pandas as pd
-
-from qmt_adapter.qmt_runner import (
-    g, qmt_init, check_risk, execute_buy, get_market_data, is_rebalance_time,
-    ZZ1800_STOCKS, FLOAT_SHARES,
-)
-from qmt_adapter.config import ACCOUNT_CONFIG
-
-# 策略参数
-PARAMS = {
-    'STOP_LOSS': -0.08,
-    'TAKE_PROFIT': 0.25,
-    'HOLD_DAYS_MAX': 5,
-    'SELL_OUT_OF': 15,
-    'MAX_HOLDINGS': 5,
-    'REBALANCE_DAYS': 5,
-}
 
 
 def init(C):
-    qmt_init(C)
-    print('[INIT] v61c strategy ready')
+    """Init: load ZZ1800 constituents."""
+    from .qmt_data import ZZ1800_STOCKS
+    from .trading import QmtAccount
+    from .config import ACCOUNT_CONFIG, RISK_CONFIG, REBALANCE_CONFIG
+    from . import qmt_runner
+    
+    qmt_runner.qmt_init(C)
+    
+    C.stock_pool = ZZ1800_STOCKS
+    C.stock_list = list(C.stock_pool.keys())
+    C.account = QmtAccount(C)
+    
+    # v61c params
+    C.hold_days = {}
+    C.last_rebalance_date = None
+    C.today_buys = 0
+    C.last_trade_date = None
+    C.rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
 
 
 def handlebar(C):
-    if not g.initialized:
+    """Main: stock selection -> target -> execute."""
+    from datetime import datetime
+    from . import qmt_runner
+    from .config import ACCOUNT_CONFIG, RISK_CONFIG
+    from .qmt_data import FLOAT_SHARES
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    if C.last_trade_date == today:
+        return
+    C.last_trade_date = today
+    
+    for code in list(C.hold_days.keys()):
+        C.hold_days[code] = C.hold_days.get(code, 0) + 1
+    
+    qmt_runner.check_risk(C, C.account, C.hold_days)
+    
+    is_rebal = qmt_runner.is_rebalance_day(C, C.rebalance_days)
+    
+    if not is_rebal:
         return
     
-    bar_date = timetag_to_datetime(C.get_bar_timetag(C.barpos), '%Y%m%d%H%M%S')
-    today = bar_date[:8]
-    g.day_count += 1
+    # Stock selection
+    selected = _select_stocks(C)
     
-    # 风控检查
-    acct = QmtAccount(C, ACCOUNT_CONFIG['account_id'], ACCOUNT_CONFIG['account_type'])
-    check_risk(C, acct, bar_date, today, PARAMS)
-    
-    # 调仓判断
-    days_since_rebalance = g.day_count - g.last_rebalance_day
-    if not is_rebalance_time(days_since_rebalance, PARAMS['REBALANCE_DAYS']):
-        return
-    if len(g.holdings) >= PARAMS['MAX_HOLDINGS']:
+    if not selected:
         return
     
-    # 获取行情
-    stock_list = ZZ1800_STOCKS[:200]
-    data = get_market_data(C, stock_list)
+    # Target weight
+    max_pos = 0.25
+    max_holdings = 5
+    target = {}
+    for code in selected[:max_holdings]:
+        target[code] = max_pos / len(selected[:max_holdings])
     
-    # 选股
-    candidates = []
-    for code in stock_list:
-        if code in g.holdings:
-            continue
-        if code not in data or len(data[code]) < 20:
-            continue
-        
-        df = data[code]
-        close = df['close'].values
-        volume = df['volume'].values
-        
-        float_sh = FLOAT_SHARES.get(code, 0)
-        if float_sh <= 0:
-            continue
-        
-        # 换手率（负向）
-        turnover = volume * 100.0 / float_sh
-        avg_turnover = np.nanmean(turnover[-5:])
-        
-        # 市值（负向）
-        market_cap = close[-1] * float_sh
-        
-        score = -avg_turnover * 0.5 - market_cap * 0.5e-12
-        candidates.append((code, score))
+    qmt_runner.execute_buy(C, C.account, target)
+
+
+def _select_stocks(C):
+    """Stock selection: low turnover + small cap."""
+    from .data import load_kline
+    from .qmt_data import FLOAT_SHARES
     
-    candidates.sort(key=lambda x: x[1], reverse=True)
+    all_data = load_kline(C, C.stock_list)
     
-    # 买入
-    cash = acct.get_cash()
-    cash = execute_buy(C, acct, candidates, cash, bar_date, PARAMS['MAX_HOLDINGS'])
-    g.last_rebalance_day = g.day_count
+    scores = []
+    for code in C.stock_list:
+        if code not in FLOAT_SHARES or FLOAT_SHARES[code] <= 0:
+            continue
+        if code not in all_data or len(all_data[code]) < 20:
+            continue
+        
+        df = all_data[code]
+        
+        # Turnover (lower is better)
+        if 'amount' in df.columns:
+            avg_amount = df['amount'].tail(20).mean()
+            float_shares = FLOAT_SHARES[code]
+            avg_turnover = avg_amount / float_shares / 100
+        else:
+            avg_turnover = 999
+        
+        # Market cap (smaller is better)
+        if 'close' in df.columns:
+            market_cap = df['close'].iloc[-1] * float_shares
+        else:
+            market_cap = 1e12
+        
+        scores.append({
+            'code': code,
+            'turnover': avg_turnover,
+            'mcap': market_cap,
+        })
+    
+    if not scores:
+        return []
+    
+    df = pd.DataFrame(scores)
+    df['turnover_rank'] = df['turnover'].rank(ascending=True, pct=True)
+    df['mcap_rank'] = df['mcap'].rank(ascending=True, pct=True)
+    df['score'] = df['turnover_rank'] + df['mcap_rank']
+    
+    df = df.sort_values('score', ascending=True)
+    
+    return df.head(5)['code'].tolist()

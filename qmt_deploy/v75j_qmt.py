@@ -8,7 +8,7 @@ Python 3.6.8兼容。
 
 import numpy as np
 import pandas as pd
-from qmt_adapter.qmt_data import FLOAT_SHARES, INDUSTRY_MAP
+from qmt_data import FLOAT_SHARES, INDUSTRY_MAP
 
 DEFAULT_PARAMS = {
     'MAX_HOLDINGS': 3,
@@ -21,15 +21,12 @@ DEFAULT_PARAMS = {
     'BREADTH_LOW': 0.30,
 }
 
-# 科技板块
 TECH_SECTORS = ['电子', '计算机', '通信', '传媒']
 
 def _get_tech_codes():
-    """从静态数据获取科技板块股票"""
     return [c for c, ind in INDUSTRY_MAP.items() if ind in TECH_SECTORS]
 
 def calc_factors_v75j(C, stock_list, count=30):
-    """计算流动性因子"""
     data = C.get_market_data_ex(
         ['open', 'high', 'low', 'close', 'volume', 'amount'],
         stock_list, period='1d', count=count, subscribe=False,
@@ -55,19 +52,16 @@ def calc_factors_v75j(C, stock_list, count=30):
     low_panel = pd.concat(low_list, axis=1)
     codes = close_panel.columns.tolist()
 
-    # 科技板块过滤
     tech_codes = _get_tech_codes()
     tech_codes_in_pool = [c for c in codes if c in tech_codes]
 
     if len(tech_codes_in_pool) < 10:
         return {}
 
-    # 流动性因子：20日均成交额
     liq_win = 20
     amount_M = amount_panel[tech_codes_in_pool].rolling(liq_win, min_periods=10).mean()
     liq = amount_M.iloc[-1]
 
-    # rank评分
     scores = pd.Series(0.0, index=tech_codes_in_pool)
     valid = liq.dropna()
     if len(valid) > 10:
@@ -77,7 +71,6 @@ def calc_factors_v75j(C, stock_list, count=30):
     return scores.sort_values(ascending=False)
 
 def _calc_breadth(C, count=30):
-    """计算广度：科技股收盘价>MA20的比例"""
     tech_codes = _get_tech_codes()
     if not tech_codes:
         return 1.0
@@ -99,11 +92,9 @@ def _calc_breadth(C, count=30):
     return above / total if total > 0 else 1.0
 
 def select_stocks_v75j(C, current_holdings, params=None):
-    """选股：流动性排序 + 广度过滤"""
     p = params or DEFAULT_PARAMS
     n = p.get('MAX_HOLDINGS', 3)
 
-    # 广度过滤
     breadth = _calc_breadth(C)
     low_thresh = p.get('BREADTH_LOW', 0.30)
     high_thresh = p.get('BREADTH_HIGH', 0.50)
@@ -112,13 +103,11 @@ def select_stocks_v75j(C, current_holdings, params=None):
         print('[v75j] breadth=%.2f < %.2f, skip' % (breadth, low_thresh))
         return []
 
-    # 线性减仓
     if breadth < high_thresh:
         n = max(1, int(n * breadth / high_thresh))
         print('[v75j] breadth=%.2f, reduce to %d stocks' % (breadth, n))
 
-    # 获取股票池（科技板块）
-    from qmt_adapter.qmt_data import ZZ1800_STOCKS
+    from qmt_data import ZZ1800_STOCKS
     tech_codes = _get_tech_codes()
     stock_list = [c for c in ZZ1800_STOCKS if c in tech_codes]
 

@@ -74,10 +74,11 @@ def execute_buy(C, account, target_weight):
         print('[EXEC] cash too low, skip')
         return
 
+    # Use available cash as base if total value unavailable (backtest init)
     total_value = account.get_total_value()
-    print('[EXEC] total value: {}'.format(total_value))
     if total_value <= 0:
-        return
+        total_value = available
+    print('[EXEC] total value: {}'.format(total_value))
 
     for code, weight in target_weight.items():
         buy_amount = total_value * weight

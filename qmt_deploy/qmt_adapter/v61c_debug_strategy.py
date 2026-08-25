@@ -75,7 +75,9 @@ def handlebar(C):
         qmt_runner.check_risk(C, _account, _hold_days)
 
         # Check rebalance
+        print('[{}] Checking rebalance...'.format(today))
         is_rebal = qmt_runner.is_rebalance_day(C, _rebalance_days)
+        print('[{}] is_rebal={}'.format(today, is_rebal))
 
         if not is_rebal:
             print('[{}] Not rebalance day, skip'.format(today))
@@ -97,7 +99,10 @@ def handlebar(C):
         for code in selected[:max_holdings]:
             target[code] = max_pos / len(selected[:max_holdings])
 
+        print('[{}] Target: {}'.format(today, target))
+        print('[{}] Executing buy...'.format(today))
         qmt_runner.execute_buy(C, _account, target)
+        print('[{}] Buy done'.format(today))
     except Exception as e:
         print('[ERROR] handlebar exception: {}'.format(e))
         import traceback

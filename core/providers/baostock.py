@@ -122,7 +122,7 @@ class BaoStockProvider(DataProvider):
                 start_date=start_date,
                 end_date=end_date,
                 frequency="d",
-                adjustflag="3"  # 不复权
+                adjustflag="2"  # 前复权（与腾讯qfq一致）
             )
             
             if rs.error_code != '0':

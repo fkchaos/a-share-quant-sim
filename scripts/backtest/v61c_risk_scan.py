@@ -474,10 +474,14 @@ def run_signal(account_id, date, params, state, panels):
         if buy_list and date in cp.index:
             price_data = cp.loc[date]
             # 计算可用资金
-            sell_cash = sum(
-                price_data.get(c, 0) * state.holdings[c].get('shares', 0)
-                for c, _, _ in to_sell if c in state.holdings and c in price_data.index
-            )
+            sell_cash = 0
+            for c, _, _ in to_sell:
+                if c in state.holdings and c in price_data.index:
+                    p_s = price_data.get(c, 0)
+                    if pd.isna(p_s) or p_s <= 0:
+                        logger.warning(f"v61c: {c} 卖出价格无效(p={p_s})，按0计")
+                        p_s = 0
+                    sell_cash += p_s * state.holdings[c].get('shares', 0)
             available = state.cash + sell_cash
             # 计算总资产（用于MAX_POSITION限制）
             total_value = state.cash
@@ -485,11 +489,17 @@ def run_signal(account_id, date, params, state, panels):
                 for code, h in state.holdings.items():
                     shares = h.get('shares', h.get('qty', 0))
                     p = price_data.get(code, 0)
+                    if pd.isna(p) or p <= 0:
+                        logger.warning(f"v61c: {code} 当前价格无效(p={p})，按0计入总资产")
+                        p = 0
                     total_value += p * shares
             # 单只股票最大金额 = 总资产 × MAX_POSITION
             max_per_stock = total_value * max_position
             per_stock = min(available / len(buy_list) * 0.95, max_per_stock)
-            
+            if pd.isna(per_stock) or per_stock <= 0:
+                logger.warning(f"v61c: per_stock无效({per_stock})，跳过买入")
+                buy_list = []
+
             for code in buy_list:
                 if code in price_data.index:
                     price = price_data[code]

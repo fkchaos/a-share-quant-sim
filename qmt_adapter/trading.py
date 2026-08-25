@@ -1,25 +1,25 @@
-# -*- coding: utf-8 -*-
+#coding:gbk
 """
-qmt_adapter/trading.py â€” QMTäº¤æ˜“é€‚é…å±‚
+qmt_adapter/trading.py ¡ª QMT½»Ò×ÊÊÅä²ã
 ========================================
-å°è£…passorderä¸‹å• + è´¦æˆ·æŸ¥è¯¢ï¼Œæä¾›å’Œæˆ‘ä»¬SimProviderä¸€è‡´çš„æ¥å£ã€‚
+·â×°passorderÏÂµ¥ + ÕË»§²éÑ¯£¬Ìá¹©ºÍÎÒÃÇSimProviderÒ»ÖÂµÄ½Ó¿Ú¡£
 
-æ³¨æ„: æœ¬æ–‡ä»¶è¿è¡Œåœ¨QMTå†…ç½®Python 3.6ç¯å¢ƒä¸­ï¼Œå¿…é¡»å…¼å®¹3.6.8ã€‚
-      ç¼–ç å£°æ˜å¿…é¡»æ˜¯ #coding:gbkï¼ˆQMTè¦æ±‚ï¼‰ã€‚
+×¢Òâ: ±¾ÎÄ¼şÔËĞĞÔÚQMTÄÚÖÃPython 3.6»·¾³ÖĞ£¬±ØĞë¼æÈİ3.6.8¡£
+      ±àÂëÉùÃ÷±ØĞëÊÇ #coding:gbk£¨QMTÒªÇó£©¡£
 """
 #coding:gbk
 
 
-# â”€â”€ äº¤æ˜“å¸¸é‡ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-STOCK_BUY = 23       # ä¹°å…¥
-STOCK_SELL = 24      # å–å‡º
-ORDER_TYPE = 1101    # æ™®é€šäº¤æ˜“
-PRICE_TYPE = 5       # æœ€æ–°ä»·
-# PRICE_TYPE = 14    # å¯¹æ‰‹ä»·ï¼ˆå¯¹æ–¹ä¸€æ¡£ä»·æ ¼ï¼‰
+# ©¤©¤ ½»Ò×³£Á¿ ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+STOCK_BUY = 23       # ÂòÈë
+STOCK_SELL = 24      # Âô³ö
+ORDER_TYPE = 1101    # ÆÕÍ¨½»Ò×
+PRICE_TYPE = 5       # ×îĞÂ¼Û
+# PRICE_TYPE = 14    # ¶ÔÊÖ¼Û£¨¶Ô·½Ò»µµ¼Û¸ñ£©
 
 
 class QmtAccount(object):
-    """QMTè´¦æˆ·æ“ä½œå°è£…ã€‚
+    """QMTÕË»§²Ù×÷·â×°¡£
 
     Usage::
 
@@ -34,16 +34,16 @@ class QmtAccount(object):
         Parameters
         ----------
         C : ContextInfo
-            QMTç­–ç•¥ä¸Šä¸‹æ–‡
+            QMT²ßÂÔÉÏÏÂÎÄ
         account_id : str
-            èµ„é‡‘è´¦å·
+            ×Ê½ğÕËºÅ
         account_type : str
             'stock' / 'credit'
         """
         self.C = C
         self.account_id = account_id
         self.account_type = account_type
-        # ä¹°å…¥/å–å‡ºä»£ç ï¼ˆä¸¤èä¸åŒï¼‰
+        # ÂòÈë/Âô³ö´úÂë£¨Á½ÈÚ²»Í¬£©
         if account_type == 'stock':
             self.buy_code = STOCK_BUY
             self.sell_code = STOCK_SELL
@@ -52,7 +52,7 @@ class QmtAccount(object):
             self.sell_code = 34
 
     def _query(self, query_type):
-        """æŸ¥è¯¢äº¤æ˜“æ˜ç»†ã€‚
+        """²éÑ¯½»Ò×Ã÷Ï¸¡£
 
         Parameters
         ----------
@@ -62,19 +62,19 @@ class QmtAccount(object):
         Returns
         -------
         list
-            QMTè¿”å›çš„å¯¹è±¡åˆ—è¡¨
+            QMT·µ»ØµÄ¶ÔÏóÁĞ±í
         """
         return get_trade_detail_data(
             self.account_id, self.account_type, query_type
         )
 
     def get_cash(self):
-        """è·å–å¯ç”¨èµ„é‡‘ã€‚
+        """»ñÈ¡¿ÉÓÃ×Ê½ğ¡£
 
         Returns
         -------
         float
-            å¯ç”¨èµ„é‡‘ï¼ˆå…ƒï¼‰
+            ¿ÉÓÃ×Ê½ğ£¨Ôª£©
         """
         accounts = self._query('account')
         if not accounts:
@@ -82,24 +82,24 @@ class QmtAccount(object):
         return float(accounts[0].m_dAvailable)
 
     def get_holdings(self):
-        """è·å–å½“å‰æŒä»“ã€‚
+        """»ñÈ¡µ±Ç°³Ö²Ö¡£
 
         Returns
         -------
         dict
-            {stock_code: shares} å¦‚ {'600000.SH': 1000}
+            {stock_code: shares} Èç {'600000.SH': 1000}
         """
         positions = self._query('position')
         result = {}
         for p in positions:
             code = p.m_strInstrumentID + '.' + p.m_strExchangeID
-            vol = p.m_nCanUseVolume  # å¯ç”¨æ•°é‡
+            vol = p.m_nCanUseVolume  # ¿ÉÓÃÊıÁ¿
             if vol > 0:
                 result[code] = vol
         return result
 
     def get_position_detail(self, stock_code):
-        """è·å–å•åªè‚¡ç¥¨çš„æŒä»“è¯¦æƒ…ã€‚
+        """»ñÈ¡µ¥Ö»¹ÉÆ±µÄ³Ö²ÖÏêÇé¡£
 
         Returns
         -------
@@ -118,53 +118,53 @@ class QmtAccount(object):
         return None
 
     def buy(self, stock_code, shares, price=-1, reason='BUY'):
-        """ä¹°å…¥ä¸‹å•ã€‚
+        """ÂòÈëÏÂµ¥¡£
 
         Parameters
         ----------
         stock_code : str
-            è‚¡ç¥¨ä»£ç , å¦‚ '600000.SH'
+            ¹ÉÆ±´úÂë, Èç '600000.SH'
         shares : int
-            ä¹°å…¥è‚¡æ•°ï¼ˆä¼šå‘ä¸‹å–æ•´åˆ°100çš„æ•´æ•°å€ï¼‰
+            ÂòÈë¹ÉÊı£¨»áÏòÏÂÈ¡Õûµ½100µÄÕûÊı±¶£©
         price : float
-            å§”æ‰˜ä»·æ ¼, 0=æœ€æ–°ä»·
+            Î¯ÍĞ¼Û¸ñ, 0=×îĞÂ¼Û
         reason : str
-            å¤‡æ³¨
+            ±¸×¢
 
         Returns
         -------
         bool
-            æ˜¯å¦æˆåŠŸå‘èµ·å§”æ‰˜
+            ÊÇ·ñ³É¹¦·¢ÆğÎ¯ÍĞ
         """
         shares = int(shares / 100) * 100
         if shares <= 0:
             return False
 
         passorder(
-            self.buy_code,           # opType: ä¹°å…¥
-            ORDER_TYPE,              # orderType: æ™®é€šäº¤æ˜“
+            self.buy_code,           # opType: ÂòÈë
+            ORDER_TYPE,              # orderType: ÆÕÍ¨½»Ò×
             self.account_id,         # accountid
             stock_code,              # orderCode
-            PRICE_TYPE,              # prType: æœ€æ–°ä»·
+            PRICE_TYPE,              # prType: ×îĞÂ¼Û
             price,                   # price
             shares,                  # volume
             reason,                  # strategyName
-            0,                       # quickTrade: 0=é€Kçº¿ç”Ÿæ•ˆ
+            0,                       # quickTrade: 0=ÖğKÏßÉúĞ§
             reason,                  # userOrderId
             self.C,                  # ContextInfo
         )
         return True
 
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
-        """å–å‡ºä¸‹å•ã€‚
+        """Âô³öÏÂµ¥¡£
 
         Parameters
         ----------
         stock_code : str
         shares : int
-            å–å‡ºè‚¡æ•°
+            Âô³ö¹ÉÊı
         price : float
-            å§”æ‰˜ä»·æ ¼, 0=æœ€æ–°ä»·
+            Î¯ÍĞ¼Û¸ñ, 0=×îĞÂ¼Û
         reason : str
 
         Returns
@@ -190,7 +190,7 @@ class QmtAccount(object):
         return True
 
     def sell_all(self, stock_code, price=-1, reason='SELL_ALL'):
-        """å…¨ä»“å–å‡ºã€‚
+        """È«²ÖÂô³ö¡£
 
         Returns
         -------
@@ -202,15 +202,15 @@ class QmtAccount(object):
         return self.sell(stock_code, holdings[stock_code], price, reason)
 
     def buy_value(self, stock_code, target_value, price, reason='BUY'):
-        """æŒ‰ç›®æ ‡é‡‘é¢ä¹°å…¥ï¼ˆè‡ªåŠ¨è®¡ç®—è‚¡æ•°ï¼‰ã€‚
+        """°´Ä¿±ê½ğ¶îÂòÈë£¨×Ô¶¯¼ÆËã¹ÉÊı£©¡£
 
         Parameters
         ----------
         stock_code : str
         target_value : float
-            ç›®æ ‡ä¹°å…¥é‡‘é¢ï¼ˆå…ƒï¼‰
+            Ä¿±êÂòÈë½ğ¶î£¨Ôª£©
         price : float
-            å½“å‰ä»·æ ¼
+            µ±Ç°¼Û¸ñ
         reason : str
 
         Returns

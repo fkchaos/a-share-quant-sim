@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
+#coding:gbk
 """
-qmt_adapter/data.py â€” QMTæ•°æ®é€‚é…å±‚
+qmt_adapter/data.py ¡ª QMTÊı¾İÊÊÅä²ã
 ======================================
-å°†QMTçš„get_market_data_ex()è¿”å›å€¼è½¬æ¢ä¸ºæˆ‘ä»¬load_panel_from_db()çš„æ ¼å¼ã€‚
+½«QMTµÄget_market_data_ex()·µ»ØÖµ×ª»»ÎªÎÒÃÇload_panel_from_db()µÄ¸ñÊ½¡£
 
-æ³¨æ„: æœ¬æ–‡ä»¶è¿è¡Œåœ¨QMTå†…ç½®Python 3.6ç¯å¢ƒä¸­ï¼Œå¿…é¡»å…¼å®¹3.6.8ã€‚
-      ç¼–ç å£°æ˜å¿…é¡»æ˜¯ #coding:gbkï¼ˆQMTè¦æ±‚ï¼‰ã€‚
+×¢Òâ: ±¾ÎÄ¼şÔËĞĞÔÚQMTÄÚÖÃPython 3.6»·¾³ÖĞ£¬±ØĞë¼æÈİ3.6.8¡£
+      ±àÂëÉùÃ÷±ØĞëÊÇ #coding:gbk£¨QMTÒªÇó£©¡£
 """
 #coding:gbk
 
@@ -14,31 +14,31 @@ import pandas as pd
 
 
 def qmt_to_our_format(qmt_data, stock_code):
-    """å°†QMT get_market_data_ex()çš„å•è‚¡ç»“æœè½¬æ¢ä¸ºæˆ‘ä»¬çš„DataFrameæ ¼å¼ã€‚
+    """½«QMT get_market_data_ex()µÄµ¥¹É½á¹û×ª»»ÎªÎÒÃÇµÄDataFrame¸ñÊ½¡£
 
-    QMTè¿”å›: DataFrame, åˆ—å ['open','high','low','close','volume','amount']
-             ç´¢å¼•æ˜¯æ—¥æœŸå­—ç¬¦ä¸² 'YYYYMMDD' æˆ–æ—¶é—´æˆ³
-    æˆ‘ä»¬éœ€è¦: DataFrame, åˆ— = ['date','open','high','low','close','vol','amt']
-             ç´¢å¼•æ˜¯æ•´æ•°RangeIndex
+    QMT·µ»Ø: DataFrame, ÁĞÃû ['open','high','low','close','volume','amount']
+             Ë÷ÒıÊÇÈÕÆÚ×Ö·û´® 'YYYYMMDD' »òÊ±¼ä´Á
+    ÎÒÃÇĞèÒª: DataFrame, ÁĞ = ['date','open','high','low','close','vol','amt']
+             Ë÷ÒıÊÇÕûÊıRangeIndex
 
     Parameters
     ----------
     qmt_data : dict
-        QMT get_market_data_ex() è¿”å›çš„ dict, key=stock_code, value=DataFrame
+        QMT get_market_data_ex() ·µ»ØµÄ dict, key=stock_code, value=DataFrame
     stock_code : str
-        è‚¡ç¥¨ä»£ç , å¦‚ '600000.SH'
+        ¹ÉÆ±´úÂë, Èç '600000.SH'
 
     Returns
     -------
     pd.DataFrame
-        æˆ‘ä»¬æ ¼å¼çš„è¡Œæƒ…æ•°æ®, åˆ— = [date, open, high, low, close, vol, amt]
+        ÎÒÃÇ¸ñÊ½µÄĞĞÇéÊı¾İ, ÁĞ = [date, open, high, low, close, vol, amt]
     """
     if stock_code not in qmt_data:
         return pd.DataFrame()
 
     df = qmt_data[stock_code].copy()
 
-    # QMTåˆ—å â†’ æˆ‘ä»¬åˆ—å
+    # QMTÁĞÃû ¡ú ÎÒÃÇÁĞÃû
     col_map = {
         'open': 'open',
         'high': 'high',
@@ -49,14 +49,14 @@ def qmt_to_our_format(qmt_data, stock_code):
     }
     df = df.rename(columns=col_map)
 
-    # ç¡®ä¿æœ‰dateåˆ—
+    # È·±£ÓĞdateÁĞ
     if 'date' not in df.columns:
         df['date'] = df.index.astype(str)
 
-    # é‡ç½®ç´¢å¼•
+    # ÖØÖÃË÷Òı
     df = df.reset_index(drop=True)
 
-    # åªä¿ç•™éœ€è¦çš„åˆ—
+    # Ö»±£ÁôĞèÒªµÄÁĞ
     want_cols = ['date', 'open', 'high', 'low', 'close', 'vol', 'amt']
     have_cols = [c for c in want_cols if c in df.columns]
     df = df[have_cols]
@@ -65,26 +65,26 @@ def qmt_to_our_format(qmt_data, stock_code):
 
 
 def load_kline_from_qmt(C, stock_list, period='1d', count=120):
-    """ä»QMTåŠ è½½Kçº¿æ•°æ®ï¼Œè¿”å›æˆ‘ä»¬æ ¼å¼çš„DataFrameã€‚
+    """´ÓQMT¼ÓÔØKÏßÊı¾İ£¬·µ»ØÎÒÃÇ¸ñÊ½µÄDataFrame¡£
 
     Parameters
     ----------
     C : ContextInfo
-        QMTç­–ç•¥ä¸Šä¸‹æ–‡å¯¹è±¡
+        QMT²ßÂÔÉÏÏÂÎÄ¶ÔÏó
     stock_list : list of str
-        è‚¡ç¥¨ä»£ç åˆ—è¡¨, å¦‚ ['600000.SH', '000001.SZ']
+        ¹ÉÆ±´úÂëÁĞ±í, Èç ['600000.SH', '000001.SZ']
     period : str
-        Kçº¿å‘¨æœŸ, '1d' / '1m' / '5m' ç­‰
+        KÏßÖÜÆÚ, '1d' / '1m' / '5m' µÈ
     count : int
-        åŠ è½½çš„Kçº¿æ ¹æ•°
+        ¼ÓÔØµÄKÏß¸ùÊı
 
     Returns
     -------
     pd.DataFrame
-        æˆ‘ä»¬æ ¼å¼çš„è¡Œæƒ…, åˆ— = [date, open, high, low, close, vol, amt]
-        å¦‚æœå¤šè‚¡, æŒ‰stockä»£ç åˆ†ç»„è¿”å›dict
+        ÎÒÃÇ¸ñÊ½µÄĞĞÇé, ÁĞ = [date, open, high, low, close, vol, amt]
+        Èç¹û¶à¹É, °´stock´úÂë·Ö×é·µ»Ødict
     """
-    # QMTè·å–æ•°æ®ï¼ˆå›æµ‹ç”¨subscribe=FalseåŠ é€Ÿï¼‰
+    # QMT»ñÈ¡Êı¾İ£¨»Ø²âÓÃsubscribe=False¼ÓËÙ£©
     qmt_data = C.get_market_data_ex(
         ['open', 'high', 'low', 'close', 'volume', 'amount'],
         stock_list,
@@ -93,7 +93,7 @@ def load_kline_from_qmt(C, stock_list, period='1d', count=120):
         subscribe=False,
     )
 
-    # è½¬æ¢æ ¼å¼
+    # ×ª»»¸ñÊ½
     if len(stock_list) == 1:
         return qmt_to_our_format(qmt_data, stock_list[0])
     else:
@@ -101,7 +101,7 @@ def load_kline_from_qmt(C, stock_list, period='1d', count=120):
 
 
 def get_close_series(C, stock_code, count=120):
-    """è·å–æ”¶ç›˜ä»·åºåˆ—ï¼ˆnumpy arrayï¼‰ï¼Œç”¨äºå› å­è®¡ç®—ã€‚
+    """»ñÈ¡ÊÕÅÌ¼ÛĞòÁĞ£¨numpy array£©£¬ÓÃÓÚÒò×Ó¼ÆËã¡£
 
     Parameters
     ----------
@@ -112,7 +112,7 @@ def get_close_series(C, stock_code, count=120):
     Returns
     -------
     np.ndarray
-        æ”¶ç›˜ä»·æ•°ç»„ï¼Œä»æ—§åˆ°æ–°
+        ÊÕÅÌ¼ÛÊı×é£¬´Ó¾Éµ½ĞÂ
     """
     data = C.get_market_data_ex(
         ['close'],
@@ -127,7 +127,7 @@ def get_close_series(C, stock_code, count=120):
 
 
 def get_multi_close(C, stock_list, count=120):
-    """è·å–å¤šè‚¡æ”¶ç›˜ä»·DataFrameï¼Œç”¨äºæ¨ªæˆªé¢æ‰“åˆ†ã€‚
+    """»ñÈ¡¶à¹ÉÊÕÅÌ¼ÛDataFrame£¬ÓÃÓÚºá½ØÃæ´ò·Ö¡£
 
     Parameters
     ----------
@@ -138,7 +138,7 @@ def get_multi_close(C, stock_list, count=120):
     Returns
     -------
     pd.DataFrame
-        ç´¢å¼•=æ—¥æœŸ, åˆ—=è‚¡ç¥¨ä»£ç , å€¼=æ”¶ç›˜ä»·
+        Ë÷Òı=ÈÕÆÚ, ÁĞ=¹ÉÆ±´úÂë, Öµ=ÊÕÅÌ¼Û
     """
     data = C.get_market_data_ex(
         ['close'],

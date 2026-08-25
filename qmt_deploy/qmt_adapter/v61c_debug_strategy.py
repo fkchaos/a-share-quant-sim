@@ -2,7 +2,7 @@
 """
 v61c_debug_strategy.py - V61C Debug Version
 
-Adds verbose output for debugging.
+Verbose output for debugging in QMT backtest/live.
 """
 import pandas as pd
 from datetime import datetime
@@ -39,9 +39,8 @@ def init(C):
     _last_trade_date = None
     _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
 
-    print('[INIT] Stock pool: {} stocks'.format(len(_stock_list)))
-    print('[INIT] Account: {}'.format(_account.account_id))
-    print('[INIT] Risk: SL={}, TP={}, HD={}'.format(
+    print('[INIT] Pool: {} stocks, Account: {}, Risk: SL={}, TP={}, HD={}'.format(
+        len(_stock_list), _account.account_id,
         RISK_CONFIG['stop_loss'], RISK_CONFIG['take_profit'], RISK_CONFIG['hold_days_max']))
 
 
@@ -49,7 +48,6 @@ def handlebar(C):
     """Main with debug output."""
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list, _rebalance_days
     try:
-        # Refresh state in case module was reloaded
         if _account is None:
             from .qmt_data import ZZ1800_STOCKS
             from .trading import QmtAccount
@@ -61,38 +59,26 @@ def handlebar(C):
             _account = QmtAccount(C)
             _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
 
-        print('[DEBUG] handlebar start, account={}'.format(_account.account_id if _account else 'None'))
-
         today = datetime.now().strftime('%Y-%m-%d')
 
-        # Update hold days
         for code in list(_hold_days.keys()):
             _hold_days[code] = _hold_days.get(code, 0) + 1
 
         from . import qmt_runner
 
-        # Risk check
         qmt_runner.check_risk(C, _account, _hold_days)
 
-        # Check rebalance
-        print('[{}] Checking rebalance...'.format(today))
         is_rebal = qmt_runner.is_rebalance_day(C, _rebalance_days)
-        print('[{}] is_rebal={}'.format(today, is_rebal))
-
         if not is_rebal:
-            print('[{}] Not rebalance day, skip'.format(today))
             return
 
-        # Stock selection
         selected = _select_stocks(C)
-
         if not selected:
             print('[{}] No stocks selected'.format(today))
             return
 
         print('[{}] Selected: {}'.format(today, selected[:5]))
 
-        # Target weight
         max_pos = 0.25
         max_holdings = 5
         target = {}
@@ -100,11 +86,9 @@ def handlebar(C):
             target[code] = max_pos / len(selected[:max_holdings])
 
         print('[{}] Target: {}'.format(today, target))
-        print('[{}] Executing buy...'.format(today))
         qmt_runner.execute_buy(C, _account, target)
-        print('[{}] Buy done'.format(today))
     except Exception as e:
-        print('[ERROR] handlebar exception: {}'.format(e))
+        print('[ERROR] {}'.format(e))
         import traceback
         traceback.print_exc()
 
@@ -114,30 +98,22 @@ def _select_stocks(C):
     from .qmt_data import FLOAT_SHARES
     from .data import get_close_prices_batch
 
-    # Get all stock codes with float_shares data
     candidates = []
     for code in _stock_list:
         if code in FLOAT_SHARES:
             candidates.append(code)
 
-    print('[SELECT] candidates with float_shares: {}'.format(len(candidates)))
-    if candidates:
-        print('[SELECT] first 5: {}'.format(candidates[:5]))
-
     if not candidates:
-        print('[SELECT] no candidates, returning empty')
         return []
 
-    # Get close prices
     prices = get_close_prices_batch(C, candidates)
-    print('[SELECT] got prices for {} stocks'.format(len(prices)))
+    if not prices:
+        print('[SELECT] no prices returned')
+        return []
 
-    # Score: lower turnover (proxy: amount/float_shares) + smaller market cap (proxy: price*float_shares)
     scored = []
     for code in candidates:
-        if code not in prices:
-            continue
-        if prices[code] <= 0:
+        if code not in prices or prices[code] <= 0:
             continue
         fs = FLOAT_SHARES.get(code, 0)
         if fs <= 0:
@@ -146,15 +122,11 @@ def _select_stocks(C):
         mcap = price * fs
         scored.append((code, mcap))
 
-    print('[SELECT] scored: {}'.format(len(scored)))
-
     if not scored:
-        print('[SELECT] no scored stocks, returning empty')
         return []
 
-    # Rank by market cap (ascending = smaller cap first)
     scored.sort(key=lambda x: x[1])
     ranked = [code for code, _ in scored]
 
-    print('[SELECT] ranked top 5: {}'.format(ranked[:5]))
+    print('[SELECT] {} candidates, top 5: {}'.format(len(ranked), ranked[:5]))
     return ranked

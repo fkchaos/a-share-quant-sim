@@ -115,24 +115,19 @@ class QmtAccount(object):
         """Buy order."""
         _get_qmt_func()
         from . import trading
-        print('[TRADE] BUY {} {} shares, account={}'.format(stock_code, shares, self.account_id))
-        try:
-            trading.passorder(
-                23,
-                1101,
-                self.account_id,
-                stock_code,
-                14,
-                -1,
-                shares,
-                reason,
-                1,
-                reason,
-                self.C
-            )
-            print('[TRADE] BUY order sent OK')
-        except Exception as e:
-            print('[TRADE] BUY ERROR: {}'.format(e))
+        trading.passorder(
+            23,
+            1101,
+            self.account_id,
+            stock_code,
+            14,
+            -1,
+            shares,
+            reason,
+            1,
+            reason,
+            self.C
+        )
 
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
         """Sell order."""

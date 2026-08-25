@@ -2,7 +2,7 @@
 """
 trading.py - QMT Trading Adapter
 
-Wraps passorder + account queries, provides same interface as SimAccount.
+Wraps passorder + account queries.
 """
 import sys
 
@@ -25,24 +25,31 @@ def _init_functions():
         _get_qmt_func()
 
 
+def _find_account_from_frames():
+    """Walk up the call stack to find 'account' in QMT's global scope."""
+    frame = sys._getframe(1)
+    while frame is not None:
+        if 'account' in frame.f_globals:
+            return frame.f_globals['account']
+        frame = frame.f_back
+    return None
+
+
 class QmtAccount(object):
     """QMT account operations wrapper."""
 
     def __init__(self, C):
-        # Get account_id from QMT global scope, not from C
-        import sys
-        frame = sys._getframe(1)
-        caller_globals = frame.f_globals
-        self.C = C
+        # Get account_id by walking up call stack to find QMT's global 'account'
+        account = _find_account_from_frames()
 
-        if 'account' in caller_globals:
-            self.account_id = caller_globals['account']
-        elif 'account_id' in caller_globals:
-            self.account_id = caller_globals['account_id']
+        if account:
+            self.account_id = account
         elif hasattr(C, 'account_id'):
             self.account_id = C.account_id
         else:
             raise ValueError("Cannot find account ID. Set 'account' in QMT strategy config.")
+
+        self.C = C
 
     def _query(self, query_type):
         """Query trade details."""
@@ -95,6 +102,7 @@ class QmtAccount(object):
     def buy(self, stock_code, shares, price=-1, reason='BUY'):
         """Buy order."""
         _init_functions()
+        from xtquant.xttype import StockAccount
         account = StockAccount(self.account_id, "STOCK")
         code = stock_code.split('.')[0]
         exchange = stock_code.split('.')[1] if '.' in stock_code else 'SH'
@@ -117,6 +125,7 @@ class QmtAccount(object):
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
         """Sell order."""
         _init_functions()
+        from xtquant.xttype import StockAccount
         account = StockAccount(self.account_id, "STOCK")
         code = stock_code.split('.')[0]
         exchange = stock_code.split('.')[1] if '.' in stock_code else 'SH'

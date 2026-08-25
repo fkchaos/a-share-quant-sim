@@ -101,7 +101,7 @@ def handlebar(C):
     # 风控检查
     sell_codes = []
     for code, info in list(g.holdings.items()):
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
+        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=True)
         if code not in data or len(data[code]) == 0:
             continue
         current_price = data[code]['close'].values[-1]
@@ -145,7 +145,7 @@ def handlebar(C):
         tech_codes[:100],
         period='1d',
         count=30,
-        subscribe=False,
+        subscribe=True,
     )
     
     # 计算广度
@@ -192,7 +192,7 @@ def handlebar(C):
     buy_count = min(actual_holdings - len(g.holdings), len(candidates))
     for i in range(buy_count):
         code, score = candidates[i]
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
+        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=True)
         if code not in data or len(data[code]) == 0:
             continue
         price = data[code]['close'].values[-1]

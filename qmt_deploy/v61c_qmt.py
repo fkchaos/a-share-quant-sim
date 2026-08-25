@@ -80,7 +80,7 @@ def handlebar(C):
     # 风控检查（止损/止盈/到期）
     sell_codes = []
     for code, info in list(g.holdings.items()):
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
+        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=True)
         if code not in data or len(data[code]) == 0:
             continue
         current_price = data[code]['close'].values[-1]
@@ -121,7 +121,7 @@ def handlebar(C):
         stock_list,
         period='1d',
         count=30,
-        subscribe=False,
+        subscribe=True,
     )
     
     # 计算因子并选股
@@ -160,7 +160,7 @@ def handlebar(C):
     buy_count = min(MAX_HOLDINGS - len(g.holdings), len(candidates))
     for i in range(buy_count):
         code, score = candidates[i]
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
+        data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=True)
         if code not in data or len(data[code]) == 0:
             continue
         price = data[code]['close'].values[-1]

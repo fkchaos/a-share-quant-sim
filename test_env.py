@@ -19,7 +19,7 @@ def init(ContextInfo):
     
     try:
         timetag_to_datetime
-        print('[2] PASS - QMT API OK')
+        print('[2] PASS - QMT API')
     except NameError:
         print('[2] FAIL - not in QMT')
         return
@@ -27,30 +27,57 @@ def init(ContextInfo):
     try:
         import numpy as np
         import pandas as pd
-        print('[3] PASS - numpy/pandas OK')
+        print('[3] PASS - numpy/pandas')
     except ImportError as e:
         print('[3] FAIL: %s' % str(e))
         return
     
     try:
         from qmt_adapter.trading import QmtAccount
-        print('[4] PASS - qmt_adapter.trading OK')
+        print('[4] PASS - qmt_adapter.trading')
     except ImportError as e:
         print('[4] FAIL: %s' % str(e))
         return
     
     try:
-        from qmt_adapter.data import qmt_to_our_format
-        print('[5] PASS - qmt_adapter.data OK')
+        from qmt_adapter.data import qmt_to_our_format, load_kline_from_qmt
+        print('[5] PASS - qmt_adapter.data')
     except ImportError as e:
         print('[5] FAIL: %s' % str(e))
         return
     
     try:
-        acct = QmtAccount(ContextInfo, 'test', 'stock')
-        print('[6] PASS - QmtAccount OK')
+        acct = QmtAccount(ContextInfo, 'testS', 'stock')
+        print('[6] PASS - QmtAccount init')
     except Exception as e:
         print('[6] FAIL: %s' % str(e))
+        return
+    
+    try:
+        cash = acct.get_cash()
+        print('[7] PASS - get_cash() = %.2f' % cash)
+    except Exception as e:
+        print('[7] FAIL: %s' % str(e))
+        return
+    
+    try:
+        holdings = acct.get_holdings()
+        print('[8] PASS - get_holdings() = %d stocks' % len(holdings))
+        if holdings:
+            for code, vol in list(holdings.items())[:3]:
+                print('       %s: %d' % (code, vol))
+    except Exception as e:
+        print('[8] FAIL: %s' % str(e))
+        return
+    
+    try:
+        detail = acct.get_position_detail('000001.SZ')
+        if detail:
+            print('[9] PASS - get_position_detail(000001.SZ)')
+        else:
+            print('[9] PASS - get_position_detail(000001.SZ) = None')
+    except Exception as e:
+        print('[9] FAIL: %s' % str(e))
         return
     
     try:
@@ -60,14 +87,16 @@ def init(ContextInfo):
             period='1d', count=5, subscribe=False,
         )
         if '000001.SZ' in data and len(data['000001.SZ']) > 0:
-            print('[7] PASS - 000001.SZ %d bars' % len(data['000001.SZ']))
+            df = qmt_to_our_format(data, '000001.SZ')
+            print('[10] PASS - qmt_to_our_format %d rows' % len(df))
+            print('       cols: %s' % list(df.columns))
         else:
-            print('[7] WARN - empty data')
+            print('[10] WARN - empty data')
     except Exception as e:
-        print('[7] WARN: %s' % str(e))
+        print('[10] FAIL: %s' % str(e))
     
     print('='*50)
-    print('[TEST] ALL PASS')
+    print('[TEST] DONE')
     print('='*50)
 
 

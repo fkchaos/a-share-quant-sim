@@ -4,7 +4,6 @@ v61c_debug_strategy.py - V61C Debug Version
 
 Adds verbose output for debugging.
 """
-import sys
 import pandas as pd
 from datetime import datetime
 
@@ -26,7 +25,7 @@ def init(C):
 
     from .qmt_data import ZZ1800_STOCKS
     from .trading import QmtAccount
-    from .config import RISK_CONFIG, REBALANCE_CONFIG
+    from .config import ACCOUNT_CONFIG, RISK_CONFIG, REBALANCE_CONFIG
     from . import qmt_runner
 
     qmt_runner.qmt_init(C)
@@ -34,13 +33,16 @@ def init(C):
     _stock_pool = ZZ1800_STOCKS
     _stock_list = _stock_pool
     _account = QmtAccount(C)
+    _hold_days = {}
+    _last_rebalance_date = None
+    _today_buys = 0
+    _last_trade_date = None
     _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
-
-    # Subscribe stock pool to QMT
-    C.set_universe(_stock_list)
 
     print('[INIT] Stock pool: {} stocks'.format(len(_stock_list)))
     print('[INIT] Account: {}'.format(_account.account_id))
+    print('[INIT] Risk: SL={}, TP={}, HD={}'.format(
+        RISK_CONFIG['stop_loss'], RISK_CONFIG['take_profit'], RISK_CONFIG['hold_days_max']))
 
 
 def handlebar(C):
@@ -59,10 +61,8 @@ def handlebar(C):
         _account = QmtAccount(C)
         _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
 
-    today = datetime.now().strftime('%Y-%m-%d')
-    if _last_trade_date == today:
-        return
-    _last_trade_date = today
+    # Use bar datetime instead of datetime.now() for backtest compatibility
+    today = C.timedict.get('RebarTime', '').strftime('%Y-%m-%d') if hasattr(C, 'timedict') and hasattr(C.timedict, 'get') else datetime.now().strftime('%Y-%m-%d')
 
     print('[{}] Processing...'.format(today))
 
@@ -70,8 +70,9 @@ def handlebar(C):
     for code in list(_hold_days.keys()):
         _hold_days[code] = _hold_days.get(code, 0) + 1
 
-    # Risk check
     from . import qmt_runner
+
+    # Risk check
     qmt_runner.check_risk(C, _account, _hold_days)
 
     # Check rebalance
@@ -101,31 +102,41 @@ def handlebar(C):
 
 
 def _select_stocks(C):
-    """V61C selection: low turnover + small cap."""
-    from .qmt_data import FLOAT_SHARES, ZZ1800_STOCKS
+    """V61C stock selection: low turnover + small cap."""
+    from .qmt_data import FLOAT_SHARES
     from .data import get_close_prices_batch
 
-    # Get close prices
-    prices = get_close_prices_batch(C, ZZ1800_STOCKS)
-    if not prices:
-        return []
-
-    # Score by turnover (low is better) + small cap (low float shares is better)
+    # Get all stock codes with float_shares data
     candidates = []
-    for code in ZZ1800_STOCKS:
-        if code not in prices or prices[code] <= 0:
-            continue
-        float_shares = FLOAT_SHARES.get(code, 0)
-        if float_shares <= 0:
-            continue
-        candidates.append((code, float_shares, prices[code]))
+    for code in _stock_list:
+        if code in FLOAT_SHARES:
+            candidates.append(code)
 
     if not candidates:
         return []
 
-    # Rank by float shares (ascending = small cap first)
-    candidates.sort(key=lambda x: x[1])
+    # Get close prices
+    prices = get_close_prices_batch(C, candidates)
 
-    # Take top 20% as candidates
-    n = max(5, len(candidates) // 5)
-    return [c[0] for c in candidates[:n]]
+    # Score: lower turnover (proxy: amount/float_shares) + smaller market cap (proxy: price*float_shares)
+    scored = []
+    for code in candidates:
+        if code not in prices or prices[code] <= 0:
+            continue
+        fs = FLOAT_SHARES.get(code, 0)
+        if fs <= 0:
+            continue
+        price = prices[code]
+        # Small cap score (lower is better, rank later)
+        mcap = price * fs
+        # Use price as proxy for simplicity
+        scored.append((code, mcap))
+
+    if not scored:
+        return []
+
+    # Rank by market cap (ascending = smaller cap first)
+    scored.sort(key=lambda x: x[1])
+    ranked = [code for code, _ in scored]
+
+    return ranked

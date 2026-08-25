@@ -8,21 +8,19 @@ import sys
 
 
 def _get_qmt_func():
-    """Get QMT built-in functions from caller's global namespace."""
-    frame = sys._getframe(2)
-    caller_globals = frame.f_globals
-
-    from . import trading
-    for name in ['get_trade_detail_data', 'passorder', 'get_last_order_id']:
-        if name in caller_globals:
-            setattr(trading, name, caller_globals[name])
-
-
-def _init_functions():
-    """Ensure QMT built-in functions are available."""
-    from . import trading
-    if not hasattr(trading, 'get_trade_detail_data'):
-        _get_qmt_func()
+    """Get QMT built-in functions by walking up ALL frames."""
+    frame = sys._getframe(1)
+    while frame is not None:
+        g = frame.f_globals
+        if 'get_trade_detail_data' in g:
+            from . import trading
+            trading.get_trade_detail_data = g['get_trade_detail_data']
+            if 'passorder' in g:
+                trading.passorder = g['passorder']
+            if 'get_last_order_id' in g:
+                trading.get_last_order_id = g['get_last_order_id']
+            return
+        frame = frame.f_back
 
 
 def _find_account_from_frames():
@@ -33,8 +31,6 @@ def _find_account_from_frames():
             val = frame.f_globals['account']
             if val and val != 'test':
                 return val
-        if 'accountType' in frame.f_globals:
-            pass  # found it, will use later
         frame = frame.f_back
     return None
 
@@ -55,18 +51,13 @@ class QmtAccount(object):
     def __init__(self, C):
         self.C = C
 
-        # 1. Try QMT global 'account' variable
         account = _find_account_from_frames()
-
-        # 2. Fallback to config
         if not account:
             try:
                 from .config import ACCOUNT_CONFIG
                 account = ACCOUNT_CONFIG.get('account_id', '')
             except Exception:
                 pass
-
-        # 3. Last resort
         if not account:
             account = 'SIMTEST'
 
@@ -75,8 +66,9 @@ class QmtAccount(object):
 
     def _query(self, query_type):
         """Query trade details."""
-        _init_functions()
-        return get_trade_detail_data(self.account_id, self.account_type, query_type)
+        _get_qmt_func()
+        from . import trading
+        return trading.get_trade_detail_data(self.account_id, self.account_type, query_type)
 
     def get_cash(self):
         """Get available cash."""
@@ -120,27 +112,29 @@ class QmtAccount(object):
         return accounts[0].m_dStockValue + accounts[0].m_dFundValue
 
     def buy(self, stock_code, shares, price=-1, reason='BUY'):
-        """Buy order. stock_code must have exchange suffix like '600000.SH'."""
-        _init_functions()
-        passorder(
-            23,                  # opType: buy
-            1101,                # orderType
-            self.account_id,     # account ID string
-            stock_code,          # full code with suffix
-            14,                  # prType: latest price
-            -1,                  # price: -1 for latest
-            shares,              # volume
-            reason,              # strategy name
-            1,                   # quickOrder: 1=fast
-            reason,              # userOrderId
-            self.C               # ContextInfo
+        """Buy order."""
+        _get_qmt_func()
+        from . import trading
+        trading.passorder(
+            23,
+            1101,
+            self.account_id,
+            stock_code,
+            14,
+            -1,
+            shares,
+            reason,
+            1,
+            reason,
+            self.C
         )
 
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
         """Sell order."""
-        _init_functions()
-        passorder(
-            24,                  # opType: sell
+        _get_qmt_func()
+        from . import trading
+        trading.passorder(
+            24,
             1101,
             self.account_id,
             stock_code,

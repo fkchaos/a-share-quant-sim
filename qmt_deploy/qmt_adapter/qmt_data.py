@@ -188,7 +188,6 @@ ZZ1800_STOCKS = [
     '688776.SH', '688777.SH', '688778.SH', '688779.SH', '688789.SH', '688798.SH', '688800.SH', '688819.SH', '688981.SH', '689009.SH',
 ]
 
-]
 
 # Float shares {code with suffix: float_shares}
 FLOAT_SHARES = {
@@ -1994,7 +1993,6 @@ FLOAT_SHARES = {
     '688800.SH': 287579377,
 }
 
-}
 
 # Industry map {code with suffix: industry}
 INDUSTRY_MAP = {

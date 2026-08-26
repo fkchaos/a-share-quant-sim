@@ -72,7 +72,7 @@ def load_kline(C, stock_list, days=120):
         try:
             klines = C.get_market_data_ex(
                 ['open', 'high', 'low', 'close', 'volume', 'amount'], [code], period=period, count=count,
-                subscribe=False
+                subscribe=True
             )
             if code in klines and len(klines[code]) > 0:
                 result[code] = qmt_to_our_format(klines[code], period)
@@ -87,7 +87,7 @@ def get_close_price(C, code):
     try:
         data = C.get_market_data_ex(
             ['close'], [code], period='1d', count=1,
-            subscribe=False
+            subscribe=True
         )
         if code in data and len(data[code]) > 0:
             return data[code]['close'].iloc[-1]
@@ -101,7 +101,7 @@ def get_close_prices_batch(C, stock_list):
     try:
         data = C.get_market_data_ex(
             ['close'], stock_list, period='1d', count=1,
-            subscribe=False
+            subscribe=True
         )
         result = {}
         for code in stock_list:
@@ -157,7 +157,7 @@ def get_kline_data_multi(C, stock_list, count=10):
             try:
                 klines = C.get_market_data_ex(
                     fields, [code], period=period, count=count,
-                    subscribe=False
+                    subscribe=True
                 )
                 if code in klines and len(klines[code]) > 0:
                     result[code] = klines[code]

@@ -217,7 +217,8 @@ def _select_stocks(C):
         # 5-day average turnover
         n = min(5, len(vol))
         recent_vol = vol[-n:]
-        avg_turnover = np.mean(recent_vol) / fs
+        avg_vol = np.mean(recent_vol)
+        avg_turnover = avg_vol / fs
         turnover_scores[code] = avg_turnover
 
         # Market cap (use latest close)
@@ -226,6 +227,11 @@ def _select_stocks(C):
             mcap_scores[code] = latest_close * fs
         else:
             mcap_scores[code] = float('inf')
+        # Debug: show raw data for first 5 candidates
+        if _DEBUG and len(turnover_scores) <= 5:
+            print("  [DATA] %s: price=%.2f vol_avg=%.0f float=%.0f turnover=%.4f%% mcap=%.1f" % (
+                code, latest_close, avg_vol, fs,
+                avg_turnover * 100, latest_close * fs / 1e8))
 
     if not turnover_scores:
         return []

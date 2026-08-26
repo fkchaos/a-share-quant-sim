@@ -25,9 +25,26 @@ def handlebar(ContextInfo):
 
     if bought:
         # After buy: check position cost
-        positions = ContextInfo.get_trade_detail_data(account_id, 'stock', 'POSITION')
+        # get_trade_detail_data is also a global function
+        # In backtest, accID might differ from our account_id
+        acc = getattr(ContextInfo, 'accID', account_id)
+        positions = get_trade_detail_data(acc, 'stock', 'POSITION')
+        if not positions:
+            # Try with our account_id directly
+            positions = get_trade_detail_data(account_id, 'stock', 'POSITION')
         print('[DIAG] === Position Check ===')
         print('[DIAG] Position count: %d' % len(positions))
+
+        # Also check account balance
+        acc = getattr(ContextInfo, 'accID', account_id)
+        try:
+            accounts = get_trade_detail_data(acc, 'stock', 'ACCOUNT')
+            for a in accounts:
+                print('[DIAG] Balance: %.2f  Available: %.2f' % (
+                    getattr(a, 'm_dBalance', 0), getattr(a, 'm_dAvailable', 0)))
+        except Exception as e:
+            print('[DIAG] Account query failed: %s' % str(e))
+
         for p in positions:
             code = p.m_strInstrumentID + '.' + p.m_strExchangeID
             vol = p.m_nVolume
@@ -75,10 +92,10 @@ def handlebar(ContextInfo):
     buy_price_used = price
     buy_shares = shares
 
-    # Execute buy
+    # Execute buy - passorder is a global function, not a ContextInfo method
     now = datetime.datetime.now()
     remark = 'DIAG-%s' % now.strftime('%H%M%S')
-    ContextInfo.passorder(
+    passorder(
         23,                     # opType: buy
         1101,                   # orderType: single
         account_id,

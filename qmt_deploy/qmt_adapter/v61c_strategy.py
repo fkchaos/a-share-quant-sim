@@ -114,29 +114,9 @@ def handlebar(C):
     rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
     max_holdings = 5
 
-    # Get bar date: try main chart first, fallback to first universe stock
-    _today_raw = None
-    try:
-        from .data import get_kline_data_multi
-        # Try main chart stock
-        _mk = C.stockcode + '.' + C.market
-        _tmp = get_kline_data_multi(C, [_mk], count=1)
-        if _mk in _tmp and len(_tmp[_mk]) > 0:
-            _idx = _tmp[_mk].index[-1]
-            _today_raw = str(_idx)[:10]
-    except Exception:
-        pass
-    if not _today_raw or _today_raw == '1970-01-01':
-        try:
-            # Fallback: use first stock from universe
-            _test_code = _stock_list[0] if _stock_list else '000001.SZ'
-            _tmp2 = get_kline_data_multi(C, [_test_code], count=1)
-            if _test_code in _tmp2 and len(_tmp2[_test_code]) > 0:
-                _idx2 = _tmp2[_test_code].index[-1]
-                _today_raw = str(_idx2)[:10]
-        except Exception:
-            pass
-    today = _today_raw or _get_bar_date(C)
+    today = _get_bar_date(C)
+    if _DEBUG:
+        print('[BAR] date=%s' % today)
 
     # 1. Increment hold_days
     for code in list(_hold_days.keys()):
@@ -231,23 +211,7 @@ def _select_stocks(C):
     from .qmt_data import FLOAT_SHARES
     from .data import get_kline_data_multi
 
-    _today_raw = None
-    try:
-        _mk = C.stockcode + '.' + C.market
-        _tmp = get_kline_data_multi(C, [_mk], count=1)
-        if _mk in _tmp and len(_tmp[_mk]) > 0:
-            _today_raw = str(_tmp[_mk].index[-1])[:10]
-    except Exception:
-        pass
-    if not _today_raw or _today_raw == '1970-01-01':
-        try:
-            _test_code = _stock_list[0] if _stock_list else '000001.SZ'
-            _tmp2 = get_kline_data_multi(C, [_test_code], count=1)
-            if _test_code in _tmp2 and len(_tmp2[_test_code]) > 0:
-                _today_raw = str(_tmp2[_test_code].index[-1])[:10]
-        except Exception:
-            pass
-    today = _today_raw or _get_bar_date(C)
+    today = _get_bar_date(C)
 
     # Cache kline data per day (avoid re-fetch in same day)
     global _kline_cache, _kline_cache_date

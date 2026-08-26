@@ -92,7 +92,11 @@ def execute_buy(C, account, target_weight):
         if price <= 0:
             continue
 
-        account.buy_value(code, buy_amount, price)
+        shares = int(buy_amount / price / 100) * 100
+        if shares > 0:
+            account.buy_value(code, buy_amount, price)
+        elif True:
+            print('[BUY] SKIP %s: amount=%.0f price=%.2f -> shares=0' % (code, buy_amount, price))
 
 
 def get_market_data(C, stock_list):

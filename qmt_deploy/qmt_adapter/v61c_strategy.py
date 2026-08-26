@@ -128,6 +128,11 @@ def handlebar(C):
     if slots <= 0:
         return
 
+    # Skip if already tried to buy today (no retry on same bar)
+    today = datetime.now().strftime('%Y-%m-%d')
+    if _last_buy_date == today:
+        return
+
     if _DEBUG:
         print('[V61C] %d slots available, selecting stocks...' % slots)
 
@@ -142,7 +147,7 @@ def handlebar(C):
     if not buy_list:
         return
 
-    max_pos = 0.25
+    max_pos = 0.50
     target = {}
     for code in buy_list:
         target[code] = max_pos / max_holdings
@@ -152,7 +157,9 @@ def handlebar(C):
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
+    global _last_buy_date
     qmt_runner.execute_buy(C, _account, target)
+    _last_buy_date = today
 
 
 def _select_stocks(C):
@@ -244,7 +251,7 @@ def _select_stocks(C):
     if _DEBUG:
         print('[V61C] candidates=%d, top 10:' % len(ranked))
         for code in ranked.head(10).index:
-            print('  %s score=%.4f turnover=%.4f%% mcap=%.1fÒÚ' % (
+            print('  %s score=%.4f turnover=%.4f%% mcap=%.1fï¿½ï¿½' % (
                 code, ranked[code],
                 turnover_scores.get(code, 0) * 100,
                 mcap_scores.get(code, 0) / 1e8))

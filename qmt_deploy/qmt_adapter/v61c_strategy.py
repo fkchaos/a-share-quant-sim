@@ -62,7 +62,7 @@ def init(C):
     _kline_cache_date = None
 
     if _DEBUG:
-        print('[V61C] init done. pool=%d, rebalance_days=%d' % (
+        print('[INIT][V61C] init done. pool=%d, rebalance_days=%d' % (
             len(_stock_list), REBALANCE_CONFIG.get('rebalance_days', 5)))
         print('[V61C] risk: SL=%.2f TP=%.2f HD=%d' % (
             _risk_config['stop_loss'], _risk_config['take_profit'], _risk_config['hold_days_max']))
@@ -125,7 +125,7 @@ def handlebar(C):
 
     if _DEBUG and holdings:
         for p in holdings:
-            print('[V61C] hold: %s shares=%d cost=%.2f days=%d' % (
+            print('[%s][V61C] hold: %s shares=%d cost=%.2f days=%d' % (today, 
                 p['code'], p['shares'], p['avg_cost'], _hold_days.get(p['code'], 0)))
 
     if slots <= 0:
@@ -137,7 +137,7 @@ def handlebar(C):
         return
 
     if _DEBUG:
-        print('[V61C] %d slots available, selecting stocks...' % slots)
+        print('[%s][V61C] %d slots available, selecting stocks...' % (today, slots))
 
     selected = _select_stocks(C)
     if not selected:
@@ -156,7 +156,7 @@ def handlebar(C):
         target[code] = max_pos / max_holdings
 
     if _DEBUG:
-        print('[V61C] buy targets:')
+        print('[%s][V61C] buy targets:' % today)
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 

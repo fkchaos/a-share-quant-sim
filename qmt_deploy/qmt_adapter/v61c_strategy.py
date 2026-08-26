@@ -75,7 +75,7 @@ def handlebar(C):
     4. If any slots empty -> select new stocks -> buy
     """
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list
-    global _kline_cache, _kline_cache_date, _risk_config
+    global _kline_cache, _kline_cache_date, _risk_config, _last_buy_date
 
     if _account is None:
         from .qmt_data import ZZ1800_STOCKS
@@ -157,7 +157,6 @@ def handlebar(C):
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
-    global _last_buy_date
     qmt_runner.execute_buy(C, _account, target)
     _last_buy_date = today
 

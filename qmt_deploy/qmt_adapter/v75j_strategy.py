@@ -149,7 +149,7 @@ def handlebar(C):
     from .config import REBALANCE_CONFIG
     max_holdings = 3
 
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _get_bar_date(C)
 
     # 1. Increment hold_days
     for code in list(_hold_days.keys()):
@@ -250,7 +250,7 @@ def _calc_breadth(C):
     if not _tech_codes:
         return 1.0
 
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _get_bar_date(C)
 
     # Cache kline data per day
     if _kline_cache_tech is None or _kline_cache_date != today:
@@ -296,7 +296,7 @@ def _select_stocks(C, breadth=None):
     from .data import get_kline_data_multi
 
     # Ensure kline cache has enough data (20-day avg amount needs 25 bars)
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _get_bar_date(C)
     global _kline_cache_tech, _kline_cache_date
     if _kline_cache_tech is None or _kline_cache_date != today or \
             (len(_kline_cache_tech) > 0 and len(list(_kline_cache_tech.values())[0]) < 20):

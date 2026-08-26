@@ -85,6 +85,12 @@ class QmtAccount(object):
         self.account_id = str(account)
         self.account_type = _find_account_type_from_frames()
 
+        # Detect backtest mode
+        self._is_backtest = getattr(C, 'do_back_test', False)
+        if _risk_debug:
+            print('[INIT] account=%s type=%s backtest=%s' % (
+                self.account_id, self.account_type, self._is_backtest))
+
     def _query(self, query_type):
         """Query trade details.
 
@@ -100,6 +106,9 @@ class QmtAccount(object):
             return []
         # Official API uses UPPERCASE datatype
         result = trading.get_trade_detail_data(self.account_id, self.account_type, query_type.upper())
+        if _risk_debug and query_type.upper() == 'POSITION':
+            print('[QMT] query POSITION: %d raw results (account=%s type=%s)' % (
+                len(result) if result else 0, self.account_id, self.account_type))
         return result if result else []
 
     def get_cash(self):
@@ -155,8 +164,12 @@ class QmtAccount(object):
                     })
 
         if _risk_debug:
-            print('[HOLD] get_holdings: api=%d internal=%d total=%d' % (
-                len(positions), len(self._internal_positions), len(holdings)))
+            source = 'API' if positions else 'INTERNAL'
+            print('[HOLD] get_holdings: api=%d internal=%d total=%d source=%s' % (
+                len(positions), len(self._internal_positions), len(holdings), source))
+            if holdings:
+                for h in holdings:
+                    print('  -> %s: %d shares @ %.2f' % (h['code'], h['shares'], h.get('avg_cost', 0)))
         return holdings
 
     def get_position_detail(self, stock_code):
@@ -201,6 +214,12 @@ class QmtAccount(object):
             remark,                 # userOrderId -> m_strRemark in callback
             self.C                  # ContextInfo
         )
+
+        if _risk_debug:
+            print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
+
+        if _risk_debug:
+            print('[SELL] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
 
         # Internal position tracking (for backtest)
         if stock_code in self._internal_positions:
@@ -250,6 +269,12 @@ class QmtAccount(object):
             self.C                  # ContextInfo
         )
 
+        if _risk_debug:
+            print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
+
+        if _risk_debug:
+            print('[SELL] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
+
         # Internal position tracking (for backtest)
         if stock_code in self._internal_positions:
             self._internal_positions[stock_code]['shares'] -= shares
@@ -277,7 +302,8 @@ class QmtAccount(object):
         if shares > 0:
             return self.buy(stock_code, shares, price, reason)
         if _risk_debug:
-            print("[BUY] SKIP %s: amount=%.0f price=%.2f -> shares=0" % (stock_code, target_value, price))
+            print("[BUY] SKIP %s: amount=%.0f price=%.2f -> lots=%d (need >=1)" % (
+                stock_code, target_value, price, shares))
         return None
 
 
@@ -304,8 +330,8 @@ def order_callback(ContextInfo, orderInfo):
     traded = getattr(orderInfo, 'm_nVolumeTraded', 0)
     status = getattr(orderInfo, 'm_nOrderStatus', -1)
 
-    if _risk_debug:
-        print('[ORDER] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
+    # Callbacks only fire in live mode (not backtest)
+    print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
 
 
 def deal_callback(ContextInfo, dealInfo):
@@ -331,7 +357,7 @@ def deal_callback(ContextInfo, dealInfo):
     amount = getattr(dealInfo, 'm_dTradeAmount', 0)
     direction = getattr(dealInfo, 'm_nOffsetFlag', 0)
 
-    if _risk_debug:
-        dir_str = 'BUY' if direction == 48 else 'SELL'
-        print('[DEAL] %s %s %s %d¹É @ %.2f = %.0fÔª remark=%s' % (
-            code, name, dir_str, vol, price, amount, remark))
+    # Callbacks only fire in live mode (not backtest)
+    dir_str = 'BUY' if direction == 48 else 'SELL'
+    print('[DEAL_CB] %s %s %s %d shares @ %.2f = %.0f CNY remark=%s' % (
+        code, name, dir_str, vol, price, amount, remark))

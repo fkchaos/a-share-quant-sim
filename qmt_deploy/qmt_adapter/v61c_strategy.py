@@ -129,7 +129,7 @@ def handlebar(C):
         _stock_list = _stock_pool
         _account = QmtAccount(C)
         _risk_config = V61C_RISK_CONFIG
-    _sell_out_of = SELL_OUT_OF_CONFIG.get('sell_out_of', 15)
+        _sell_out_of = SELL_OUT_OF_CONFIG.get('sell_out_of', 15)
         _kline_cache = None
         _kline_cache_date = None
 

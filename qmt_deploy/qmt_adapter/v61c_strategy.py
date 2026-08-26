@@ -55,7 +55,7 @@ def init(C):
     _account = QmtAccount(C)
     _hold_days = {}
     _last_trade_date = None
-_last_buy_date = None
+    _last_buy_date = None
     _today_buys = 0
     _risk_config = V61C_RISK_CONFIG
     _kline_cache = None

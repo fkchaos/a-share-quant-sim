@@ -83,10 +83,9 @@ def load_kline(C, stock_list, days=120):
 
 
 def get_close_price(C, code, bar_date=''):
-    """Get close price for a stock. Subscribe first, then read local data with end_time."""
+    """Get close price for a stock (official way: subscribe=True + end_time)."""
     try:
-        C.subscribe_quote(code, period='1d', count=1)
-        kwargs = {'field_list': ['close'], 'stock_list': [code], 'period': '1d', 'count': 1, 'subscribe': False}
+        kwargs = {'field_list': ['close'], 'stock_list': [code], 'period': '1d', 'count': 1}
         if bar_date:
             kwargs['end_time'] = bar_date
         data = C.get_market_data_ex(**kwargs)
@@ -98,14 +97,9 @@ def get_close_price(C, code, bar_date=''):
 
 
 def get_close_prices_batch(C, stock_list, bar_date=''):
-    """Get close prices for multiple stocks. Subscribe first, then read local data."""
+    """Get close prices for multiple stocks (official way: subscribe=True + end_time)."""
     try:
-        for code in stock_list:
-            try:
-                C.subscribe_quote(code, period='1d', count=1)
-            except Exception:
-                pass
-        kwargs = {'field_list': ['close'], 'stock_list': stock_list, 'period': '1d', 'count': 1, 'subscribe': False}
+        kwargs = {'field_list': ['close'], 'stock_list': stock_list, 'period': '1d', 'count': 1}
         if bar_date:
             kwargs['end_time'] = bar_date
         data = C.get_market_data_ex(**kwargs)

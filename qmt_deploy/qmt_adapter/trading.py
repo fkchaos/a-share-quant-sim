@@ -68,27 +68,46 @@ class QmtAccount(object):
         """Query trade details."""
         _get_qmt_func()
         from . import trading
-        return trading.get_trade_detail_data(self.account_id, self.account_type, query_type)
+        has_func = hasattr(trading, 'get_trade_detail_data') and trading.get_trade_detail_data is not None
+        if not has_func:
+            print('[QMT] WARNING: get_trade_detail_data not available!')
+            return []
+        result = trading.get_trade_detail_data(self.account_id, self.account_type, query_type)
+        if query_type == 'stockpositions':
+            print('[QMT] query stockpositions: %d results, account=%s type=%s' % (len(result) if result else 0, self.account_id, self.account_type))
+            if result:
+                for p in result[:3]:
+                    print('[QMT]   pos: code=%s vol=%s canUse=%s cost=%s' % (
+                        getattr(p, 'm_strStockCode', '?'),
+                        getattr(p, 'm_nVolume', '?'),
+                        getattr(p, 'm_nCanUseVolume', '?'),
+                        getattr(p, 'm_dSettlementPrice', '?')))
+        return result
 
     def get_cash(self):
         """Get available cash."""
         accounts = self._query("account")
         if not accounts:
+            print('[QMT] WARNING: get_cash returned 0 accounts')
             return 0
-        return accounts[0].m_dAvailable
+        cash = accounts[0].m_dAvailable
+        print('[QMT] get_cash: %.2f (account=%s)' % (cash, self.account_id))
+        return cash
 
     def get_holdings(self):
         """Get current holdings as list of dicts."""
         positions = self._query("stockpositions")
         holdings = []
         for p in positions:
-            if p.m_nVolume > 0:
+            vol = getattr(p, 'm_nVolume', 0)
+            if vol > 0:
                 holdings.append({
-                    'code': p.m_strStockCode,
-                    'shares': p.m_nVolume,
-                    'available': p.m_nCanUseVolume,
-                    'avg_cost': p.m_dSettlementPrice
+                    'code': getattr(p, 'm_strStockCode', '?'),
+                    'shares': vol,
+                    'available': getattr(p, 'm_nCanUseVolume', 0),
+                    'avg_cost': getattr(p, 'm_dSettlementPrice', 0)
                 })
+        print('[HOLD] get_holdings: raw=%d filtered=%d' % (len(positions) if positions else 0, len(holdings)))
         return holdings
 
     def get_position_detail(self, stock_code):

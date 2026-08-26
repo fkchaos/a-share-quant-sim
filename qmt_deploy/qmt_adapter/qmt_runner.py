@@ -1,3 +1,4 @@
+# QMT_RUNNER v2 - set_risk_debug added
 #coding:gbk
 """
 qmt_runner.py - QMT Common Runner

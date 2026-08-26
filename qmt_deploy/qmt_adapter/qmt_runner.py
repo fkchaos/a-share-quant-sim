@@ -96,19 +96,23 @@ def execute_buy(C, account, target_weight):
         buy_amount = total_value * weight
         buy_amount = min(buy_amount, available * 0.95)
 
-        if buy_amount < 5000:
-            continue
-
         from .data import get_close_price
         price = get_close_price(C, code)
+        lots = int(buy_amount / price / 100) if price > 0 else 0
+        print('[BUY] %s: amount=%.0f price=%.2f lots=%d (need >=1)' % (code, buy_amount, price, lots))
+
+        if buy_amount < 5000:
+            print('[BUY] SKIP %s: amount < 5000' % code)
+            continue
         if price <= 0:
+            print('[BUY] SKIP %s: price <= 0' % code)
+            continue
+        if lots < 1:
+            print('[BUY] SKIP %s: cannot afford 1 lot' % code)
             continue
 
-        shares = int(buy_amount / price / 100) * 100
-        if shares > 0:
-            account.buy_value(code, buy_amount, price)
-        elif True:
-            print('[BUY] SKIP %s: amount=%.0f price=%.2f -> shares=0' % (code, buy_amount, price))
+        account.buy_value(code, buy_amount, price)
+        print('[BUY] EXECUTED %s: %.0f CNY -> %d lots' % (code, buy_amount, lots))
 
 
 def get_market_data(C, stock_list):

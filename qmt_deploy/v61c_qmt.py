@@ -11,9 +11,11 @@ from qmt_adapter.v61c_strategy import (
     handlebar as _handlebar,
     set_debug as _set_debug,
 )
+from qmt_adapter.qmt_runner import set_risk_debug as _set_risk_debug
 
 def init(C):
     _set_debug(DEBUG)
+    _set_risk_debug(DEBUG)
     _init(C)
 
 def handlebar(C):

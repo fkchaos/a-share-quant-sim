@@ -8,6 +8,11 @@ Strategy files only need to implement stock selection logic.
 import sys
 
 _qmt_initialized = False
+_risk_debug = False
+
+def set_risk_debug(flag):
+    global _risk_debug
+    _risk_debug = flag
 
 
 def qmt_init(C):
@@ -38,6 +43,8 @@ def check_risk(C, account, holding_days, risk_config=None):
     hd = risk_config['hold_days_max']
 
     positions = account.get_holdings()  # returns list
+    if _risk_debug:
+        print('[RISK] check_risk: %d holdings' % len(positions))
 
     for p in positions:
         code = p['code']
@@ -54,6 +61,10 @@ def check_risk(C, account, holding_days, risk_config=None):
             continue
 
         pnl = (cur_price - cost_price) / cost_price
+        if _risk_debug:
+            print('[RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) -> %s' % (
+                code, cost_price, cur_price, pnl*100, sl*100, tp*100, hold_days, hd,
+            'SELL' if (pnl < sl or pnl > tp or hold_days >= hd) else 'HOLD'))
 
         if pnl < sl:
             account.sell_all(code)

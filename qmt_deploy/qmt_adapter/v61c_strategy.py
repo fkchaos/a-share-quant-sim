@@ -37,6 +37,19 @@ _kline_cache_date = None
 _risk_config = None
 
 
+def _get_bar_date(C):
+    """Get current bar date from K-line data. NEVER use datetime.now()."""
+    from .data import get_kline_data_multi
+    try:
+        _mk = C.stockcode + '.' + C.market
+        _tmp = get_kline_data_multi(C, [_mk], count=1)
+        if _mk in _tmp and len(_tmp[_mk]) > 0:
+            return str(_tmp[_mk].index[-1])[:10]
+    except Exception:
+        pass
+    return 'unknown'
+
+
 def init(C):
     """Init strategy."""
     global _stock_pool, _stock_list, _account, _last_buy_date

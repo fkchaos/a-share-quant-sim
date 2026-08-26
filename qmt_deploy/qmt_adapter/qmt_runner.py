@@ -92,7 +92,7 @@ def execute_buy(C, account, target_weight):
         if price <= 0:
             continue
 
-        account.buy(code, buy_amount, price)
+        account.buy_value(code, buy_amount, price)
 
 
 def get_market_data(C, stock_list):

@@ -133,7 +133,7 @@ def is_rebalance_day(C, rebalance_days):
     if not account_id:
         return True
 
-    trades = get_trade_detail_data(account_id, account_type, "stockorders")
+    trades = get_trade_detail_data(account_id, account_type, "order")
 
     if not trades:
         return True

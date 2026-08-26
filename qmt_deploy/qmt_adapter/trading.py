@@ -73,8 +73,8 @@ class QmtAccount(object):
             print('[QMT] WARNING: get_trade_detail_data not available!')
             return []
         result = trading.get_trade_detail_data(self.account_id, self.account_type, query_type)
-        if query_type == 'stockpositions':
-            print('[QMT] query stockpositions: %d results, account=%s type=%s' % (len(result) if result else 0, self.account_id, self.account_type))
+        if query_type == 'position':
+            print('[QMT] query position: %d results, account=%s type=%s' % (len(result) if result else 0, self.account_id, self.account_type))
             if result:
                 for p in result[:3]:
                     print('[QMT]   pos: code=%s vol=%s canUse=%s cost=%s' % (
@@ -96,7 +96,7 @@ class QmtAccount(object):
 
     def get_holdings(self):
         """Get current holdings as list of dicts."""
-        positions = self._query("stockpositions")
+        positions = self._query("position")
         holdings = []
         for p in positions:
             vol = getattr(p, 'm_nVolume', 0)
@@ -112,7 +112,7 @@ class QmtAccount(object):
 
     def get_position_detail(self, stock_code):
         """Get position detail for a specific stock."""
-        positions = self._query("stockpositions")
+        positions = self._query("position")
         for p in positions:
             if p.m_strStockCode == stock_code and p.m_nVolume > 0:
                 return {

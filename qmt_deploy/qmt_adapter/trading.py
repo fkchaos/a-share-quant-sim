@@ -138,10 +138,22 @@ class QmtAccount(object):
         """
         positions = self._query("POSITION")
 
-        # Internal tracking first (correct buy prices from our records)
+        # Try QMT API first
         holdings = []
-        internal_codes = set()
-        if self._internal_positions:
+        for p in positions:
+            vol = getattr(p, 'm_nVolume', 0)
+            if vol > 0:
+                code = getattr(p, 'm_strInstrumentID', '') + '.' + getattr(p, 'm_strExchangeID', '')
+                holdings.append({
+                    'code': code,
+                    'shares': vol,
+                    'available': getattr(p, 'm_nCanUseVolume', 0),
+                    'avg_cost': getattr(p, 'm_dOpenPrice', 0),
+                    'name': getattr(p, 'm_strInstrumentName', ''),
+                })
+
+        # Fallback to internal tracking (for backtest where POSITION returns empty)
+        if not holdings and self._internal_positions:
             for code, pos in self._internal_positions.items():
                 if pos['shares'] > 0:
                     holdings.append({
@@ -149,21 +161,6 @@ class QmtAccount(object):
                         'shares': pos['shares'],
                         'avg_cost': pos['cost'],
                         'name': pos.get('name', ''),
-                    })
-                    internal_codes.add(code)
-
-        # Supplement with API positions we don't track internally
-        for p in positions:
-            vol = getattr(p, 'm_nVolume', 0)
-            if vol > 0:
-                code = getattr(p, 'm_strInstrumentID', '') + '.' + getattr(p, 'm_strExchangeID', '')
-                if code not in internal_codes:
-                    holdings.append({
-                        'code': code,
-                        'shares': vol,
-                        'available': getattr(p, 'm_nCanUseVolume', 0),
-                        'avg_cost': getattr(p, 'm_dOpenPrice', 0),
-                        'name': getattr(p, 'm_strInstrumentName', ''),
                     })
 
         if _risk_debug:

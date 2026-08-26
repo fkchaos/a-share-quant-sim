@@ -25,7 +25,7 @@ def set_debug(flag):
 
 
 # Tech sector names in QMT instrument detail
-TECH_SECTORS = ['ç”µå­', 'è®¡ç®—æœº', 'é€šä¿¡', 'ä¼ åª’']
+TECH_SECTORS = ['µç×Ó', '¼ÆËã»ú', 'Í¨ĞÅ', '´«Ã½']
 
 # Module-level globals
 _stock_pool = None

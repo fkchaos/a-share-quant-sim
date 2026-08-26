@@ -108,7 +108,7 @@ def init(C):
     try:
         from qmt_adapter.qmt_data import ZZ1800_STOCKS
         tech_count = 0
-        tech_sectors = ['ç”µå­', 'è®¡ç®—æœº', 'é€šä¿¡', 'ä¼ åª’']
+        tech_sectors = ['µç×Ó', '¼ÆËã»ú', 'Í¨ĞÅ', '´«Ã½']
         for code in ZZ1800_STOCKS[:200]:  # scan first 200 for speed
             try:
                 d = C.get_instrument_detail(code)

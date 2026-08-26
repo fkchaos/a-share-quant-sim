@@ -244,7 +244,7 @@ def _select_stocks(C):
     if _DEBUG:
         print('[V61C] candidates=%d, top 10:' % len(ranked))
         for code in ranked.head(10).index:
-            print('  %s score=%.4f turnover=%.4f%% mcap=%.1fäº¿' % (
+            print('  %s score=%.4f turnover=%.4f%% mcap=%.1fÒÚ' % (
                 code, ranked[code],
                 turnover_scores.get(code, 0) * 100,
                 mcap_scores.get(code, 0) / 1e8))

@@ -1,139 +1,96 @@
 #coding:gbk
 """
-qmt_diagnostic.py - QMT Environment Diagnostic Strategy
+QMT Cost Price Diagnostic Strategy
 
-NOT a real trading strategy. Run this first to verify QMT environment.
-Tests: API calls, data access, account, industry mapping, breadth calc.
+Experiment: Buy 1 stock, check m_dOpenPrice vs expected price.
+Run on FRESH SIMTEST account (reset before testing).
 
-Usage: Load this file in QMT as a strategy and run backtest (1 day).
+Purpose: Verify how QMT calculates m_dOpenPrice for prType=14.
 """
-from datetime import datetime
+import datetime
 
-_results = []
+account_id = 'SIMTEST'
+bought = False
+buy_price_used = 0
+buy_shares = 0
 
-def _log(tag, msg, ok=True):
-    prefix = '[OK]' if ok else '[FAIL]'
-    line = '%s %s: %s' % (prefix, tag, msg)
-    print(line)
-    _results.append((tag, ok, msg))
+def init(ContextInfo):
+    print('[DIAG] === QMT Cost Price Diagnostic ===')
+    print('[DIAG] Purpose: verify m_dOpenPrice calculation')
+    print('[DIAG] Account: %s' % account_id)
+    print('[DIAG] Waiting for first bar to buy...')
 
+def handlebar(ContextInfo):
+    global bought, buy_price_used, buy_shares
 
-def init(C):
-    """Run all diagnostic checks."""
-    global _results
-    _results = []
+    if bought:
+        # After buy: check position cost
+        positions = ContextInfo.get_trade_detail_data(account_id, 'stock', 'POSITION')
+        print('[DIAG] === Position Check ===')
+        print('[DIAG] Position count: %d' % len(positions))
+        for p in positions:
+            code = p.m_strInstrumentID + '.' + p.m_strExchangeID
+            vol = p.m_nVolume
+            open_price = p.m_dOpenPrice
+            settlement = p.m_dSettlementPrice
+            profit = p.m_dPositionProfit
+            print('[DIAG] %s:' % code)
+            print('[DIAG]   m_dOpenPrice    = %.4f (QMT cost)' % open_price)
+            print('[DIAG]   m_dSettlement   = %.4f' % settlement)
+            print('[DIAG]   m_nVolume       = %d' % vol)
+            print('[DIAG]   m_dPositionPnL  = %.4f' % profit)
+            print('[DIAG]   Our buy price   = %.4f' % buy_price_used)
+            print('[DIAG]   Price diff      = %.4f (%.2f%%)' % (
+                open_price - buy_price_used,
+                (open_price - buy_price_used) / buy_price_used * 100 if buy_price_used > 0 else 0))
+        return
 
-    print('=' * 60)
-    print('QMT Diagnostic - %s' % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    print('=' * 60)
+    # First bar: buy 1 stock
+    code = '600584.SH'  # Pick a known stock
+    print('[DIAG] === Attempting Buy ===')
+    print('[DIAG] Stock: %s' % code)
 
-    # --- 1. QMT built-in functions ---
-    import sys
-    frame = sys._getframe(0)
-    has_gtd = 'get_trade_detail_data' in frame.f_globals
-    has_po = 'passorder' in frame.f_globals
-    _log('API', 'get_trade_detail_data available', has_gtd)
-    _log('API', 'passorder available', has_po)
-
-    # --- 2. get_market_data_ex ---
-    test_code = '000001.SZ'
-    try:
-        data = C.get_market_data_ex(
-            ['open', 'high', 'low', 'close', 'volume', 'amount'],
-            [test_code], period='1d', count=5, subscribe=False
-        )
-        if test_code in data and len(data[test_code]) > 0:
-            df = data[test_code]
-            last_close = df['close'].iloc[-1]
-            _log('DATA', 'get_market_data_ex OK, %s close=%.2f' % (test_code, last_close))
-        else:
-            _log('DATA', 'get_market_data_ex returned empty for %s' % test_code, False)
-    except Exception as e:
-        _log('DATA', 'get_market_data_ex error: %s' % e, False)
-
-    # --- 3. Batch data fetch ---
-    test_batch = ['000001.SZ', '600519.SH', '000858.SZ']
-    try:
-        data = C.get_market_data_ex(
-            ['close'], test_batch, period='1d', count=1, subscribe=False
-        )
-        got = len([c for c in test_batch if c in data and len(data[c]) > 0])
-        _log('DATA', 'batch fetch: %d/%d stocks returned data' % (got, len(test_batch)), got == len(test_batch))
-    except Exception as e:
-        _log('DATA', 'batch fetch error: %s' % e, False)
-
-    # --- 4. get_instrument_detail ---
-    try:
-        detail = C.get_instrument_detail(test_code)
-        if detail:
-            name = detail.get('InstrumentName', 'N/A')
-            industry = detail.get('IndustryClassification', 'N/A')
-            _log('INST', '%s name=%s industry=%s' % (test_code, name, industry))
-        else:
-            _log('INST', 'get_instrument_detail returned None', False)
-    except Exception as e:
-        _log('INST', 'get_instrument_detail error: %s' % e, False)
-
-    # --- 5. Float shares (QMT) ---
-    try:
-        detail = C.get_instrument_detail(test_code)
-        if detail:
-            fs = detail.get('FloatVolume', 0)
-            _log('INST', 'FloatVolume of %s = %s' % (test_code, fs), fs > 0)
-        else:
-            _log('INST', 'Cannot get FloatVolume (no detail)', False)
-    except Exception as e:
-        _log('INST', 'FloatVolume error: %s' % e, False)
-
-    # --- 6. ZZ1800 pool ---
-    try:
-        from qmt_adapter.qmt_data import ZZ1800_STOCKS
-        _log('POOL', 'ZZ1800 has %d stocks' % len(ZZ1800_STOCKS), len(ZZ1800_STOCKS) > 100)
-    except Exception as e:
-        _log('POOL', 'ZZ1800 load error: %s' % e, False)
-
-    # --- 7. Account info ---
-    try:
-        from qmt_adapter.trading import QmtAccount
-        acct = QmtAccount(C)
-        cash = acct.get_cash()
-        holdings = acct.get_holdings()
-        total = acct.get_total_value()
-        _log('ACCT', 'account_id=%s cash=%.0f holdings=%d total=%.0f' % (
-            acct.account_id, cash, len(holdings), total))
-    except Exception as e:
-        _log('ACCT', 'Account error: %s' % e, False)
-
-    # --- 8. Tech industry scan (v75j) ---
-    try:
-        from qmt_adapter.qmt_data import ZZ1800_STOCKS
-        tech_count = 0
-        tech_sectors = ['电子', '计算机', '通信', '传媒']
-        for code in ZZ1800_STOCKS[:200]:  # scan first 200 for speed
-            try:
-                d = C.get_instrument_detail(code)
-                if d and d.get('IndustryClassification', '') in tech_sectors:
-                    tech_count += 1
-            except Exception:
-                pass
-        _log('TECH', 'found %d tech stocks in first 200 (est. %d total)' % (
-            tech_count, int(tech_count * len(ZZ1800_STOCKS) / 200)))
-    except Exception as e:
-        _log('TECH', 'Tech scan error: %s' % e, False)
-
-    # --- Summary ---
-    print('')
-    print('=' * 60)
-    passed = sum(1 for _, ok, _ in _results if ok)
-    total = len(_results)
-    print('DIAGNOSTIC RESULT: %d/%d passed' % (passed, total))
-    if passed == total:
-        print('All checks passed. QMT environment is ready.')
+    # Get current price
+    data = ContextInfo.get_market_data_ex(['close', 'volume', 'amount'], [code], count=1)
+    if code in data and len(data[code]) > 0:
+        df = data[code]
+        price = df['close'].iloc[-1]
+        vol = df['volume'].iloc[-1]
+        print('[DIAG] Current price: %.2f' % price)
+        print('[DIAG] Current volume: %.0f' % vol)
     else:
-        print('Some checks failed. See [FAIL] items above.')
-    print('=' * 60)
+        print('[DIAG] ERROR: cannot get price for %s' % code)
+        return
 
+    # Calculate shares (10% position = 10000 CNY)
+    target_value = 10000
+    shares = int(target_value / price / 100) * 100
+    if shares <= 0:
+        print('[DIAG] ERROR: cannot afford 1 lot at %.2f' % price)
+        return
 
-def handlebar(C):
-    """Nothing to do - all checks run in init."""
-    pass
+    print('[DIAG] Buy: %d shares at ~%.2f (target value=%.0f)' % (shares, price, target_value))
+
+    # Record our expected price
+    buy_price_used = price
+    buy_shares = shares
+
+    # Execute buy
+    now = datetime.datetime.now()
+    remark = 'DIAG-%s' % now.strftime('%H%M%S')
+    ContextInfo.passorder(
+        23,                     # opType: buy
+        1101,                   # orderType: single
+        account_id,
+        code,
+        14,                     # prType: counterparty
+        -1,                     # price: -1 for prType=14
+        shares,
+        'DIAG',
+        1,                      # quickTrade
+        remark,
+        ContextInfo
+    )
+    print('[DIAG] passorder sent, remark=%s' % remark)
+    print('[DIAG] Waiting for execution...')
+    bought = True

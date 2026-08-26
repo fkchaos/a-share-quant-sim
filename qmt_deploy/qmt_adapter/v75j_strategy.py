@@ -71,7 +71,7 @@ def init(C):
     # Build industry map at init
     _build_industry_map(C)
 
-    if DEBUG:
+    if _DEBUG:
         print('[V75J] init done. pool=%d, tech=%d, rebalance_days=%d' % (
             len(_stock_list), len(_tech_codes) if _tech_codes else 0, _rebalance_days))
         print('[V75J] risk: SL=%.2f TP=%.2f HD=%d' % (
@@ -148,7 +148,7 @@ def handlebar(C):
         code = p['code']
         days = _hold_days.get(code, 0)
         if days >= _rebalance_days:
-            if DEBUG:
+            if _DEBUG:
                 print('[V75J] time exit: %s days=%d >= %d -> SELL' % (code, days, _rebalance_days))
             _account.sell_all(code)
             _hold_days.pop(code, None)
@@ -158,7 +158,7 @@ def handlebar(C):
     current_count = len([p for p in holdings if p['shares'] > 0])
     slots = max_holdings - current_count
 
-    if DEBUG and holdings:
+    if _DEBUG and holdings:
         for p in holdings:
             print('[V75J] hold: %s shares=%d cost=%.2f days=%d' % (
                 p['code'], p['shares'], p['avg_cost'], _hold_days.get(p['code'], 0)))
@@ -172,7 +172,7 @@ def handlebar(C):
     low_thresh = 0.30
 
     if breadth < low_thresh:
-        if DEBUG:
+        if _DEBUG:
             print('[V75J] breadth %.4f < %.2f -> SKIP (no buy)' % (breadth, low_thresh))
         return
 
@@ -180,11 +180,11 @@ def handlebar(C):
     if breadth < high_thresh:
         scaled_slots = max(1, int(max_holdings * breadth / high_thresh))
         slots = min(slots, scaled_slots)
-        if DEBUG:
+        if _DEBUG:
             print('[V75J] breadth %.4f in [%.2f, %.2f) -> scale to %d slots' % (
                 breadth, low_thresh, high_thresh, slots))
 
-    if DEBUG:
+    if _DEBUG:
         print('[V75J] %d slots available, selecting stocks...' % slots)
 
     selected = _select_stocks(C, breadth)
@@ -203,7 +203,7 @@ def handlebar(C):
     for code in buy_list:
         target[code] = max_pos / max_holdings
 
-    if DEBUG:
+    if _DEBUG:
         print('[V75J] buy targets:')
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
@@ -306,7 +306,7 @@ def _select_stocks(C, breadth=None):
     # Sort by avg amount descending (more liquid first)
     scored.sort(key=lambda x: x[1], reverse=True)
 
-    if DEBUG:
+    if _DEBUG:
         print('[V75J] liquidity candidates=%d, top 10:' % len(scored))
         for code, amt in scored[:10]:
             print('  %s avg_amount=%.0f' % (code, amt))

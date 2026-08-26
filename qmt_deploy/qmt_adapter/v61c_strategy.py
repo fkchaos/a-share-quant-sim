@@ -58,7 +58,7 @@ def init(C):
     _kline_cache = None
     _kline_cache_date = None
 
-    if DEBUG:
+    if _DEBUG:
         print('[V61C] init done. pool=%d, rebalance_days=%d' % (
             len(_stock_list), REBALANCE_CONFIG.get('rebalance_days', 5)))
         print('[V61C] risk: SL=%.2f TP=%.2f HD=%d' % (
@@ -110,7 +110,7 @@ def handlebar(C):
         code = p['code']
         days = _hold_days.get(code, 0)
         if days >= rebalance_days:
-            if DEBUG:
+            if _DEBUG:
                 print('[V61C] time exit: %s days=%d >= %d -> SELL' % (code, days, rebalance_days))
             _account.sell_all(code)
             _hold_days.pop(code, None)
@@ -120,7 +120,7 @@ def handlebar(C):
     current_count = len([p for p in holdings if p['shares'] > 0])
     slots = max_holdings - current_count
 
-    if DEBUG and holdings:
+    if _DEBUG and holdings:
         for p in holdings:
             print('[V61C] hold: %s shares=%d cost=%.2f days=%d' % (
                 p['code'], p['shares'], p['avg_cost'], _hold_days.get(p['code'], 0)))
@@ -128,7 +128,7 @@ def handlebar(C):
     if slots <= 0:
         return
 
-    if DEBUG:
+    if _DEBUG:
         print('[V61C] %d slots available, selecting stocks...' % slots)
 
     selected = _select_stocks(C)
@@ -147,7 +147,7 @@ def handlebar(C):
     for code in buy_list:
         target[code] = max_pos / max_holdings
 
-    if DEBUG:
+    if _DEBUG:
         print('[V61C] buy targets:')
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))

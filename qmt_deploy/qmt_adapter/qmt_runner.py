@@ -34,16 +34,16 @@ def qmt_init(C):
 
 
 def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
-    """Common risk control: stop loss / take profit / max hold days.
-    risk_config: optional override, defaults to RISK_CONFIG."""
+    """Common risk control. Returns list of sold codes."""
     if risk_config is None:
         from .config import RISK_CONFIG
         risk_config = RISK_CONFIG
     sl = risk_config['stop_loss']
     tp = risk_config['take_profit']
     hd = risk_config['hold_days_max']
+    sold = []
 
-    positions = account.get_holdings()  # returns list
+    positions = account.get_holdings()
     if _risk_debug:
         print('[%s][RISK] check_risk: %d holdings' % (bar_date or '??', len(positions)))
 
@@ -69,23 +69,29 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
 
         if pnl < sl:
             account.sell_all(code)
+            sold.append(code)
             continue
 
         if pnl > tp:
             account.sell_all(code)
+            sold.append(code)
             continue
 
         if hold_days >= hd:
             account.sell_all(code)
+            sold.append(code)
+
+    return sold
 
 
 def execute_buy(C, account, target_weight):
-    """Common buy execution."""
+    """Common buy execution. Returns list of actually bought codes."""
     from .config import MARKET_CONFIG
+    bought = []
 
     available = account.get_cash()
     if available < 10000:
-        return
+        return bought
 
     # Use available cash as base if total value unavailable (backtest init)
     total_value = account.get_total_value()
@@ -113,6 +119,9 @@ def execute_buy(C, account, target_weight):
 
         account.buy_value(code, buy_amount, price)
         print('[BUY] EXECUTED %s: %.0f CNY -> %d lots' % (code, buy_amount, lots))
+        bought.append(code)
+
+    return bought
 
 
 def get_market_data(C, stock_list):

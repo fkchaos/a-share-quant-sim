@@ -28,8 +28,10 @@ _stock_list = None
 _account = None
 _hold_days = {}
 _last_trade_date = None
+_last_buy_date = None
 _today_buys = 0
 _last_trade_date = None
+_last_buy_date = None
 _kline_cache = None
 _kline_cache_date = None
 _risk_config = None
@@ -37,7 +39,7 @@ _risk_config = None
 
 def init(C):
     """Init strategy."""
-    global _stock_pool, _stock_list, _account
+    global _stock_pool, _stock_list, _account, _last_buy_date
     global _hold_days, _last_trade_date, _today_buys
     global _kline_cache, _kline_cache_date, _risk_config
 
@@ -53,6 +55,7 @@ def init(C):
     _account = QmtAccount(C)
     _hold_days = {}
     _last_trade_date = None
+_last_buy_date = None
     _today_buys = 0
     _risk_config = V61C_RISK_CONFIG
     _kline_cache = None

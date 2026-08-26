@@ -24,15 +24,19 @@ def handlebar(ContextInfo):
     global bought, buy_price_used, buy_shares
 
     if bought:
-        # After buy: check position cost
-        # get_trade_detail_data is also a global function
-        # In backtest, accID might differ from our account_id
+        # After buy: check position cost + current price
         acc = getattr(ContextInfo, 'accID', account_id)
         positions = get_trade_detail_data(acc, 'stock', 'POSITION')
         if not positions:
-            # Try with our account_id directly
             positions = get_trade_detail_data(account_id, 'stock', 'POSITION')
-        print('[DIAG] === Position Check ===')
+
+        # Get current bar close price
+        data = ContextInfo.get_market_data_ex(['close'], ['600584.SH'], count=1)
+        cur_close = 0
+        if '600584.SH' in data and len(data['600584.SH']) > 0:
+            cur_close = data['600584.SH']['close'].iloc[-1]
+        print('[DIAG] --- Position Check ---')
+        print('[DIAG] Close price: %.4f' % cur_close)
         print('[DIAG] Position count: %d' % len(positions))
 
         # Also check account balance
@@ -57,6 +61,7 @@ def handlebar(ContextInfo):
             print('[DIAG]   m_nVolume       = %d' % vol)
             print('[DIAG]   m_dPositionPnL  = %.4f' % profit)
             print('[DIAG]   Our buy price   = %.4f' % buy_price_used)
+            print('[DIAG]   Cur close price = %.4f' % cur_close)
             print('[DIAG]   Price diff      = %.4f (%.2f%%)' % (
                 open_price - buy_price_used,
                 (open_price - buy_price_used) / buy_price_used * 100 if buy_price_used > 0 else 0))

@@ -114,7 +114,13 @@ def handlebar(C):
     rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
     max_holdings = 5
 
-    today = datetime.now().strftime('%Y-%m-%d')
+    # Get bar date from ContextInfo (not datetime.now() which returns system time in backtest)
+    try:
+        from .data import get_kline_data_multi
+        _tmp = get_kline_data_multi(C, [C.stockcode + '.' + C.market], count=1)
+        today = str(_tmp[C.stockcode + '.' + C.market].index[-1])[:10]
+    except Exception:
+        today = datetime.now().strftime('%Y-%m-%d')
 
     # 1. Increment hold_days
     for code in list(_hold_days.keys()):
@@ -163,7 +169,7 @@ def handlebar(C):
         return
 
     # Skip if already tried to buy today (no retry on same bar)
-    today = datetime.now().strftime('%Y-%m-%d')
+    # Note: use bar_date from context, not datetime.now() which returns system time in backtest
     if _last_buy_date == today:
         return
 
@@ -207,7 +213,12 @@ def _select_stocks(C):
     from .qmt_data import FLOAT_SHARES
     from .data import get_kline_data_multi
 
-    today = datetime.now().strftime('%Y-%m-%d')
+    try:
+        from .data import get_kline_data_multi
+        _tmp = get_kline_data_multi(C, [C.stockcode + '.' + C.market], count=1)
+        today = str(_tmp[C.stockcode + '.' + C.market].index[-1])[:10]
+    except Exception:
+        today = datetime.now().strftime('%Y-%m-%d')
 
     # Cache kline data per day (avoid re-fetch in same day)
     global _kline_cache, _kline_cache_date
@@ -296,5 +307,17 @@ def _select_stocks(C):
                 code, ranked[code],
                 turnover_scores.get(code, 0) * 100,
                 mcap_scores.get(code, 0) / 1e8))
+        # Show turnover distribution
+        all_turns = sorted(turnover_scores.values())
+        n = len(all_turns)
+        if n > 0:
+            print('[V61C] turnover distribution: min=%.4f%% p25=%.4f%% median=%.4f%% p75=%.4f%% max=%.4f%%' % (
+                all_turns[0]*100, all_turns[n//4]*100, all_turns[n//2]*100,
+                all_turns[3*n//4]*100, all_turns[-1]*100))
+            # Show where selected stocks fall
+            for code in ranked.head(5).index:
+                t = turnover_scores.get(code, 0)
+                rank_pct = sum(1 for v in all_turns if v <= t) / n * 100
+                print('  %s: turnover=%.4f%% -> percentile=%.0f%%' % (code, t*100, rank_pct))
 
     return ranked.index.tolist()

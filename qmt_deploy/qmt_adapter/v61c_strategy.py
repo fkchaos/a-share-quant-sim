@@ -60,13 +60,13 @@ def _get_bar_date(C):
 
 def init(C):
     """Init strategy."""
-    global _stock_pool, _stock_list, _account, _last_buy_date
+    global _stock_pool, _stock_list, _account, _last_buy_date, _sell_out_of
     global _hold_days, _last_trade_date, _today_buys
     global _kline_cache, _kline_cache_date, _risk_config
 
     from .qmt_data import ZZ1800_STOCKS
     from .trading import QmtAccount
-    from .config import ACCOUNT_CONFIG, RISK_CONFIG, V61C_RISK_CONFIG, REBALANCE_CONFIG
+    from .config import ACCOUNT_CONFIG, RISK_CONFIG, V61C_RISK_CONFIG, REBALANCE_CONFIG, SELL_OUT_OF_CONFIG
     from . import qmt_runner
 
     qmt_runner.qmt_init(C)
@@ -96,6 +96,7 @@ def init(C):
     _last_buy_date = None
     _today_buys = 0
     _risk_config = V61C_RISK_CONFIG
+    _sell_out_of = SELL_OUT_OF_CONFIG.get('sell_out_of', 15)
     _kline_cache = None
     _kline_cache_date = None
 
@@ -128,6 +129,7 @@ def handlebar(C):
         _stock_list = _stock_pool
         _account = QmtAccount(C)
         _risk_config = V61C_RISK_CONFIG
+    _sell_out_of = SELL_OUT_OF_CONFIG.get('sell_out_of', 15)
         _kline_cache = None
         _kline_cache_date = None
 
@@ -151,16 +153,67 @@ def handlebar(C):
     for code in sold:
         _hold_days.pop(code, None)
 
-    # 3. Per-stock time exit: sell if hold_days >= rebalance_days
+    # 3. Per-stock time exit with SELL_OUT_OF logic
+    # Compute current rankings for hold period check
+    ranked_codes = []
+    try:
+        from .data import get_kline_data_multi
+        from .qmt_data import FLOAT_SHARES
+        _kl = get_kline_data_multi(C, _stock_list, count=7)
+        _turn = {}
+        _mcap = {}
+        for code in _stock_list:
+            if code not in FLOAT_SHARES or code not in _kl:
+                continue
+            df = _kl[code]
+            if len(df) < 3:
+                continue
+            fs = FLOAT_SHARES[code]
+            vol = df['volume'].values
+            close = df['close'].values
+            n = min(5, len(vol))
+            _turn[code] = np.mean(vol[-n:]) / fs if fs > 0 else 999
+            _mcap[code] = close[-1] * fs if close[-1] > 0 else float('inf')
+        if _turn:
+            _codes = list(_turn.keys())
+            _scores = pd.Series(0.0, index=_codes)
+            _ts = pd.Series(_turn)
+            if len(_ts) > 50:
+                _scores = _scores.add(1 - _ts.rank(ascending=True, pct=True), fill_value=0)
+            _ms = pd.Series(_mcap)
+            if len(_ms) > 50:
+                _scores = _scores.add(1 - _ms.rank(ascending=True, pct=True), fill_value=0)
+            ranked_codes = _scores.sort_values(ascending=False).head(_sell_out_of).index.tolist()
+    except Exception:
+        pass
+
     holdings = _account.get_holdings()
     for p in holdings:
         code = p['code']
         days = _hold_days.get(code, 0)
         if days >= rebalance_days:
-            if _DEBUG:
-                print('[V61C] time exit: %s days=%d >= %d -> SELL' % (code, days, rebalance_days))
-            _account.sell_all(code)
-            _hold_days.pop(code, None)
+            if code in ranked_codes:
+                # v61c core: still in Top N -> hold, reset days
+                _hold_days[code] = 0
+                if _DEBUG:
+                    print('[%s][V61C] HOLD (renew): %s days=%d, still in Top%d' % (today, code, days, _sell_out_of))
+            else:
+                # Dropped out of ranking -> sell
+                if _DEBUG:
+                    print('[%s][V61C] time exit: %s days=%d, NOT in Top%d -> SELL' % (today, code, days, _sell_out_of))
+                _account.sell_all(code)
+                _hold_days.pop(code, None)
+
+    # 4. Rank drop sell: sell holdings that dropped out of Top N
+    if ranked_codes:
+        holdings = _account.get_holdings()
+        for p in holdings:
+            code = p['code']
+            if code not in ranked_codes and _hold_days.get(code, 0) > 0:
+                if _DEBUG:
+                    print('[%s][V61C] rank drop: %s NOT in Top%d -> SELL' % (today, code, _sell_out_of))
+                _account.sell_all(code)
+                _hold_days.pop(code, None)
 
     # 4. Check if slots are available -> buy
     holdings = _account.get_holdings()

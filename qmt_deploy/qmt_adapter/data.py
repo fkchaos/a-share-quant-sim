@@ -136,7 +136,7 @@ def get_kline_data_multi(C, stock_list, count=10):
     try:
         data = C.get_market_data_ex(
             fields, stock_list, period=period, count=count,
-            subscribe=False
+            subscribe=True
         )
         _dbg_count = 0
         for code in stock_list:

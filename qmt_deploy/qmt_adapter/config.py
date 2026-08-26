@@ -31,9 +31,14 @@ RISK_CONFIG = {
 
 # V61C risk control (different from v75j)
 V61C_RISK_CONFIG = {
-    'stop_loss': -0.10,          # V61C: wider stop loss
-    'take_profit': 0.20,         # V61C: lower take profit
+    'stop_loss': -0.08,          # V61C: match local strategy
+    'take_profit': 0.25,         # V61C: match local strategy
     'hold_days_max': 5,          # V61C: shorter hold period
+}
+
+# V61C sell-out-of ranking (hold renewal logic)
+SELL_OUT_OF_CONFIG = {
+    'sell_out_of': 15,  # Top N for hold renewal check
 }
 
 # Rebalance config

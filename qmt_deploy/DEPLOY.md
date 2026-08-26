@@ -6,6 +6,7 @@
 qmt_deploy/
 ├── v61c_qmt.py                 # v61c入口文件（加载这个）
 ├── v75j_qmt.py                 # v75j入口文件（加载这个）
+├── qmt_diagnostic.py           # 环境诊断（先跑这个）
 ├── qmt_adapter/
 │   ├── config.py               # 风控/市场/账户参数
 │   ├── data.py                 # 行情数据获取
@@ -72,6 +73,16 @@ DEBUG = True   # ← 回测时设True，实盘设False
 ```
 
 ### 5. 运行回测
+
+### 首次使用：先跑环境诊断
+
+1. 加载 `qmt_diagnostic.py`，跑1天回测
+2. 查看输出，确认所有 `[OK]` 项通过
+3. 如果有 `[FAIL]` 项，参考下方「常见问题」排查
+
+诊断项目：API可用性、行情数据、股票池、账户、行业映射
+
+### 正式回测
 
 1. QMT「策略交易」→「回测」
 2. 选择策略文件（v61c_qmt.py 或 v75j_qmt.py）

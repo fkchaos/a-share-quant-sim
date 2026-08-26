@@ -4,7 +4,7 @@ trading.py - QMT Trading Adapter
 
 Based on official ThinkTrader API docs (v3.3.6):
 - get_trade_detail_data: 'POSITION'/'ORDER'/'DEAL' (uppercase)
-- passorder: prType=14 (counterparty), quickTrade=1 (fast)
+- passorder: prType=14 (counterparty), quickTrade=0 (backtest mode)
 - Position fields: m_dOpenPrice (not m_dSettlementPrice)
 - order_callback/deal_callback for trade confirmation
 """
@@ -192,7 +192,7 @@ class QmtAccount(object):
 
         passorder params (official):
           opType=23 (stock buy), orderType=1101 (single, shares),
-          prType=14 (counterparty price), quickTrade=1 (fast trigger)
+          prType=14 (counterparty price), quickTrade=0 (backtest mode)
         """
         _get_qmt_func()
         from . import trading
@@ -210,7 +210,7 @@ class QmtAccount(object):
             -1,                     # price: -1 for prType=14
             shares,                 # volume
             'V61C',                 # strategyName
-            1,                      # quickTrade: 1=fast (official docs)
+            0,                      # quickTrade: 0=backtest mode
             remark,                 # userOrderId -> m_strRemark in callback
             self.C                  # ContextInfo
         )
@@ -247,7 +247,7 @@ class QmtAccount(object):
 
         passorder params (official):
           opType=24 (stock sell), orderType=1101 (single, shares),
-          prType=14 (counterparty price), quickTrade=1 (fast trigger)
+          prType=14 (counterparty price), quickTrade=0 (backtest mode)
         """
         _get_qmt_func()
         from . import trading
@@ -264,7 +264,7 @@ class QmtAccount(object):
             -1,                     # price: -1 for prType=14
             shares,                 # volume
             'V61C',                 # strategyName
-            1,                      # quickTrade: 1=fast
+            0,                      # quickTrade: 0=backtest mode
             remark,                 # userOrderId
             self.C                  # ContextInfo
         )

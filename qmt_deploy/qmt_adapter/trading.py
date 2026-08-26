@@ -144,12 +144,11 @@ class QmtAccount(object):
             vol = getattr(p, 'm_nVolume', 0)
             if vol > 0:
                 code = getattr(p, 'm_strInstrumentID', '') + '.' + getattr(p, 'm_strExchangeID', '')
-                our_cost = self._buy_prices.get(code, getattr(p, 'm_dOpenPrice', 0))
                 holdings.append({
                     'code': code,
                     'shares': vol,
                     'available': getattr(p, 'm_nCanUseVolume', 0),
-                    'avg_cost': our_cost,
+                    'avg_cost': getattr(p, 'm_dOpenPrice', 0),
                     'name': getattr(p, 'm_strInstrumentName', ''),
                 })
 

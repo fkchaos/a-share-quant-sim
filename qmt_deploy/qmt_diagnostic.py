@@ -4,7 +4,6 @@ QMT Cost Price Diagnostic Strategy
 
 Experiment: Buy 1 stock, check m_dOpenPrice vs expected price.
 Run on FRESH SIMTEST account (reset before testing).
-
 Purpose: Verify how QMT calculates m_dOpenPrice for prType=14.
 """
 import datetime
@@ -13,6 +12,28 @@ account_id = 'SIMTEST'
 bought = False
 buy_price_used = 0
 buy_shares = 0
+
+def _get_bar_date(C):
+    """Get current bar date from ContextInfo."""
+    try:
+        timetag = C.get_bar_timetag(C.barpos)
+        if timetag > 0:
+            return datetime.datetime.fromtimestamp(timetag / 1000).strftime('%Y%m%d')
+    except Exception:
+        pass
+    return ''
+
+def _get_bar_close(C, code, bar_date):
+    """Get close price for bar date using official QMT way."""
+    data = C.get_market_data_ex(
+        ['close'], [code],
+        period='1d', count=1,
+        subscribe=False,
+        end_time=bar_date
+    )
+    if code in data and len(data[code]) > 0:
+        return data[code]['close'].iloc[-1]
+    return 0
 
 def init(ContextInfo):
     print('[DIAG] === QMT Cost Price Diagnostic ===')
@@ -23,6 +44,8 @@ def init(ContextInfo):
 def handlebar(ContextInfo):
     global bought, buy_price_used, buy_shares
 
+    bar_date = _get_bar_date(ContextInfo)
+
     if bought:
         # After buy: check position cost + current price
         acc = getattr(ContextInfo, 'accID', account_id)
@@ -30,17 +53,14 @@ def handlebar(ContextInfo):
         if not positions:
             positions = get_trade_detail_data(account_id, 'stock', 'POSITION')
 
-        # Get current bar close price (official way: subscribe=False)
-        data = ContextInfo.get_market_data_ex(['close'], ['600584.SH'], count=1, subscribe=False)
-        cur_close = 0
-        if '600584.SH' in data and len(data['600584.SH']) > 0:
-            cur_close = data['600584.SH']['close'].iloc[-1]
-        print('[DIAG] --- Position Check ---')
+        # Get current bar close price
+        cur_close = _get_bar_close(ContextInfo, '600584.SH', bar_date)
+
+        print('[DIAG] --- Bar %s ---' % bar_date)
         print('[DIAG] Close price: %.4f' % cur_close)
         print('[DIAG] Position count: %d' % len(positions))
 
-        # Also check account balance
-        acc = getattr(ContextInfo, 'accID', account_id)
+        # Account balance
         try:
             accounts = get_trade_detail_data(acc, 'stock', 'ACCOUNT')
             for a in accounts:
@@ -68,23 +88,24 @@ def handlebar(ContextInfo):
         return
 
     # First bar: buy 1 stock
-    code = '600584.SH'  # Pick a known stock
+    code = '600584.SH'
     print('[DIAG] === Attempting Buy ===')
-    print('[DIAG] Stock: %s' % code)
+    print('[DIAG] Stock: %s  Bar date: %s' % (code, bar_date))
 
     # Get current bar price (official way: subscribe=False + end_time)
-    data = ContextInfo.get_market_data_ex(['close', 'volume', 'amount'], [code], count=1, subscribe=False)
-    if code in data and len(data[code]) > 0:
-        df = data[code]
-        price = df['close'].iloc[-1]
-        vol = df['volume'].iloc[-1]
-        print('[DIAG] Current price: %.2f' % price)
-        print('[DIAG] Current volume: %.0f' % vol)
-    else:
+    price = _get_bar_close(ContextInfo, code, bar_date)
+    if price <= 0:
         print('[DIAG] ERROR: cannot get price for %s' % code)
         return
 
-    # Calculate shares (10% position = 10000 CNY)
+    data = ContextInfo.get_market_data_ex(['volume'], [code], count=1, subscribe=False, end_time=bar_date)
+    vol = 0
+    if code in data and len(data[code]) > 0:
+        vol = data[code]['volume'].iloc[-1]
+    print('[DIAG] Bar close price: %.2f' % price)
+    print('[DIAG] Bar volume: %.0f' % vol)
+
+    # Calculate shares
     target_value = 10000
     shares = int(target_value / price / 100) * 100
     if shares <= 0:
@@ -93,25 +114,16 @@ def handlebar(ContextInfo):
 
     print('[DIAG] Buy: %d shares at ~%.2f (target value=%.0f)' % (shares, price, target_value))
 
-    # Record our expected price
     buy_price_used = price
     buy_shares = shares
 
-    # Execute buy - passorder is a global function, not a ContextInfo method
+    # Execute buy
     now = datetime.datetime.now()
     remark = 'DIAG-%s' % now.strftime('%H%M%S')
     passorder(
-        23,                     # opType: buy
-        1101,                   # orderType: single
-        account_id,
-        code,
-        14,                     # prType: counterparty
-        -1,                     # price: -1 for prType=14
-        shares,
-        'DIAG',
-        1,                      # quickTrade
-        remark,
-        ContextInfo
+        23, 1101, account_id, code,
+        14, -1, shares,
+        'DIAG', 1, remark, ContextInfo
     )
     print('[DIAG] passorder sent, remark=%s' % remark)
     print('[DIAG] Waiting for execution...')

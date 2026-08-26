@@ -138,10 +138,19 @@ def get_kline_data_multi(C, stock_list, count=10):
             fields, stock_list, period=period, count=count,
             subscribe=False
         )
+        _dbg_count = 0
         for code in stock_list:
             if code in data and len(data[code]) > 0:
                 df = data[code]
                 result[code] = df
+                # Debug: show raw data for first 3 stocks
+                if _dbg_count < 3:
+                    _dbg_count += 1
+                    last_close = df["close"].iloc[-1] if "close" in df.columns else 0
+                    last_vol = df["volume"].iloc[-1] if "volume" in df.columns else 0
+                    last_amount = df["amount"].iloc[-1] if "amount" in df.columns else 0
+                    print("  [KLINE] %s: close=%.2f vol=%.0f amount=%.0f rows=%d" % (
+                        code, last_close, last_vol, last_amount, len(df)))
     except Exception:
         # Fallback: fetch one by one
         for code in stock_list:

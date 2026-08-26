@@ -30,8 +30,8 @@ def handlebar(ContextInfo):
         if not positions:
             positions = get_trade_detail_data(account_id, 'stock', 'POSITION')
 
-        # Get current bar close price
-        data = ContextInfo.get_market_data_ex(['close'], ['600584.SH'], count=1)
+        # Get current bar close price (official way: subscribe=False)
+        data = ContextInfo.get_market_data_ex(['close'], ['600584.SH'], count=1, subscribe=False)
         cur_close = 0
         if '600584.SH' in data and len(data['600584.SH']) > 0:
             cur_close = data['600584.SH']['close'].iloc[-1]
@@ -72,8 +72,8 @@ def handlebar(ContextInfo):
     print('[DIAG] === Attempting Buy ===')
     print('[DIAG] Stock: %s' % code)
 
-    # Get current price
-    data = ContextInfo.get_market_data_ex(['close', 'volume', 'amount'], [code], count=1)
+    # Get current bar price (official way: subscribe=False + end_time)
+    data = ContextInfo.get_market_data_ex(['close', 'volume', 'amount'], [code], count=1, subscribe=False)
     if code in data and len(data[code]) > 0:
         df = data[code]
         price = df['close'].iloc[-1]

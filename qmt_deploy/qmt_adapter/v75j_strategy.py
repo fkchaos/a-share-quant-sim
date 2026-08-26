@@ -258,7 +258,7 @@ def handlebar(C):
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
-    qmt_runner.execute_buy(C, _account, target)
+    qmt_runner.execute_buy(C, _account, target, bar_date=today)
 
 
 def _calc_breadth(C):

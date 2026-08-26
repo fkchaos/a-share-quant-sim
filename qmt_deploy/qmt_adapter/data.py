@@ -72,7 +72,7 @@ def load_kline(C, stock_list, days=120):
         try:
             klines = C.get_market_data_ex(
                 ['open', 'high', 'low', 'close', 'volume', 'amount'], [code], period=period, count=count,
-                subscribe=True
+                subscribe=False
             )
             if code in klines and len(klines[code]) > 0:
                 result[code] = qmt_to_our_format(klines[code], period)
@@ -82,13 +82,13 @@ def load_kline(C, stock_list, days=120):
     return result
 
 
-def get_close_price(C, code):
-    """Get latest close price for a stock."""
+def get_close_price(C, code, bar_date=''):
+    """Get close price for a stock. Use bar_date to get bar date price in backtest."""
     try:
-        data = C.get_market_data_ex(
-            ['close'], [code], period='1d', count=1,
-            subscribe=True
-        )
+        kwargs = {'field_list': ['close'], 'stock_list': [code], 'period': '1d', 'count': 1, 'subscribe': False}
+        if bar_date:
+            kwargs['end_time'] = bar_date
+        data = C.get_market_data_ex(**kwargs)
         if code in data and len(data[code]) > 0:
             return data[code]['close'].iloc[-1]
     except Exception:
@@ -96,13 +96,13 @@ def get_close_price(C, code):
     return 0.0
 
 
-def get_close_prices_batch(C, stock_list):
-    """Get close prices for multiple stocks."""
+def get_close_prices_batch(C, stock_list, bar_date=''):
+    """Get close prices for multiple stocks. Use bar_date to get bar date prices in backtest."""
     try:
-        data = C.get_market_data_ex(
-            ['close'], stock_list, period='1d', count=1,
-            subscribe=True
-        )
+        kwargs = {'field_list': ['close'], 'stock_list': stock_list, 'period': '1d', 'count': 1, 'subscribe': False}
+        if bar_date:
+            kwargs['end_time'] = bar_date
+        data = C.get_market_data_ex(**kwargs)
         result = {}
         for code in stock_list:
             if code in data and len(data[code]) > 0:
@@ -136,7 +136,7 @@ def get_kline_data_multi(C, stock_list, count=10):
     try:
         data = C.get_market_data_ex(
             fields, stock_list, period=period, count=count,
-            subscribe=True
+            subscribe=False
         )
         _dbg_count = 0
         for code in stock_list:
@@ -157,7 +157,7 @@ def get_kline_data_multi(C, stock_list, count=10):
             try:
                 klines = C.get_market_data_ex(
                     fields, [code], period=period, count=count,
-                    subscribe=True
+                    subscribe=False
                 )
                 if code in klines and len(klines[code]) > 0:
                     result[code] = klines[code]

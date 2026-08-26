@@ -269,7 +269,7 @@ def handlebar(C):
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
-    bought = qmt_runner.execute_buy(C, _account, target)
+    bought = qmt_runner.execute_buy(C, _account, target, bar_date=today)
     for code in bought:
         _hold_days[code] = 0
     _last_buy_date = today

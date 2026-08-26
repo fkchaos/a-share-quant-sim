@@ -57,7 +57,7 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
         cost_price = p.get('avg_cost', 0)
 
         from .data import get_close_price
-        cur_price = get_close_price(C, code)
+        cur_price = get_close_price(C, code, bar_date)
         if cur_price <= 0 or cost_price <= 0:
             continue
 
@@ -84,7 +84,7 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
     return sold
 
 
-def execute_buy(C, account, target_weight):
+def execute_buy(C, account, target_weight, bar_date=''):
     """Common buy execution. Returns list of actually bought codes."""
     from .config import MARKET_CONFIG
     bought = []
@@ -103,7 +103,7 @@ def execute_buy(C, account, target_weight):
         buy_amount = min(buy_amount, available * 0.95)
 
         from .data import get_close_price
-        price = get_close_price(C, code)
+        price = get_close_price(C, code, bar_date)
         lots = int(buy_amount / price / 100) if price > 0 else 0
         print('[BUY] %s: amount=%.0f price=%.2f lots=%d (need >=1)' % (code, buy_amount, price, lots))
 

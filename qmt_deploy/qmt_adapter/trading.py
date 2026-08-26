@@ -203,11 +203,23 @@ class QmtAccount(object):
         )
 
         # Internal position tracking (for backtest)
-        self._internal_positions[stock_code] = {
-            'shares': shares,
-            'cost': price if price > 0 else 0,
-            'name': '',
-        }
+        if stock_code in self._internal_positions:
+            old = self._internal_positions[stock_code]
+            old_shares = old['shares']
+            old_cost = old['cost']
+            new_shares = old_shares + shares
+            new_cost = (old_cost * old_shares + price * shares) / new_shares if new_shares > 0 else 0
+            self._internal_positions[stock_code] = {
+                'shares': new_shares,
+                'cost': new_cost,
+                'name': old.get('name', ''),
+            }
+        else:
+            self._internal_positions[stock_code] = {
+                'shares': shares,
+                'cost': price if price > 0 else 0,
+                'name': '',
+            }
 
         return remark
 

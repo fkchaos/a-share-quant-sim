@@ -102,10 +102,12 @@ def handlebar(C):
     # 1. Increment hold_days
     for code in list(_hold_days.keys()):
         _hold_days[code] = _hold_days.get(code, 0) + 1
+    if _DEBUG and _hold_days:
+        print('[%s][V61C] hold_days: %s' % (today, dict(_hold_days)))
 
     # 2. Risk control (SL/TP/HD) - sells individually
     from . import qmt_runner
-    qmt_runner.check_risk(C, _account, _hold_days, _risk_config)
+    qmt_runner.check_risk(C, _account, _hold_days, _risk_config, bar_date=today)
 
     # 3. Per-stock time exit: sell if hold_days >= rebalance_days
     holdings = _account.get_holdings()
@@ -161,6 +163,9 @@ def handlebar(C):
             print('  %s weight=%.4f' % (code, w))
 
     qmt_runner.execute_buy(C, _account, target)
+    for code in target.keys():
+        if code not in _hold_days:
+            _hold_days[code] = 0
     _last_buy_date = today
 
 

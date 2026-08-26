@@ -140,7 +140,7 @@ def handlebar(C):
 
     # 2. Risk control (SL/TP/HD) - sells individually
     from . import qmt_runner
-    qmt_runner.check_risk(C, _account, _hold_days, _risk_config)
+    qmt_runner.check_risk(C, _account, _hold_days, _risk_config, bar_date=today)
 
     # 3. Per-stock time exit: sell if hold_days >= rebalance_days
     holdings = _account.get_holdings()

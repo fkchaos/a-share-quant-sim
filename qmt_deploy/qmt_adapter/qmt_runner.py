@@ -33,7 +33,7 @@ def qmt_init(C):
     _qmt_initialized = True
 
 
-def check_risk(C, account, holding_days, risk_config=None):
+def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
     """Common risk control: stop loss / take profit / max hold days.
     risk_config: optional override, defaults to RISK_CONFIG."""
     if risk_config is None:
@@ -45,7 +45,7 @@ def check_risk(C, account, holding_days, risk_config=None):
 
     positions = account.get_holdings()  # returns list
     if _risk_debug:
-        print('[RISK] check_risk: %d holdings' % len(positions))
+        print('[%s][RISK] check_risk: %d holdings' % (bar_date or '??', len(positions)))
 
     for p in positions:
         code = p['code']
@@ -63,7 +63,7 @@ def check_risk(C, account, holding_days, risk_config=None):
 
         pnl = (cur_price - cost_price) / cost_price
         if _risk_debug:
-            print('[RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) -> %s' % (
+            print('[%s][RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) -> %s' % (bar_date or '??',
                 code, cost_price, cur_price, pnl*100, sl*100, tp*100, hold_days, hd,
             'SELL' if (pnl < sl or pnl > tp or hold_days >= hd) else 'HOLD'))
 

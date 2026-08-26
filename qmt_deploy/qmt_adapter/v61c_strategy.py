@@ -38,13 +38,21 @@ _risk_config = None
 
 
 def _get_bar_date(C):
-    """Get current bar date from K-line data. NEVER use datetime.now()."""
-    from .data import get_kline_data_multi
+    """Get current bar date from ContextInfo. NEVER use datetime.now()."""
+    # Method 1: get_bar_timetag (preferred)
+    try:
+        timetag = C.get_bar_timetag(C.barpos)
+        from datetime import datetime
+        if timetag > 0:
+            return datetime.fromtimestamp(timetag / 1000).strftime('%Y%m%d')
+    except Exception:
+        pass
+    # Method 2: get_market_data_ex (subscribe=True, default)
     try:
         _mk = C.stockcode + '.' + C.market
-        _tmp = get_kline_data_multi(C, [_mk], count=1)
-        if _mk in _tmp and len(_tmp[_mk]) > 0:
-            return str(_tmp[_mk].index[-1])[:10]
+        _data = C.get_market_data_ex(['close'], [_mk], count=1)
+        if _mk in _data and len(_data[_mk]) > 0:
+            return str(_data[_mk].index[-1])[:10]
     except Exception:
         pass
     return 'unknown'
@@ -301,7 +309,7 @@ def _select_stocks(C):
     # Market cap rank: smaller is better -> ascending=True means smallest gets highest rank
     mcap_series = pd.Series(mcap_scores)
     if len(mcap_series) > 50:
-        mcap_rank = mcap_series.rank(ascending=True, pct=True)
+        mcap_rank = 1 - mcap_series.rank(ascending=True, pct=True)
         scores = scores.add(mcap_rank, fill_value=0)
 
     ranked = scores.sort_values(ascending=False)

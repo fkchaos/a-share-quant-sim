@@ -27,12 +27,15 @@ def qmt_init(C):
     _qmt_initialized = True
 
 
-def check_risk(C, account, holding_days):
-    """Common risk control: stop loss / take profit / max hold days."""
-    from .config import RISK_CONFIG
-    sl = RISK_CONFIG['stop_loss']
-    tp = RISK_CONFIG['take_profit']
-    hd = RISK_CONFIG['hold_days_max']
+def check_risk(C, account, holding_days, risk_config=None):
+    """Common risk control: stop loss / take profit / max hold days.
+    risk_config: optional override, defaults to RISK_CONFIG."""
+    if risk_config is None:
+        from .config import RISK_CONFIG
+        risk_config = RISK_CONFIG
+    sl = risk_config['stop_loss']
+    tp = risk_config['take_profit']
+    hd = risk_config['hold_days_max']
 
     positions = account.get_holdings()  # returns list
 

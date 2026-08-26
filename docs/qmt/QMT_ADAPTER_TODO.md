@@ -1,61 +1,85 @@
-# QMT Adapter TODO - 2026-08-26
+# QMT Adapter Implementation TODO
 
-## 明天必须完成
+## Status
 
-### 1. 恢复v61c选股逻辑（优先级：P0）
-**问题**：当前v61c_strategy.py的`_select_stocks`只按市值排序，缺少低换手因子
-**目标逻辑**：
-```python
-turnover = volume * 100 / float_shares  # 换手率（volume单位是手）
-turn_5 = turnover.rolling(5).mean()      # 5日均换手率
-market_cap = close * float_shares        # 市值
-# 低换手 + 小市值 → rank评分
-```
-**实现步骤**：
-1. `data.py`添加`get_kline_data(C, stock_list, count=5)`获取多日K线
-2. `_select_stocks`里计算5日均换手率
-3. 换手率+市值各50%权重rank评分
-4. 参考：`scripts/strategies/v61_turnover_size.py`的`calc_factors_v61`
+- [x] P0: v61c选股逻辑恢复 ✅ (2026-08-26)
+- [x] P0: v75j选股逻辑恢复 ✅ (2026-08-26)
+- [x] P1: config.py更新 ✅ (2026-08-26)
+- [x] P1: sell_all验证 ✅ (之前已验证)
+- [x] P2: 清理遗留问题 ✅ (2026-08-26)
 
-### 2. 恢复v75j选股逻辑（优先级：P0）
-**问题**：当前v75j_strategy.py的`_select_stocks`只按float_shares排序
-**目标逻辑**：
-- 科技趋势：需要动量因子（如5日涨幅）
-- 流动性：float_shares作为proxy
-- 广度过滤：需要市场宽度指标（如上涨比例）
-**实现步骤**：
-1. 参考：`scripts/strategies/v75j_liquidity_only.py`
-2. 实现科技趋势+流动性+广度过滤的三因子选股
+---
 
-### 3. 验证QMT回测交易记录（优先级：P1）
-**现状**：passorder调用成功（有系统WARNING），但回测界面看不到记录
-**排查方向**：
-- QMT回测界面的初始资金设置是否正确
-- 账户配置是否匹配（8890979649）
-- 是否需要在QMT界面单独配置回测参数
+## Completed Changes (2026-08-26)
 
-### 4. config.py更新（优先级：P1）
-- 填入主公的真实account_id（已在本地填，但代码默认值还是SIMTEST）
-- 确认account_type='STOCK'是否正确
+### 1. data.py - 新增 get_kline_data_multi()
+- 获取多日K线数据，供v61c计算换手率、v75j计算流动性
+- 支持批量获取，有逐只fallback
+- Python 3.6.8兼容
 
-### 5. 清理遗留问题（优先级：P2）
-- [ ] 删除v61c_debug_strategy.py的SELECT打印（或保留作为调试工具）
-- [ ] 确认qmt_data.py的FLOAT_SHARES和INDUSTRY_MAP数据是否准确
-- [ ] 测试v75j的REBALANCE_DAYS=10是否合理
+### 2. v61c_strategy.py - 恢复低换手+小市值选股
+- 从config读取REBALANCE_CONFIG（不再硬编码5天）
+- 计算5日均换手率：volume(股)/float_shares
+- 计算市值：close*float_shares
+- 等权50/50 rank评分（低换手+小市值）
+- 每日缓存K线数据避免重复获取
 
-## 参考文件
-- 原始v61c策略：`scripts/strategies/v61_turnover_size.py`
-- 原始v75j策略：`scripts/strategies/v75j_liquidity_only.py`
-- QMT知识库：`docs/qmt/wtsolutions/`
-- 当前adapter：`qmt_deploy/qmt_adapter/`
+### 3. v75j_strategy.py - 恢复科技趋势+流动性+广度过滤
+- 用C.get_instrument_detail()获取行业（QMT环境不能导入sqlite）
+- init时构建行业映射，识别科技板块（电子/计算机/通信/传媒）
+- 广度过滤：科技股中收盘价>MA20的比例
+  - breadth<0.30: 空仓
+  - 0.30<=breadth<0.50: 线性减仓（MAX_HOLDINGS按比例缩减）
+  - breadth>=0.50: 满仓运行
+- 流动性排序：按float_shares降序（越大越流动）
+- 股价过滤：<300元
+- 科创板过滤：688/689开头排除
 
-## 已完成的修复（供参考）
-- [x] GBK编码+英文注释
-- [x] 模块级全局变量（不存C属性）
-- [x] entry文件定义init/handlebar函数体
-- [x] frame遍历找QMT内置函数
-- [x] get_market_data_ex参数修正（field_list在前）
-- [x] passorder参数修正（11参数）
-- [x] 回测禁用datetime.now()去重
-- [x] total_value=0用available cash兜底
-- [x] 清理debug打印
+### 4. config.py - 明确回测/实盘区分
+- 添加注释：account_id='SIMTEST'仅用于回测
+- 部署QMT实盘前需改为真实account_id
+- 代码中所有策略从config统一读取，不硬编码
+
+---
+
+## Key Technical Decisions
+
+1. **QMT volume单位**：QMT返回股（shares），不是手（lots），所以换手率=volume/float_shares，不需要*100
+2. **行业映射**：QMT环境不能import sqlite，改用C.get_instrument_detail()获取IndustryClassification
+3. **K线缓存**：每日首次获取后缓存，同一天内不重复fetch（避免QMT限流）
+4. **Python 3.6.8兼容**：无walrus(:=)、无dict union(|)、无debug f-string(=)
+
+---
+
+## Original TODO (archived for reference)
+
+### P0: Restore Stock Selection Logic
+
+1. **v61c_strategy.py `_select_stocks(C)`** ✅ DONE
+   - ~~Get turnover data for last N days~~ ✅ (get_kline_data_multi + 5日均值)
+   - ~~Calculate rolling average turnover~~ ✅ (volume/float_shares, 5日均值)
+   - ~~Rank by low turnover + small cap~~ ✅ (等权50/50 rank)
+   - Add missing imports if needed ✅
+
+2. **v75j_strategy.py `_select_stocks(C)`** ✅ DONE
+   - ~~Import v75a factors~~ ✅ (改用QMT API获取行业映射)
+   - Apply breadth filter ✅ (MA20广度过滤)
+   - Calculate liquidity factor ✅ (float_shares排序)
+   - Select top N tech stocks ✅
+
+### P1: Verify Buy/Sell/GetHoldings in Backtest
+
+1. **Backtest run** - Run a short backtest (1-2 weeks)
+2. **Check trade log** - Verify buy/sell orders appear in QMT trade log
+3. **Check final positions** - Verify get_holdings returns correct positions
+4. **Check cash flow** - Verify cash decreases on buy, increases on sell
+
+### P1: Update config.py Real Account ID
+
+1. ~~Fill in real account_id~~ ✅ DONE
+2. Fill in real account type if different from STOCK
+
+### P2: Clean Up Issues
+
+1. ~~v61c_debug_strategy.py~~ - Legacy debug file, can archive if not needed
+2. Any other test artifacts

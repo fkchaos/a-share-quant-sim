@@ -110,3 +110,49 @@ def get_close_prices_batch(C, stock_list):
         return result
     except Exception:
         return {}
+
+
+def get_kline_data_multi(C, stock_list, count=10):
+    """Get multi-day K-line data for multiple stocks.
+
+    Returns dict: {code: DataFrame(index=date, columns=[close,volume,amount,high,low])}
+    Used for turnover calculation (v61c) and liquidity/volume ratio (v75j).
+    """
+    from .config import MARKET_CONFIG
+    period = MARKET_CONFIG.get('period', '1d')
+    dividend_type = MARKET_CONFIG.get('dividend_type', 'front')
+
+    fields = ['open', 'high', 'low', 'close', 'volume', 'amount']
+    result = {}
+
+    # Batch subscribe for efficiency
+    for code in stock_list:
+        try:
+            C.subscribe_quote(code, period=period, count=count)
+        except Exception:
+            pass
+
+    # Batch fetch
+    try:
+        data = C.get_market_data_ex(
+            fields, stock_list, period=period, count=count,
+            subscribe=False
+        )
+        for code in stock_list:
+            if code in data and len(data[code]) > 0:
+                df = data[code]
+                result[code] = df
+    except Exception:
+        # Fallback: fetch one by one
+        for code in stock_list:
+            try:
+                klines = C.get_market_data_ex(
+                    fields, [code], period=period, count=count,
+                    subscribe=False
+                )
+                if code in klines and len(klines[code]) > 0:
+                    result[code] = klines[code]
+            except Exception:
+                continue
+
+    return result

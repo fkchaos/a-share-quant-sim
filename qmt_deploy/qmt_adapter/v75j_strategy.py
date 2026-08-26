@@ -61,6 +61,23 @@ def init(C):
     _stock_list = _stock_pool
     _account = QmtAccount(C)
     _hold_days = {}
+
+    # Load persisted hold_days from file
+    import json as _json
+    import os as _os
+    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days.json')
+    try:
+        with open(_persist_path, 'r') as _f:
+            _data = _json.load(_f)
+            _hold_days = _data.get('hold_days', {})
+            _last_date = _data.get('last_date', '')
+            # If date changed (new day), keep hold_days but update date
+            if _last_date != today:
+                print('[INIT] new day detected: %s -> %s, keeping %d positions' % (
+                    _last_date, today, len(_hold_days)))
+    except Exception:
+        _hold_days = {}
+
     _last_trade_date = None
     _today_buys = 0
     _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 10)
@@ -159,6 +176,16 @@ def handlebar(C):
     holdings = _account.get_holdings()
     current_count = len([p for p in holdings if p['shares'] > 0])
     slots = max_holdings - current_count
+
+    # Persist hold_days to file
+    import json as _json
+    import os as _os
+    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days.json')
+    try:
+        with open(_persist_path, 'w') as _f:
+            _json.dump({'hold_days': _hold_days, 'last_date': today}, _f)
+    except Exception as _e:
+        print('[WARN] failed to persist hold_days: %s' % str(_e))
 
     if _DEBUG and holdings:
         for p in holdings:

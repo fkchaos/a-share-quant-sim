@@ -13,6 +13,15 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
+# Debug switch (set by entry file via set_debug())
+_DEBUG = False
+
+
+def set_debug(flag):
+    global _DEBUG
+    _DEBUG = flag
+
+
 # Module-level globals
 _stock_pool = None
 _stock_list = None
@@ -34,7 +43,7 @@ def init(C):
 
     from .qmt_data import ZZ1800_STOCKS
     from .trading import QmtAccount
-    from .config import V61C_RISK_CONFIG, REBALANCE_CONFIG, DEBUG
+    from .config import ACCOUNT_CONFIG, RISK_CONFIG, V61C_RISK_CONFIG, REBALANCE_CONFIG
     from . import qmt_runner
 
     qmt_runner.qmt_init(C)
@@ -232,8 +241,7 @@ def _select_stocks(C):
 
     ranked = scores.sort_values(ascending=False)
 
-    from .config import DEBUG
-    if DEBUG:
+    if _DEBUG:
         print('[V61C] candidates=%d, top 10:' % len(ranked))
         for code in ranked.head(10).index:
             print('  %s score=%.4f turnover=%.4f%% mcap=%.1f亿' % (

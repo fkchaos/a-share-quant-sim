@@ -15,6 +15,15 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
+# Debug switch (set by entry file via set_debug())
+_DEBUG = False
+
+
+def set_debug(flag):
+    global _DEBUG
+    _DEBUG = flag
+
+
 # Tech sector names in QMT instrument detail
 TECH_SECTORS = ['电子', '计算机', '通信', '传媒']
 
@@ -243,8 +252,7 @@ def _calc_breadth(C):
 
     breadth = above / total if total > 0 else 1.0
 
-    from .config import DEBUG
-    if DEBUG:
+    if _DEBUG:
         print('[V75J] breadth: %.4f (%d/%d above MA20)' % (breadth, above, total))
 
     return breadth
@@ -257,7 +265,6 @@ def _select_stocks(C, breadth=None):
     4. Select top N from tech stocks only
     """
     from .data import get_kline_data_multi
-    from .config import DEBUG
 
     # Ensure kline cache has enough data (20-day avg amount needs 25 bars)
     today = datetime.now().strftime('%Y-%m-%d')

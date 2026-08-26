@@ -6,9 +6,6 @@ All configurable parameters for QMT strategies.
 NOTE: Runs in QMT built-in Python 3.6, must be 3.6.8 compatible.
 """
 
-# Debug mode (set True for backtest debugging, False for production)
-DEBUG = False
-
 # Account config
 # NOTE: account_id='SIMTEST' is for backtesting only.
 # Change to real account_id before deploying to QMT live.

@@ -90,7 +90,7 @@ def handlebar(C):
         _kline_cache = None
         _kline_cache_date = None
 
-    from .config import REBALANCE_CONFIG, DEBUG
+    from .config import REBALANCE_CONFIG
     rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
     max_holdings = 5
 

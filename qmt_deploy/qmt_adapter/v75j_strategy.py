@@ -52,7 +52,7 @@ def init(C):
 
     from .qmt_data import ZZ1800_STOCKS
     from .trading import QmtAccount
-    from .config import RISK_CONFIG, REBALANCE_CONFIG, DEBUG
+    from .config import RISK_CONFIG, REBALANCE_CONFIG
     from . import qmt_runner
 
     qmt_runner.qmt_init(C)
@@ -129,7 +129,7 @@ def handlebar(C):
         if _tech_codes is None:
             _build_industry_map(C)
 
-    from .config import REBALANCE_CONFIG, DEBUG
+    from .config import REBALANCE_CONFIG
     max_holdings = 3
 
     today = datetime.now().strftime('%Y-%m-%d')

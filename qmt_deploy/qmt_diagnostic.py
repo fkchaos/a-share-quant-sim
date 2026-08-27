@@ -1,11 +1,26 @@
 #coding:gbk
 """
-QMT Cost Price Diagnostic Strategy
+QMT Diagnostic Strategy (dual trigger mode)
 
-Experiment: Buy 1 stock, check m_dOpenPrice vs expected price.
-Run on FRESH SIMTEST account (reset before testing).
-Purpose: Verify how QMT calculates m_dOpenPrice for prType=14.
+Use to verify:
+1. Timer registration (MODE='LIVE')
+2. Cost price calculation (MODE='BACKTEST')
+3. Basic buy/sell flow
+
+MODE = 'BACKTEST' -> handlebar callback
+MODE = 'LIVE'     -> run_time timer (14:50 daily)
 """
+# ========== CONFIG ==========
+MODE = 'BACKTEST'       # 'BACKTEST' or 'LIVE'
+TIMER_INTERVAL = '1nDay'
+TIMER_START = '14:50:00'
+# =============================
+
+# Validate MODE
+_VALID_MODES = ('BACKTEST', 'LIVE')
+if MODE not in _VALID_MODES:
+    raise ValueError("MODE must be %s, got %r" % (' or '.join(_VALID_MODES), MODE))
+
 import datetime
 
 account_id = 'SIMTEST'
@@ -36,12 +51,36 @@ def _get_bar_close(C, code, bar_date):
     return 0
 
 def init(ContextInfo):
-    print('[DIAG] === QMT Cost Price Diagnostic ===')
-    print('[DIAG] Purpose: verify m_dOpenPrice calculation')
+    print('[DIAG] === QMT Diagnostic (dual trigger) ===')
+    print('[DIAG] MODE: %s' % MODE)
     print('[DIAG] Account: %s' % account_id)
-    print('[DIAG] Waiting for first bar to buy...')
+
+    # Live mode: register run_time timer
+    if MODE == 'LIVE':
+        today_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        ContextInfo.run_time('on_timer', TIMER_INTERVAL,
+                             today_str + ' ' + TIMER_START)
+        print('[DIAG] Timer registered: %s at %s' % (TIMER_INTERVAL, TIMER_START))
+        print('[DIAG] Waiting for timer trigger...')
+    else:
+        print('[DIAG] Backtest mode: waiting for handlebar...')
+
 
 def handlebar(ContextInfo):
+    """Backtest mode: triggered on each bar close."""
+    if MODE == 'BACKTEST':
+        _on_signal(ContextInfo)
+
+
+def on_timer(ContextInfo):
+    """Live mode: triggered by run_time timer."""
+    if MODE == 'LIVE':
+        print('[DIAG] Timer fired at %s' % datetime.datetime.now().strftime('%H:%M:%S'))
+        _on_signal(ContextInfo)
+
+
+def _on_signal(ContextInfo):
+    """Core diagnostic logic."""
     global bought, buy_price_used, buy_shares
 
     bar_date = _get_bar_date(ContextInfo)

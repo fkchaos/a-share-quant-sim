@@ -165,9 +165,16 @@ def load_account(account_id, stale_days=30):
                 _conn.close()
                 if _rows:
                     dates = sorted([r[0] for r in _rows if r[1] > 0])
-                    # 用最近一个已有交易日作为截止日，不依赖"今天是否是交易日"
                     latest_td = dates[-1]
-                    hd = sum(1 for d in dates if d > buy_date and d <= latest_td)
+                    # 盘中优化：如果今天是工作日且比最新数据新，加上今天
+                    from datetime import date as _date
+                    _today = _date.today()
+                    _today_str = _today.strftime('%Y-%m-%d')
+                    if _today_str > latest_td and _today.weekday() < 5:
+                        # 今天是交易日但数据未更新，包含今天
+                        hd = sum(1 for d in dates if d > buy_date) + 1
+                    else:
+                        hd = sum(1 for d in dates if d > buy_date and d <= latest_td)
                 else:
                     buy_dt = dt.strptime(buy_date, "%Y-%m-%d")
                     hd = max(0, (dt.now() - buy_dt).days)

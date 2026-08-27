@@ -138,7 +138,7 @@ def on_signal(C):
 
     from .config import get_strategy_params
     _params = get_strategy_params('v61c')
-    rebalance_days = _params.get('rebalance_days', 5)
+    rebalance_days = _params.get('hold_days_max', 5)
     max_holdings = _params.get('max_holdings', 5)
     max_per_stock = _params.get('max_per_stock', 0.25)
 

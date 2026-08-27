@@ -35,7 +35,7 @@ _hold_days = {}
 _last_trade_date = None
 _today_buys = 0
 _last_trade_date = None
-_rebalance_days = 10
+_hold_days_max = 10
 _tech_codes = None
 _industry_map = None
 _kline_cache_tech = None
@@ -67,7 +67,7 @@ def _get_bar_date(C):
 def init(C):
     """Init strategy."""
     global _stock_pool, _stock_list, _account
-    global _hold_days, _last_trade_date, _today_buys, _rebalance_days
+    global _hold_days, _last_trade_date, _today_buys, _hold_days_max
     global _tech_codes, _industry_map, _kline_cache_tech, _kline_cache_date
     global _risk_config
 
@@ -102,7 +102,7 @@ def init(C):
     _last_trade_date = None
     _today_buys = 0
     _params = get_strategy_params('v75j')
-    _rebalance_days = _params.get('rebalance_days', 10)
+    _hold_days_max = _params.get('hold_days_max', 10)
     _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
     _kline_cache_tech = None
     _kline_cache_date = None
@@ -112,7 +112,7 @@ def init(C):
 
     if _DEBUG:
         print('[V75J] init done. pool=%d, tech=%d, rebalance_days=%d' % (
-            len(_stock_list), len(_tech_codes) if _tech_codes else 0, _rebalance_days))
+            len(_stock_list), len(_tech_codes) if _tech_codes else 0, _hold_days_max))
         print('[V75J] risk: SL=%.2f TP=%.2f HD=%d' % (
             _risk_config['stop_loss'], _risk_config['take_profit'], _risk_config['hold_days_max']))
         if _tech_codes:
@@ -150,7 +150,7 @@ def on_signal(C):
     4. If any slots empty -> breadth check -> select new stocks -> buy
     """
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list
-    global _kline_cache_tech, _kline_cache_date, _risk_config, _rebalance_days
+    global _kline_cache_tech, _kline_cache_date, _risk_config, _hold_days_max
 
     if _account is None:
         from .qmt_data import ZZ1800_STOCKS
@@ -162,7 +162,7 @@ def on_signal(C):
         _stock_list = _stock_pool
         _account = QmtAccount(C)
         _params = get_strategy_params('v75j')
-        _rebalance_days = _params.get('rebalance_days', 10)
+        _hold_days_max = _params.get('hold_days_max', 10)
         _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
         _kline_cache_tech = None
         _kline_cache_date = None
@@ -191,9 +191,9 @@ def on_signal(C):
     for p in holdings:
         code = p['code']
         days = _hold_days.get(code, 0)
-        if days >= _rebalance_days:
+        if days >= _hold_days_max:
             if _DEBUG:
-                print('[V75J] time exit: %s days=%d >= %d -> SELL' % (code, days, _rebalance_days))
+                print('[V75J] time exit: %s days=%d >= %d -> SELL' % (code, days, _hold_days_max))
             _account.sell_all(code)
             _hold_days.pop(code, None)
 

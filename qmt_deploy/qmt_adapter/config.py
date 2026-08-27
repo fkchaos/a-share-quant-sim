@@ -15,9 +15,6 @@ ACCOUNTS = {
 
 # ========== STRATEGIES ==========
 # Strategy-level config: all parameters grouped by strategy name.
-# - capital: fixed budget for this strategy (independent of account total)
-# - max_holdings: max number of stocks held simultaneously
-# - max_per_stock: max allocation per single stock (fraction of capital)
 STRATEGIES = {
     'v61c': {
         # Risk control
@@ -25,7 +22,7 @@ STRATEGIES = {
         'take_profit': 0.25,
         'hold_days_max': 5,
         # Position management (per-strategy capital, not account total)
-        'capital': 50000,
+        'capital': 100000,
         'max_holdings': 5,
         'max_per_stock': 0.25,
         # Rebalance
@@ -40,7 +37,7 @@ STRATEGIES = {
         'take_profit': 0.25,
         'hold_days_max': 20,
         # Position management (per-strategy capital, not account total)
-        'capital': 50000,
+        'capital': 100000,
         'max_holdings': 3,
         'max_per_stock': 0.35,
         # Rebalance

@@ -139,8 +139,8 @@ def _build_industry_map(C):
             _industry_map[code] = ''
 
 
-def handlebar(C):
-    """Main strategy logic.
+def on_signal(C):
+    """Core business logic - shared by both handlebar and run_time triggers.
 
     Per-stock flow each bar:
     1. Increment hold_days
@@ -260,6 +260,11 @@ def handlebar(C):
 
     qmt_runner.execute_buy(C, _account, target, bar_date=today)
 
+
+
+def handlebar(C):
+    """Backward compat: handlebar -> on_signal."""
+    on_signal(C)
 
 def _calc_breadth(C):
     """Calculate tech breadth: % of tech stocks with close > MA20.

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 """
 拉取上证/深证/创业板指数历史数据并存入 daily_kline 表。
 上证指数: sh000001
 深证成指: sz399001
 创业板指: sz399006
+
+数据源: 优先腾讯API，失败时降级为baostock
 """
 import sys, os, time, requests, re
 from datetime import datetime
@@ -62,8 +63,48 @@ def fetch_index_kline(code):
                 "low": float(k[4]),
                 "volume": float(k[5]) if k[5] else 0,
             })
-
     return records
+
+
+def fetch_index_kline_baostock(code):
+    """从baostock拉取指数日K线（腾讯WAF封时的备用方案）"""
+    # Convert code format: sh000001 -> sh.000001
+    bs_code = code[:2] + '.' + code[2:]
+    
+    try:
+        import baostock as bs
+        lg = bs.login()
+        if lg.error_code != '0':
+            print(f"  baostock login failed: {lg.error_msg}")
+            return []
+        
+        rs = bs.query_history_k_data_plus(bs_code,
+            fields='date,open,high,low,close,volume',
+            start_date=START_DATE,
+            frequency='d')
+        
+        records = []
+        while rs.next():
+            row = rs.get_row_data()
+            try:
+                records.append({
+                    "code": code,
+                    "date": row[0],
+                    "open": float(row[1]) if row[1] else 0,
+                    "high": float(row[2]) if row[2] else 0,
+                    "low": float(row[3]) if row[3] else 0,
+                    "close": float(row[4]) if row[4] else 0,
+                    "volume": float(row[5]) if row[5] else 0,
+                })
+            except (ValueError, IndexError):
+                continue
+        
+        bs.logout()
+        return records
+    except Exception as e:
+        print(f"  baostock error: {e}")
+        return []
+
 
 def save_to_db(records):
     """存入 daily_kline 表"""
@@ -75,17 +116,21 @@ def save_to_db(records):
             )
 
 def fetch_all_indices():
-    """拉取所有指数数据"""
+    """拉取所有指数数据（优先腾讯，失败降级baostock）"""
     all_records = []
     for code, name in INDICES.items():
         print(f"📈 更新{name}...")
         records = fetch_index_kline(code)
+        if not records:
+            # Tencent failed, try baostock
+            print(f"  ⚠️ 腾讯接口失败，尝试baostock...")
+            records = fetch_index_kline_baostock(code)
         if records:
             save_to_db(records)
             all_records.extend(records)
             print(f"  存入 {len(records)} 条{name}数据")
         else:
-            print(f"  ⚠️ {name}更新失败")
+            print(f"  ❌ {name}更新失败（所有数据源均失败）")
     return all_records
 
 def get_latest_index_points():

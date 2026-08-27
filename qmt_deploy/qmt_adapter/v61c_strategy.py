@@ -107,8 +107,8 @@ def init(C):
             _risk_config['stop_loss'], _risk_config['take_profit'], _risk_config['hold_days_max']))
 
 
-def handlebar(C):
-    """Main strategy logic.
+def on_signal(C):
+    """Core business logic - shared by both handlebar and run_time triggers.
 
     Per-stock flow each bar:
     1. Increment hold_days
@@ -273,6 +273,11 @@ def handlebar(C):
     for code in bought:
         _hold_days[code] = 0
     _last_buy_date = today
+
+
+def handlebar(C):
+    """Backward compat: handlebar -> on_signal."""
+    on_signal(C)
 
 
 def _select_stocks(C):

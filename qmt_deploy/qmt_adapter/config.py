@@ -40,8 +40,6 @@ STRATEGIES = {
         'capital': 100000,
         'max_holdings': 3,
         'max_per_stock': 0.35,
-        # Rebalance
-        'rebalance_days': 10,
         # Breadth filter
         'breadth_high': 0.50,
         'breadth_low': 0.30,

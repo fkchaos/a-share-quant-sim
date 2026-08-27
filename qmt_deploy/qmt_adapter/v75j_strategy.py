@@ -8,7 +8,7 @@ Tech trend + liquidity factor + breadth filter.
 - Breadth: % of tech stocks above 20-day MA
 - Linear position scaling in breadth neutral zone
 
-Per-stock rebalance: each stock sells independently when hold_days >= REBALANCE_DAYS.
+Per-stock time exit: sell when hold_days >= hold_days_max.
 Buy when slots are available (breadth allows).
 """
 import numpy as np
@@ -111,7 +111,7 @@ def init(C):
     _build_industry_map(C)
 
     if _DEBUG:
-        print('[V75J] init done. pool=%d, tech=%d, rebalance_days=%d' % (
+        print('[V75J] init done. pool=%d, tech=%d, hold_days_max=%d' % (
             len(_stock_list), len(_tech_codes) if _tech_codes else 0, _hold_days_max))
         print('[V75J] risk: SL=%.2f TP=%.2f HD=%d' % (
             _risk_config['stop_loss'], _risk_config['take_profit'], _risk_config['hold_days_max']))
@@ -146,7 +146,7 @@ def on_signal(C):
     Per-stock flow each bar:
     1. Increment hold_days
     2. Risk control (SL/TP/HD) -> sell if triggered
-    3. Per-stock time exit: sell if hold_days >= REBALANCE_DAYS
+    3. Per-stock time exit: sell if hold_days >= hold_days_max
     4. If any slots empty -> breadth check -> select new stocks -> buy
     """
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list

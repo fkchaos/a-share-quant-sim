@@ -66,8 +66,10 @@ def init(C):
 
     from .qmt_data import ZZ1800_STOCKS
     from .trading import QmtAccount
-    from .config import ACCOUNT_CONFIG, RISK_CONFIG, V61C_RISK_CONFIG, REBALANCE_CONFIG, SELL_OUT_OF_CONFIG
+    from .config import get_strategy_params, ACCOUNT_CONFIG
     from . import qmt_runner
+
+    _params = get_strategy_params('v61c')
 
     qmt_runner.qmt_init(C)
 
@@ -95,14 +97,14 @@ def init(C):
     _last_trade_date = None
     _last_buy_date = None
     _today_buys = 0
-    _risk_config = V61C_RISK_CONFIG
-    _sell_out_of = SELL_OUT_OF_CONFIG.get('sell_out_of', 15)
+    _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
+    _sell_out_of = _params.get('sell_out_of', 15)
     _kline_cache = None
     _kline_cache_date = None
 
     if _DEBUG:
         print('[INIT][V61C] init done. pool=%d, rebalance_days=%d' % (
-            len(_stock_list), REBALANCE_CONFIG.get('rebalance_days', 5)))
+            len(_stock_list), _params.get('rebalance_days', 5)))
         print('[V61C] risk: SL=%.2f TP=%.2f HD=%d' % (
             _risk_config['stop_loss'], _risk_config['take_profit'], _risk_config['hold_days_max']))
 
@@ -122,20 +124,23 @@ def on_signal(C):
     if _account is None:
         from .qmt_data import ZZ1800_STOCKS
         from .trading import QmtAccount
-        from .config import V61C_RISK_CONFIG, REBALANCE_CONFIG
+        from .config import get_strategy_params
         from . import qmt_runner
         qmt_runner.qmt_init(C)
         _stock_pool = ZZ1800_STOCKS
         _stock_list = _stock_pool
-        _account = QmtAccount(C)
-        _risk_config = V61C_RISK_CONFIG
-        _sell_out_of = SELL_OUT_OF_CONFIG.get('sell_out_of', 15)
+        from .config import get_strategy_params
+        _params = get_strategy_params('v61c')
+        _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
+        _sell_out_of = _params.get('sell_out_of', 15)
         _kline_cache = None
         _kline_cache_date = None
 
-    from .config import REBALANCE_CONFIG
-    rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 5)
-    max_holdings = 5
+    from .config import get_strategy_params
+    _params = get_strategy_params('v61c')
+    rebalance_days = _params.get('rebalance_days', 5)
+    max_holdings = _params.get('max_holdings', 5)
+    max_pos = _params.get('max_pos', 0.50)
 
     today = _get_bar_date(C)
     if _DEBUG:
@@ -259,7 +264,6 @@ def on_signal(C):
     if not buy_list:
         return
 
-    max_pos = 0.50
     target = {}
     for code in buy_list:
         target[code] = max_pos / max_holdings

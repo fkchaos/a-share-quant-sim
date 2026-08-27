@@ -1,4 +1,4 @@
-#coding:gbk
+#coding:utf-8
 """
 v75j_strategy.py - V75J Strategy Logic
 
@@ -25,7 +25,7 @@ def set_debug(flag):
 
 
 # Tech sector names in QMT instrument detail
-TECH_SECTORS = ['µç×Ó', '¼ÆËã»ú', 'Í¨ÐÅ', '´«Ã½']
+TECH_SECTORS = ['ï¿½ï¿½ï¿½ï¿½', 'ï¿½ï¿½ï¿½ï¿½ï¿½', 'Í¨ï¿½ï¿½', 'ï¿½ï¿½Ã½']
 
 # Module-level globals
 _stock_pool = None
@@ -73,7 +73,7 @@ def init(C):
 
     from .qmt_data import ZZ1800_STOCKS
     from .trading import QmtAccount
-    from .config import RISK_CONFIG, REBALANCE_CONFIG
+    from .config import get_strategy_params, ACCOUNT_CONFIG
     from . import qmt_runner
 
     qmt_runner.qmt_init(C)
@@ -101,8 +101,9 @@ def init(C):
 
     _last_trade_date = None
     _today_buys = 0
-    _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 10)
-    _risk_config = RISK_CONFIG
+    _params = get_strategy_params('v75j')
+    _rebalance_days = _params.get('rebalance_days', 10)
+    _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
     _kline_cache_tech = None
     _kline_cache_date = None
 
@@ -154,21 +155,24 @@ def on_signal(C):
     if _account is None:
         from .qmt_data import ZZ1800_STOCKS
         from .trading import QmtAccount
-        from .config import RISK_CONFIG, REBALANCE_CONFIG
+        from .config import get_strategy_params
         from . import qmt_runner
         qmt_runner.qmt_init(C)
         _stock_pool = ZZ1800_STOCKS
         _stock_list = _stock_pool
         _account = QmtAccount(C)
-        _rebalance_days = REBALANCE_CONFIG.get('rebalance_days', 10)
-        _risk_config = RISK_CONFIG
+        _params = get_strategy_params('v75j')
+        _rebalance_days = _params.get('rebalance_days', 10)
+        _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
         _kline_cache_tech = None
         _kline_cache_date = None
         if _tech_codes is None:
             _build_industry_map(C)
 
-    from .config import REBALANCE_CONFIG
-    max_holdings = 3
+    from .config import get_strategy_params
+    _params = get_strategy_params('v75j')
+    max_holdings = _params.get('max_holdings', 3)
+    max_pos = _params.get('max_pos', 0.35)
 
     today = _get_bar_date(C)
 
@@ -218,8 +222,8 @@ def on_signal(C):
 
     # Breadth filter before buying
     breadth = _calc_breadth(C)
-    high_thresh = 0.50
-    low_thresh = 0.30
+    high_thresh = _params.get('breadth_high', 0.50)
+    low_thresh = _params.get('breadth_low', 0.30)
 
     if breadth < low_thresh:
         if _DEBUG:
@@ -248,7 +252,6 @@ def on_signal(C):
     if not buy_list:
         return
 
-    max_pos = 0.35
     target = {}
     for code in buy_list:
         target[code] = max_pos / max_holdings

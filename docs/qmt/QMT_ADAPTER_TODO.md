@@ -83,3 +83,36 @@
 
 1. ~~v61c_debug_strategy.py~~ - Legacy debug file, can archive if not needed
 2. Any other test artifacts
+
+---
+
+## Completed Changes (2026-08-27)
+
+### 5. config.py - 策略参数集中化
+- STRATEGIES dict 按策略名分组，所有参数一处管理
+- 每策略独立 capital（10万），不再用账户总资产算仓位
+- max_per_stock 替代 max_pos（单只上限，不受其他策略影响）
+- hold_days_max（风控超时）vs rebalance_days（v61c续持）分清
+- v75j 去掉死参数 rebalance_days（adapter不用）
+
+### 6. PER_STRATEGY_POSITIONS 隔离开关
+- 两策略共用同一账户时，持仓JSON隔离
+- check_risk / max_holdings 只看自己的JSON
+- 买入/卖出同时更新QMT账户+本地JSON
+- JSON从空开始，不从账户同步（避免误拽其他策略持仓）
+- 关闭开关回退到旧逻辑（共享账户持仓）
+
+### 7. 双触发入口
+- handlebar() → on_signal()（回测）
+- schedule_run + TIMER_TIME='14:50:00'（实盘）
+- MODE='BACKTEST'|'LIVE' 控制
+- schedule_run time_point 必须传字符串
+
+### 8. hold_days 盘中优化
+- date.today() 补偿 daily_kline 数据延迟
+- 今天买的 hold_days=0（buy_date < today_str 才加1）
+
+## Key Technical Decisions (updated)
+5. **仓位隔离**：共享股票账户无法拆子账户，用本地JSON实现per-strategy持仓
+6. **不从账户同步持仓**：JSON空=策略没买过，避免新策略初始化时拽入其他策略持仓
+7. **capital静态分配**：每策略固定资金池，不受其他策略买入影响

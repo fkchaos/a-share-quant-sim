@@ -60,8 +60,6 @@ def init(ContextInfo):
         now = datetime.datetime.now()
         today_str = now.strftime('%Y%m%d')
         target = datetime.datetime.strptime(today_str + TIMER_TIME, '%Y%m%d%H%M%S')
-        if target <= now:
-            target = target + datetime.timedelta(days=1)
         interval = datetime.timedelta(seconds=TIMER_INTERVAL)
         ContextInfo.schedule_run(on_timer, target.strftime('%Y%m%d%H%M%S'), repeat_times=-1,
                                  interval=interval, name='diag_timer')

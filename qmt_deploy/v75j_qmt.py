@@ -41,9 +41,6 @@ def init(C):
         # Build target datetime from today + TIMER_TIME
         today_str = now.strftime('%Y%m%d')
         target = datetime.strptime(today_str + TIMER_TIME, '%Y%m%d%H%M%S')
-        # If target time already passed today, schedule for tomorrow
-        if target <= now:
-            target = target + timedelta(days=1)
         interval = timedelta(seconds=TIMER_INTERVAL)
         C.schedule_run(on_timer, target.strftime('%Y%m%d%H%M%S'), repeat_times=-1,
                         interval=interval, name='signal_timer')

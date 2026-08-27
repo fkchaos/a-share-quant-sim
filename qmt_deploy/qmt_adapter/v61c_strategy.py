@@ -140,7 +140,7 @@ def on_signal(C):
     _params = get_strategy_params('v61c')
     rebalance_days = _params.get('rebalance_days', 5)
     max_holdings = _params.get('max_holdings', 5)
-    max_pos = _params.get('max_pos', 0.50)
+    max_per_stock = _params.get('max_per_stock', 0.25)
 
     today = _get_bar_date(C)
     if _DEBUG:
@@ -266,14 +266,14 @@ def on_signal(C):
 
     target = {}
     for code in buy_list:
-        target[code] = max_pos / max_holdings
+        target[code] = max_per_stock
 
     if _DEBUG:
         print('[%s][V61C] buy targets:' % today)
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
-    bought = qmt_runner.execute_buy(C, _account, target, bar_date=today)
+    bought = qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000))
     for code in bought:
         _hold_days[code] = 0
     _last_buy_date = today

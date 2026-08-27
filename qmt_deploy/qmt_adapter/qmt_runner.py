@@ -84,22 +84,22 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
     return sold
 
 
-def execute_buy(C, account, target_weight, bar_date=''):
-    """Common buy execution. Returns list of actually bought codes."""
+def execute_buy(C, account, target_weight, bar_date='', capital=50000):
+    """Common buy execution. Returns list of actually bought codes.
+    
+    Args:
+        capital: per-strategy fixed budget (independent of account total).
+                 Each stock gets capital * weight.
+    """
     from .config import MARKET_CONFIG
     bought = []
 
     available = account.get_cash()
-    if available < 10000:
+    if available < 1000:
         return bought
 
-    # Use available cash as base if total value unavailable (backtest init)
-    total_value = account.get_total_value()
-    if total_value <= 0:
-        total_value = available
-
     for code, weight in target_weight.items():
-        buy_amount = total_value * weight
+        buy_amount = capital * weight
         buy_amount = min(buy_amount, available * 0.95)
 
         from .data import get_close_price

@@ -9,21 +9,25 @@ NOTE: Runs in QMT built-in Python 3.6, must be 3.6.8 compatible.
 # ========== ACCOUNTS ==========
 # Account-level config: which strategy runs on which account.
 ACCOUNTS = {
-    1: {'strategy': 'v61c', 'initial_capital': 100000},
-    2: {'strategy': 'v75j', 'initial_capital': 100000},
+    1: {'strategy': 'v61c'},
+    2: {'strategy': 'v75j'},
 }
 
 # ========== STRATEGIES ==========
 # Strategy-level config: all parameters grouped by strategy name.
+# - capital: fixed budget for this strategy (independent of account total)
+# - max_holdings: max number of stocks held simultaneously
+# - max_per_stock: max allocation per single stock (fraction of capital)
 STRATEGIES = {
     'v61c': {
         # Risk control
         'stop_loss': -0.08,
         'take_profit': 0.25,
         'hold_days_max': 5,
-        # Position management
+        # Position management (per-strategy capital, not account total)
+        'capital': 50000,
         'max_holdings': 5,
-        'max_pos': 0.50,
+        'max_per_stock': 0.25,
         # Rebalance
         'rebalance_days': 5,
         'sell_out_of': 15,
@@ -35,9 +39,10 @@ STRATEGIES = {
         'stop_loss': -0.08,
         'take_profit': 0.25,
         'hold_days_max': 20,
-        # Position management
+        # Position management (per-strategy capital, not account total)
+        'capital': 50000,
         'max_holdings': 3,
-        'max_pos': 0.35,
+        'max_per_stock': 0.35,
         # Rebalance
         'rebalance_days': 10,
         # Breadth filter

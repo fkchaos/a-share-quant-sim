@@ -172,7 +172,7 @@ def on_signal(C):
     from .config import get_strategy_params
     _params = get_strategy_params('v75j')
     max_holdings = _params.get('max_holdings', 3)
-    max_pos = _params.get('max_pos', 0.35)
+    max_per_stock = _params.get('max_per_stock', 0.35)
 
     today = _get_bar_date(C)
 
@@ -254,14 +254,14 @@ def on_signal(C):
 
     target = {}
     for code in buy_list:
-        target[code] = max_pos / max_holdings
+        target[code] = max_per_stock
 
     if _DEBUG:
         print('[V75J] buy targets:')
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
-    qmt_runner.execute_buy(C, _account, target, bar_date=today)
+    qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000))
 
 
 

@@ -45,7 +45,7 @@ def init(C):
         if target <= now:
             target = target + timedelta(days=1)
         interval = timedelta(seconds=TIMER_INTERVAL)
-        C.schedule_run(on_timer, target, repeat_times=-1,
+        C.schedule_run(on_timer, target.strftime('%Y%m%d%H%M%S'), repeat_times=-1,
                         interval=interval, name='signal_timer')
         if DEBUG:
             print('[INIT] MODE=LIVE, schedule_run at %s, interval=%ds' % (target, TIMER_INTERVAL))

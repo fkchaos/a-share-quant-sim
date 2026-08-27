@@ -63,7 +63,7 @@ def init(ContextInfo):
         if target <= now:
             target = target + datetime.timedelta(days=1)
         interval = datetime.timedelta(seconds=TIMER_INTERVAL)
-        ContextInfo.schedule_run(on_timer, target, repeat_times=-1,
+        ContextInfo.schedule_run(on_timer, target.strftime('%Y%m%d%H%M%S'), repeat_times=-1,
                                  interval=interval, name='diag_timer')
         print('[DIAG] schedule_run at %s, interval=%ds' % (target, TIMER_INTERVAL))
         print('[DIAG] Waiting for timer trigger...')

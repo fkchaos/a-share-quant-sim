@@ -2,14 +2,14 @@
 """v61c_qmt.py - V61C entry point (dual trigger mode)
 
 MODE = 'BACKTEST'  -> handlebar callback (回测+实盘通用)
-MODE = 'LIVE'      -> run_time timer (仅实盘，支持集合竞价等场景)
+MODE = 'LIVE'      -> schedule_run timer (仅实盘，支持集合竞价等场景)
 
 Business logic lives in v61c_strategy.on_signal(), shared by both modes.
 """
 # ========== CONFIG ==========
 MODE = 'BACKTEST'       # 'BACKTEST' or 'LIVE'
-TIMER_INTERVAL = '1nDay'  # run_time interval (only used when MODE='LIVE')
-TIMER_START = '14:50:00'     # run_time start time
+TIMER_INTERVAL = 24 * 3600  # seconds (1 day = 86400)
+TIMER_TIME = '145000'  # HHMMSS format
 # =============================
 
 # Validate MODE
@@ -34,14 +34,21 @@ def init(C):
     _set_risk_debug(DEBUG)
     _init(C)
 
-    # Live mode: register run_time timer
+    # Live mode: register schedule_run timer
     if MODE == 'LIVE':
-        from datetime import datetime
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        C.run_time('on_timer', TIMER_INTERVAL,
-                    today_str + ' ' + TIMER_START)
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Build target datetime from today + TIMER_TIME
+        today_str = now.strftime('%Y%m%d')
+        target = datetime.strptime(today_str + TIMER_TIME, '%Y%m%d%H%M%S')
+        # If target time already passed today, schedule for tomorrow
+        if target <= now:
+            target = target + timedelta(days=1)
+        interval = timedelta(seconds=TIMER_INTERVAL)
+        C.schedule_run(on_timer, target, repeat_times=-1,
+                        interval=interval, name='signal_timer')
         if DEBUG:
-            print('[INIT] MODE=live, timer=%s start=%s' % (TIMER_INTERVAL, TIMER_START))
+            print('[INIT] MODE=LIVE, schedule_run at %s, interval=%ds' % (target, TIMER_INTERVAL))
 
 
 def handlebar(C):
@@ -51,6 +58,6 @@ def handlebar(C):
 
 
 def on_timer(C):
-    """Live mode: triggered by run_time timer."""
+    """Live mode: triggered by schedule_run timer."""
     if MODE == 'LIVE':
         _on_signal(C)

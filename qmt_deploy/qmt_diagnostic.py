@@ -8,12 +8,12 @@ Use to verify:
 3. Basic buy/sell flow
 
 MODE = 'BACKTEST' -> handlebar callback
-MODE = 'LIVE'     -> run_time timer (14:50 daily)
+MODE = 'LIVE'     -> schedule_run timer (14:50 daily)
 """
 # ========== CONFIG ==========
 MODE = 'BACKTEST'       # 'BACKTEST' or 'LIVE'
-TIMER_INTERVAL = '1nDay'
-TIMER_START = '14:50:00'
+TIMER_INTERVAL = 24 * 3600  # seconds (1 day = 86400)
+TIMER_TIME = '145000'  # HHMMSS format
 # =============================
 
 # Validate MODE
@@ -55,12 +55,17 @@ def init(ContextInfo):
     print('[DIAG] MODE: %s' % MODE)
     print('[DIAG] Account: %s' % account_id)
 
-    # Live mode: register run_time timer
+    # Live mode: register schedule_run timer
     if MODE == 'LIVE':
-        today_str = datetime.datetime.now().strftime('%Y-%m-%d')
-        ContextInfo.run_time('on_timer', TIMER_INTERVAL,
-                             today_str + ' ' + TIMER_START)
-        print('[DIAG] Timer registered: %s at %s' % (TIMER_INTERVAL, TIMER_START))
+        now = datetime.datetime.now()
+        today_str = now.strftime('%Y%m%d')
+        target = datetime.datetime.strptime(today_str + TIMER_TIME, '%Y%m%d%H%M%S')
+        if target <= now:
+            target = target + datetime.timedelta(days=1)
+        interval = datetime.timedelta(seconds=TIMER_INTERVAL)
+        ContextInfo.schedule_run(on_timer, target, repeat_times=-1,
+                                 interval=interval, name='diag_timer')
+        print('[DIAG] schedule_run at %s, interval=%ds' % (target, TIMER_INTERVAL))
         print('[DIAG] Waiting for timer trigger...')
     else:
         print('[DIAG] Backtest mode: waiting for handlebar...')
@@ -73,7 +78,7 @@ def handlebar(ContextInfo):
 
 
 def on_timer(ContextInfo):
-    """Live mode: triggered by run_time timer."""
+    """Live mode: triggered by schedule_run timer."""
     if MODE == 'LIVE':
         print('[DIAG] Timer fired at %s' % datetime.datetime.now().strftime('%H:%M:%S'))
         _on_signal(ContextInfo)
@@ -86,20 +91,17 @@ def _on_signal(ContextInfo):
     bar_date = _get_bar_date(ContextInfo)
 
     if bought:
-        # After buy: check position cost + current price
         acc = getattr(ContextInfo, 'accID', account_id)
         positions = get_trade_detail_data(acc, 'stock', 'POSITION')
         if not positions:
             positions = get_trade_detail_data(account_id, 'stock', 'POSITION')
 
-        # Get current bar close price
         cur_close = _get_bar_close(ContextInfo, '600584.SH', bar_date)
 
         print('[DIAG] --- Bar %s ---' % bar_date)
         print('[DIAG] Close price: %.4f' % cur_close)
         print('[DIAG] Position count: %d' % len(positions))
 
-        # Account balance
         try:
             accounts = get_trade_detail_data(acc, 'stock', 'ACCOUNT')
             for a in accounts:
@@ -126,12 +128,10 @@ def _on_signal(ContextInfo):
                 (open_price - buy_price_used) / buy_price_used * 100 if buy_price_used > 0 else 0))
         return
 
-    # First bar: buy 1 stock
     code = '600584.SH'
     print('[DIAG] === Attempting Buy ===')
     print('[DIAG] Stock: %s  Bar date: %s' % (code, bar_date))
 
-    # Get current bar price (official way: subscribe=False + end_time)
     price = _get_bar_close(ContextInfo, code, bar_date)
     if price <= 0:
         print('[DIAG] ERROR: cannot get price for %s' % code)
@@ -144,7 +144,6 @@ def _on_signal(ContextInfo):
     print('[DIAG] Bar close price: %.2f' % price)
     print('[DIAG] Bar volume: %.0f' % vol)
 
-    # Calculate shares
     target_value = 10000
     shares = int(target_value / price / 100) * 100
     if shares <= 0:
@@ -156,7 +155,6 @@ def _on_signal(ContextInfo):
     buy_price_used = price
     buy_shares = shares
 
-    # Execute buy
     now = datetime.datetime.now()
     remark = 'DIAG-%s' % now.strftime('%H%M%S')
     passorder(

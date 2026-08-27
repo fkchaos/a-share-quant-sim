@@ -187,7 +187,7 @@ def on_signal(C):
         _hold_days.pop(code, None)
 
     # 3. Per-stock time exit: sell if hold_days >= rebalance_days
-    holdings = _account.get_holdings()
+    holdings = qmt_runner.get_strategy_holdings('v75j', _account)
     for p in holdings:
         code = p['code']
         days = _hold_days.get(code, 0)
@@ -196,10 +196,11 @@ def on_signal(C):
                 print('[V75J] time exit: %s days=%d >= %d -> SELL' % (code, days, _hold_days_max))
             _account.sell_all(code)
             _hold_days.pop(code, None)
+            qmt_runner.strategy_sell('v75j', code, 999999)
 
     # 4. Check if slots are available -> buy
-    holdings = _account.get_holdings()
-    current_count = len([p for p in holdings if p['shares'] > 0])
+    holdings = qmt_runner.get_strategy_holdings('v75j', _account)
+    current_count = len([p for p in holdings if p.get('shares', 0) > 0])
     slots = max_holdings - current_count
 
     # Persist hold_days to file

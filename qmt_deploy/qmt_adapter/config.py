@@ -49,6 +49,10 @@ STRATEGIES = {
 }
 
 
+# ========== MODE ==========
+# Per-strategy position tracking (temporary: separates positions per strategy)
+PER_STRATEGY_POSITIONS = True
+
 # ========== MARKET DATA ==========
 MARKET_CONFIG = {
     'period': '1d',              # K-line period: 1d/1w/1mon

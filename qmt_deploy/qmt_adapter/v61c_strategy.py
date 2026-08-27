@@ -192,7 +192,7 @@ def on_signal(C):
     except Exception:
         pass
 
-    holdings = _account.get_holdings()
+    holdings = qmt_runner.get_strategy_holdings('v61c', _account)
     for p in holdings:
         code = p['code']
         days = _hold_days.get(code, 0)
@@ -208,10 +208,11 @@ def on_signal(C):
                     print('[%s][V61C] time exit: %s days=%d, NOT in Top%d -> SELL' % (today, code, days, _sell_out_of))
                 _account.sell_all(code)
                 _hold_days.pop(code, None)
+                qmt_runner.strategy_sell('v61c', code, 999999)  # sell all
 
     # 4. Rank drop sell: sell holdings that dropped out of Top N
     if ranked_codes:
-        holdings = _account.get_holdings()
+        holdings = qmt_runner.get_strategy_holdings('v61c', _account)
         for p in holdings:
             code = p['code']
             if code not in ranked_codes and _hold_days.get(code, 0) > 0:
@@ -219,10 +220,11 @@ def on_signal(C):
                     print('[%s][V61C] rank drop: %s NOT in Top%d -> SELL' % (today, code, _sell_out_of))
                 _account.sell_all(code)
                 _hold_days.pop(code, None)
+                qmt_runner.strategy_sell('v61c', code, 999999)  # sell all
 
     # 4. Check if slots are available -> buy
-    holdings = _account.get_holdings()
-    current_count = len([p for p in holdings if p['shares'] > 0])
+    holdings = qmt_runner.get_strategy_holdings('v61c', _account)
+    current_count = len([p for p in holdings if p.get('shares', 0) > 0])
     slots = max_holdings - current_count
 
     # Persist hold_days to file

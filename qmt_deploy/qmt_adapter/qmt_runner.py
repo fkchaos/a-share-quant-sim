@@ -1,3 +1,4 @@
+#coding:utf-8
 # QMT_RUNNER v2 - set_risk_debug added
 #coding:gbk
 """
@@ -156,3 +157,68 @@ def is_rebalance_day(C, rebalance_days):
         return days_diff >= rebalance_days
 
     return True
+
+# ── Per-strategy position tracking (temporary) ──
+def _get_positions_path(strategy_name):
+    """Get path to strategy's local position JSON."""
+    import os
+    return os.path.join(os.path.dirname(__file__), '_positions_%s.json' % strategy_name)
+
+def load_strategy_positions(strategy_name):
+    """Load per-strategy positions. Empty dict if file not found."""
+    import json, os
+    path = _get_positions_path(strategy_name)
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_strategy_positions(strategy_name, positions):
+    """Save per-strategy positions to JSON."""
+    import json
+    path = _get_positions_path(strategy_name)
+    with open(path, 'w') as f:
+        json.dump(positions, f)
+
+def strategy_buy(strategy_name, code, shares, cost_price, date=''):
+    """Record a buy in strategy's position file."""
+    pos = load_strategy_positions(strategy_name)
+    if code in pos:
+        old = pos[code]
+        total_cost = old['cost_price'] * old['shares'] + cost_price * shares
+        total_shares = old['shares'] + shares
+        pos[code] = {
+            'shares': total_shares,
+            'cost_price': round(total_cost / total_shares, 4) if total_shares > 0 else 0,
+            'added_at': old.get('added_at', date),
+        }
+    else:
+        pos[code] = {'shares': shares, 'cost_price': cost_price, 'added_at': date}
+    save_strategy_positions(strategy_name, pos)
+
+def strategy_sell(strategy_name, code, shares):
+    """Record a sell in strategy's position file."""
+    pos = load_strategy_positions(strategy_name)
+    if code in pos:
+        pos[code]['shares'] -= shares
+        if pos[code]['shares'] <= 0:
+            del pos[code]
+        save_strategy_positions(strategy_name, pos)
+
+def get_strategy_holdings(strategy_name, account):
+    """Get holdings: per-strategy if enabled, else account-wide."""
+    from .config import PER_STRATEGY_POSITIONS
+    if not PER_STRATEGY_POSITIONS:
+        return account.get_holdings()
+    pos = load_strategy_positions(strategy_name)
+    return [{'code': c, 'shares': v['shares'], 'avg_cost': v['cost_price']} 
+            for c, v in pos.items() if v.get('shares', 0) > 0]
+
+def strategy_stock_count(strategy_name):
+    """Count stocks held by this strategy."""
+    from .config import PER_STRATEGY_POSITIONS
+    if not PER_STRATEGY_POSITIONS:
+        return None  # caller should use account
+    pos = load_strategy_positions(strategy_name)
+    return sum(1 for v in pos.values() if v.get('shares', 0) > 0)

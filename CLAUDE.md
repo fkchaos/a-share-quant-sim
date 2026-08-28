@@ -115,6 +115,15 @@
 23. **⚠️ v61c SELL_OUT_OF逻辑** — v61c的核心是到期续持优化（持有5天到期→检查Top15→在则续持）。QMT版必须实现此逻辑，否则退化为v61b
 24. **⚠️ get_close_price必须先subscribe** — `subscribe=False`仅主图品种有效。`get_close_price`/`get_close_prices_batch`获取非主图股票价格前必须先`subscribe_quote()`，否则返回0导致无法买入
 25. **⚠️ QMT策略init()中today变量** — `_get_bar_date(C)` 必须在init()内显式调用赋值给`_today_init`，不能依赖后续函数的局部变量。否则NameError→hold_days被重置
+27. **⚠️ QMT订单状态机** — 用`userOrderId`（remark）跟踪订单状态：pending→ordered→filled。`order_callback`返回`m_strOrderSysID`用于撤单。部分成交用`filled += dealInfo.m_nVolume`累计
+28. **⚠️ QMT撤单超时** — 60秒无`order_callback`→废单（rejected）。`ordered`状态超时→调用`cancel`撤单。撤单前必须`can_cancel_order`检查
+29. **⚠️ QMT持仓JSON更新** — 必须在`deal_callback`（成交确认）后更新，不能在`buy`/`sell`调用时立即更新
+30. **⚠️ QMT选股阶段过滤** — 涨停过滤（close==high）和资金容量过滤（买不起1手）必须在选股阶段（buy_list生成）执行，不是买入执行阶段
+31. **⚠️ QMT风控T+1** — 持有首日（hold_days<1）跳过风控检查，不卖
+32. **⚠️ QMT涨停不卖止盈** — 涨停时不卖（止盈保留），防止卖出后无法买回
+33. **⚠️ QMT HOLD_DAYS_EXTEND** — 盈利>阈值时可延期持有，用`hold_days_extend`参数
+34. **⚠️ QMT MAX_STOCK_PRICE** — 排除超过价格上限的股票，参数在config.py中配置
+
 26. **⚠️ QMT策略文件必须GBK编码且不用中文** — 所有.py文件第一行必须`#coding:gbk`，文件必须实际保存为GBK编码。字符串常量用英文（如TECH_SECTORS用'Electronics'不用'电子'），UTF-8编辑器修改GBK文件=中文变"锟斤拷"
 
 ---

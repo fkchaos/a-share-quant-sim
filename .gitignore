@@ -47,3 +47,4 @@ config/mcporter.json
 data/v44_param_scan.json
 scripts/data/portfolio/trade_plan_*.json
 data/external/valuation_daily.csv
+.hermes/

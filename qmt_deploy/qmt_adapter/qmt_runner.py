@@ -1,4 +1,4 @@
-#coding:utf-8
+#coding:gbk
 # QMT_RUNNER v2 - set_risk_debug added
 #coding:gbk
 """
@@ -158,7 +158,7 @@ def is_rebalance_day(C, rebalance_days):
 
     return True
 
-# â”€â”€ Per-strategy position tracking (temporary) â”€â”€
+# ©¤©¤ Per-strategy position tracking (temporary) ©¤©¤
 def _get_positions_path(strategy_name):
     """Get path to strategy's local position JSON."""
     import os

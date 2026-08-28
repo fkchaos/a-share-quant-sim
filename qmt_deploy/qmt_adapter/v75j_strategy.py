@@ -1,4 +1,4 @@
-#coding:utf-8
+#coding:gbk
 """
 v75j_strategy.py - V75J Strategy Logic
 
@@ -25,7 +25,7 @@ def set_debug(flag):
 
 
 # Tech sector names in QMT instrument detail
-TECH_SECTORS = ['ï¿½ï¿½ï¿½ï¿½', 'ï¿½ï¿½ï¿½ï¿½ï¿½', 'Í¨ï¿½ï¿½', 'ï¿½ï¿½Ã½']
+TECH_SECTORS = ['Electronics', 'Computer', 'Communication', 'Media']
 
 # Module-level globals
 _stock_pool = None
@@ -87,15 +87,16 @@ def init(C):
     import json as _json
     import os as _os
     _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days.json')
+    _today_init = _get_bar_date(C)
     try:
         with open(_persist_path, 'r') as _f:
             _data = _json.load(_f)
             _hold_days = _data.get('hold_days', {})
             _last_date = _data.get('last_date', '')
             # If date changed (new day), keep hold_days but update date
-            if _last_date != today:
+            if _last_date != _today_init:
                 print('[INIT] new day detected: %s -> %s, keeping %d positions' % (
-                    _last_date, today, len(_hold_days)))
+                    _last_date, _today_init, len(_hold_days)))
     except Exception:
         _hold_days = {}
 
@@ -119,26 +120,24 @@ def init(C):
             print('[V75J] tech codes (first 10): %s' % ','.join(_tech_codes[:10]))
 
 
+#coding:gbk
 def _build_industry_map(C):
-    """Build industry mapping for ZZ1800 stocks using QMT instrument detail."""
+    """Build industry mapping from static data (qmt_data_static.py)."""
     global _tech_codes, _industry_map
+
+    from .qmt_data_static import INDUSTRY
 
     _industry_map = {}
     _tech_codes = []
 
-    for code in _stock_list:
-        try:
-            detail = C.get_instrument_detail(code)
-            if detail and 'IndustryClassification' in detail:
-                industry = detail['IndustryClassification']
-                _industry_map[code] = industry
-                if industry in TECH_SECTORS:
-                    _tech_codes.append(code)
-            else:
-                _industry_map[code] = ''
-        except Exception:
-            _industry_map[code] = ''
+    # Tech sector names (Chinese, matching DB)
+    _TECH_CN = ['µç×Ó', '¼ÆËã»ú', 'Í¨ÐÅ', '´«Ã½']
 
+    for code in _stock_list:
+        industry = INDUSTRY.get(code, '')
+        _industry_map[code] = industry
+        if industry in _TECH_CN:
+            _tech_codes.append(code)
 
 def on_signal(C):
     """Core business logic - shared by both handlebar and run_time triggers.
@@ -266,9 +265,6 @@ def on_signal(C):
 
 
 
-def handlebar(C):
-    """Backward compat: handlebar -> on_signal."""
-    on_signal(C)
 
 def _calc_breadth(C):
     """Calculate tech breadth: % of tech stocks with close > MA20.

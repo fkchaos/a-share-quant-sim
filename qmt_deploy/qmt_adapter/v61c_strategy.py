@@ -82,15 +82,16 @@ def init(C):
     import json as _json
     import os as _os
     _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days.json')
+    _today_init = _get_bar_date(C)
     try:
         with open(_persist_path, 'r') as _f:
             _data = _json.load(_f)
             _hold_days = _data.get('hold_days', {})
             _last_date = _data.get('last_date', '')
             # If date changed (new day), keep hold_days but update date
-            if _last_date != today:
+            if _last_date != _today_init:
                 print('[INIT] new day detected: %s -> %s, keeping %d positions' % (
-                    _last_date, today, len(_hold_days)))
+                    _last_date, _today_init, len(_hold_days)))
     except Exception:
         _hold_days = {}
 
@@ -281,9 +282,6 @@ def on_signal(C):
     _last_buy_date = today
 
 
-def handlebar(C):
-    """Backward compat: handlebar -> on_signal."""
-    on_signal(C)
 
 
 def _select_stocks(C):

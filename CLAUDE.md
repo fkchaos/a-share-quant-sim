@@ -111,8 +111,11 @@
 18. **⚠️ QMT get_market_data_ex必须传end_time** — 不传end_time返回今天的价格而非bar日期价格，导致买入价/风控PnL计算错误。正确用法：`C.get_market_data_ex(['close'], [code], end_time=bar_date, period='1d', count=1)`
 19. **⚠️ QMT get_market_data_ex subscribe参数** — `subscribe=False`仅主图品种有效，非主图品种返回空。交易非主图股票必须用`subscribe=True`（默认值）
 20. **⚠️ QMT passorder quickTrade参数** — 回测必须用`quickTrade=0`（逐K线模式），不能用1（仅最新K线触发）
-21. **⚠️ QMT m_dOpenPrice是真实成本** — 不要自己记录买入价覆盖m_dOpenPrice。如果m_dOpenPrice与预期不符，先检查end_time参数，再检查账户状态
-22. **⚠️ v61c SELL_OUT_OF逻辑** — v61c的核心是到期续持优化（持有5天到期→检查Top15→在则续持）。QMT版必须实现此逻辑，否则退化为v61b
+22. **⚠️ QMT m_dOpenPrice是真实成本** — 不要自己记录买入价覆盖m_dOpenPrice。如果m_dOpenPrice与预期不符，先检查end_time参数，再检查账户状态
+23. **⚠️ v61c SELL_OUT_OF逻辑** — v61c的核心是到期续持优化（持有5天到期→检查Top15→在则续持）。QMT版必须实现此逻辑，否则退化为v61b
+24. **⚠️ get_close_price必须先subscribe** — `subscribe=False`仅主图品种有效。`get_close_price`/`get_close_prices_batch`获取非主图股票价格前必须先`subscribe_quote()`，否则返回0导致无法买入
+25. **⚠️ QMT策略init()中today变量** — `_get_bar_date(C)` 必须在init()内显式调用赋值给`_today_init`，不能依赖后续函数的局部变量。否则NameError→hold_days被重置
+26. **⚠️ QMT策略文件必须GBK编码且不用中文** — 所有.py文件第一行必须`#coding:gbk`，文件必须实际保存为GBK编码。字符串常量用英文（如TECH_SECTORS用'Electronics'不用'电子'），UTF-8编辑器修改GBK文件=中文变"锟斤拷"
 
 ---
 

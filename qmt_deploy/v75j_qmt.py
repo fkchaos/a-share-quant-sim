@@ -1,8 +1,8 @@
 #coding:gbk
 """v75j_qmt.py - V75J entry point (dual trigger mode)
 
-MODE = 'BACKTEST'  -> handlebar callback (回测+实盘通用)
-MODE = 'LIVE'      -> schedule_run timer (仅实盘，支持集合竞价等场景)
+MODE = 'BACKTEST'  -> handlebar callback (backtest + live universal)
+MODE = 'LIVE'      -> schedule_run timer (live only, supports call auction etc)
 
 Business logic lives in v75j_strategy.on_signal(), shared by both modes.
 """
@@ -21,7 +21,6 @@ DEBUG = True
 
 from qmt_adapter.v75j_strategy import (
     init as _init,
-    handlebar as _handlebar,
     on_signal as _on_signal,
     set_debug as _set_debug,
 )

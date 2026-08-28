@@ -83,9 +83,18 @@ def load_kline(C, stock_list, days=120):
 
 
 def get_close_price(C, code, bar_date=''):
-    """Get close price for a stock (official backtest way: subscribe=False + end_time)."""
+    """Get close price for a stock.
+
+    NOTE: subscribe=False only works for main chart stock.
+    For non-main-chart stocks, must subscribe=True first.
+    """
     try:
-        kwargs = {'field_list': ['close'], 'stock_list': [code], 'period': '1d', 'count': 1, 'subscribe': False}
+        # Subscribe first (required for non-main-chart stocks)
+        try:
+            C.subscribe_quote(code, period='1d', count=1)
+        except Exception:
+            pass
+        kwargs = {'field_list': ['close'], 'stock_list': [code], 'period': '1d', 'count': 1, 'subscribe': True}
         if bar_date:
             kwargs['end_time'] = bar_date
         data = C.get_market_data_ex(**kwargs)
@@ -97,9 +106,19 @@ def get_close_price(C, code, bar_date=''):
 
 
 def get_close_prices_batch(C, stock_list, bar_date=''):
-    """Get close prices for multiple stocks (official backtest way: subscribe=False + end_time)."""
+    """Get close prices for multiple stocks.
+
+    NOTE: subscribe=False only works for main chart stock.
+    For non-main-chart stocks, must subscribe first.
+    """
     try:
-        kwargs = {'field_list': ['close'], 'stock_list': stock_list, 'period': '1d', 'count': 1, 'subscribe': False}
+        # Subscribe first (required for non-main-chart stocks)
+        for code in stock_list:
+            try:
+                C.subscribe_quote(code, period='1d', count=1)
+            except Exception:
+                pass
+        kwargs = {'field_list': ['close'], 'stock_list': stock_list, 'period': '1d', 'count': 1, 'subscribe': True}
         if bar_date:
             kwargs['end_time'] = bar_date
         data = C.get_market_data_ex(**kwargs)

@@ -24,9 +24,6 @@ def set_debug(flag):
     _DEBUG = flag
 
 
-# Tech sector names in QMT instrument detail
-TECH_SECTORS = ['Electronics', 'Computer', 'Communication', 'Media']
-
 # Module-level globals
 _stock_pool = None
 _stock_list = None
@@ -125,18 +122,15 @@ def _build_industry_map(C):
     """Build industry mapping from static data (qmt_data_static.py)."""
     global _tech_codes, _industry_map
 
-    from .qmt_data_static import INDUSTRY
+    from .qmt_data_static import INDUSTRY, TECH_SECTORS
 
     _industry_map = {}
     _tech_codes = []
 
-    # Tech sector names (Chinese, matching DB)
-    _TECH_CN = ['电子', '计算机', '通信', '传媒']
-
     for code in _stock_list:
         industry = INDUSTRY.get(code, '')
         _industry_map[code] = industry
-        if industry in _TECH_CN:
+        if industry in TECH_SECTORS:
             _tech_codes.append(code)
 
 def on_signal(C):

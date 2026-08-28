@@ -118,6 +118,18 @@ def execute_buy(C, account, target_weight, bar_date='', capital=50000):
             print('[BUY] SKIP %s: cannot afford 1 lot' % code)
             continue
 
+        # Limit up check: skip if close == high (ÕÇÍ£²»Âò)
+        try:
+            data = C.get_market_data_ex(['close', 'high'], [code], period='1d', count=1)
+            if code in data and len(data[code]) > 0:
+                close_price = data[code]['close'].iloc[-1]
+                high_price = data[code]['high'].iloc[-1]
+                if close_price > 0 and high_price > 0 and close_price >= high_price:
+                    print('[BUY] SKIP %s: limit up (close==high)' % code)
+                    continue
+        except Exception:
+            pass  # If can't check, allow buy
+
         account.buy_value(code, buy_amount, price)
         print('[BUY] EXECUTED %s: %.0f CNY -> %d lots' % (code, buy_amount, lots))
         bought.append(code)

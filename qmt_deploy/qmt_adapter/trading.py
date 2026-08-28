@@ -203,6 +203,12 @@ class QmtAccount(object):
           prType=14 (counterparty price), quickTrade=0 (backtest mode)
         """
         _get_qmt_func()
+        
+        # Duplicate order prevention: check if same stock has pending order
+        for remark, o in _orders.items():
+            if o['code'] == stock_code and o['status'] in ('pending', 'ordered', 'partial'):
+                print('[BUY] SKIP %s: duplicate order pending (remark=%s)' % (stock_code, remark))
+                return None
         from . import trading
 
         # Generate unique userOrderId for callback matching

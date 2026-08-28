@@ -278,6 +278,21 @@ def on_signal(C):
                     continue
         filtered.append(c)
     
+    # Price filter: skip if price > MAX_STOCK_PRICE
+    max_stock_price = _params.get('max_stock_price', 0)
+    price_filtered = []
+    for c in filtered:
+        if max_stock_price > 0 and c in kline_data:
+            df = kline_data[c]
+            if len(df) > 0:
+                price = df['close'].iloc[-1]
+                if price > max_stock_price:
+                    if _DEBUG:
+                        print('[V61C] SKIP %s: price %.2f > max %d' % (c, price, max_stock_price))
+                    continue
+        price_filtered.append(c)
+    filtered = price_filtered
+    
     # Capital filter: skip if cannot afford 1 lot (100 shares)
     capital_per_stock = _params.get('capital', 50000) * _params.get('max_per_stock', 0.25)
     capital_filtered = []

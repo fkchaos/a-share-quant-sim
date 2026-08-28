@@ -36,6 +36,9 @@ STRATEGIES = {
         'stop_loss': -0.08,
         'take_profit': 0.25,
         'hold_days_max': 20,
+        'hold_days_extend': 30,
+        'hold_days_extend_pnl': 0.10,
+        'max_stock_price': 300,
         # Position management (per-strategy capital, not account total)
         'capital': 100000,
         'max_holdings': 3,

@@ -57,30 +57,59 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
         hold_days = holding_days.get(code, 0)
         cost_price = p.get('avg_cost', 0)
 
+        # T+1: skip risk check on buy day
+        if hold_days < 1:
+            continue
+
         from .data import get_close_price
         cur_price = get_close_price(C, code, bar_date)
         if cur_price <= 0 or cost_price <= 0:
             continue
 
         pnl = (cur_price - cost_price) / cost_price
+
+        # Limit up check: don't sell on take profit if limit up
+        is_limit_up = False
+        from .data import get_kline_data_multi
+        try:
+            _kl = get_kline_data_multi(C, [code], count=1)
+            if code in _kl and len(_kl[code]) > 0:
+                df = _kl[code]
+                last_close = df['close'].iloc[-1]
+                last_high = df['high'].iloc[-1]
+                if last_close > 0 and last_high > 0 and last_close >= last_high:
+                    is_limit_up = True
+        except Exception:
+            pass
+
         if _risk_debug:
-            print('[%s][RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) -> %s' % (bar_date or '??',
-                code, cost_price, cur_price, pnl*100, sl*100, tp*100, hold_days, hd,
-            'SELL' if (pnl < sl or pnl > tp or hold_days >= hd) else 'HOLD'))
+            print('[%s][RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) limit_up=%s -> %s' % (bar_date or '??',
+                code, cost_price, cur_price, pnl*100, sl*100, tp*100, hold_days, hd, is_limit_up,
+            'SELL' if (pnl < sl or (pnl > tp and not is_limit_up) or hold_days >= hd) else 'HOLD'))
 
         if pnl < sl:
             account.sell_all(code)
             sold.append(code)
             continue
 
-        if pnl > tp:
+        if pnl > tp and not is_limit_up:
             account.sell_all(code)
             sold.append(code)
             continue
 
-        if hold_days >= hd:
-            account.sell_all(code)
-            sold.append(code)
+        # HOLD_DAYS_EXTEND: extend if profit > threshold
+        hd_extend = risk_config.get('hold_days_extend', hd)
+        hd_extend_pnl = risk_config.get('hold_days_extend_pnl', 0.03)
+        if pnl >= hd_extend_pnl:
+            # Profitable: use extended hold days
+            if hold_days >= hd_extend:
+                account.sell_all(code)
+                sold.append(code)
+        else:
+            # Not profitable: use normal hold days
+            if hold_days >= hd:
+                account.sell_all(code)
+                sold.append(code)
 
     return sold
 

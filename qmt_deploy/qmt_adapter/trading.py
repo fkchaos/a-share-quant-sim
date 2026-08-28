@@ -215,6 +215,18 @@ class QmtAccount(object):
             self.C                  # ContextInfo
         )
 
+        # Register order for callback tracking
+        from . import trading as _trading_mod
+        if hasattr(_trading_mod, '_orders'):
+            _trading_mod._orders[remark] = {
+                'status': 'pending',
+                'stock': stock_code,
+                'vol': shares,
+                'price': price,
+                'filled': 0,
+                'name': '',
+            }
+
         if _risk_debug:
             print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
 
@@ -266,6 +278,18 @@ class QmtAccount(object):
             'V61C',                 # strategyName
             0,                      # quickTrade: 0=backtest mode
             remark,                 # userOrderId
+
+        # Register order for callback tracking
+        from . import trading as _trading_mod
+        if hasattr(_trading_mod, '_orders'):
+            _trading_mod._orders[remark] = {
+                'status': 'pending',
+                'stock': stock_code,
+                'vol': shares,
+                'price': price,
+                'filled': 0,
+                'name': '',
+            }
             self.C                  # ContextInfo
         )
 
@@ -311,18 +335,11 @@ class QmtAccount(object):
 # Callback functions (QMT auto-calls these, no registration needed)
 # ============================================================
 
+_orders = {}  # remark -> {status, stock, vol, price, filled, name}
+
 def order_callback(ContextInfo, orderInfo):
     """order callback - called when order status changes.
-
-    Official fields:
-      m_strInstrumentID     - code (without suffix)
-      m_strExchangeID       - exchange (SH/SZ)
-      m_strRemark           - userOrderId (our unique identifier)
-      m_nVolumeTotalOriginal - total order volume
-      m_nVolumeTraded       - filled volume
-      m_dTradedPrice        - avg fill price
-      m_nOrderStatus        - order status
-      m_nOffsetFlag         - direction (48=buy, 49=sell)
+    Tracks order state via userOrderId (m_strRemark).
     """
     remark = getattr(orderInfo, 'm_strRemark', '')
     code = getattr(orderInfo, 'm_strInstrumentID', '') + '.' + getattr(orderInfo, 'm_strExchangeID', '')
@@ -330,24 +347,16 @@ def order_callback(ContextInfo, orderInfo):
     traded = getattr(orderInfo, 'm_nVolumeTraded', 0)
     status = getattr(orderInfo, 'm_nOrderStatus', -1)
 
-    # Callbacks only fire in live mode (not backtest)
-    print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
+    if remark and remark in _orders:
+        _orders[remark]['status'] = 'ordered'
+        print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
+    else:
+        print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s (unknown)' % (code, vol, traded, status, remark))
 
 
 def deal_callback(ContextInfo, dealInfo):
     """deal callback - called when order is (partially) filled.
-
-    Official fields:
-      m_strInstrumentID     - code (without suffix)
-      m_strExchangeID       - exchange (SH/SZ)
-      m_strInstrumentName   - stock name
-      m_dPrice              - fill price
-      m_nVolume             - fill volume
-      m_dTradeAmount        - fill amount (CNY)
-      m_nOffsetFlag         - direction (48=buy, 49=sell)
-      m_strRemark           - userOrderId
-      m_strTradeDate        - fill date
-      m_strTradeTime        - fill time
+    Updates position tracking and order state.
     """
     remark = getattr(dealInfo, 'm_strRemark', '')
     code = getattr(dealInfo, 'm_strInstrumentID', '') + '.' + getattr(dealInfo, 'm_strExchangeID', '')
@@ -357,7 +366,18 @@ def deal_callback(ContextInfo, dealInfo):
     amount = getattr(dealInfo, 'm_dTradeAmount', 0)
     direction = getattr(dealInfo, 'm_nOffsetFlag', 0)
 
-    # Callbacks only fire in live mode (not backtest)
     dir_str = 'BUY' if direction == 48 else 'SELL'
     print('[DEAL_CB] %s %s %s %d shares @ %.2f = %.0f CNY remark=%s' % (
         code, name, dir_str, vol, price, amount, remark))
+
+    # Update order state
+    if remark and remark in _orders:
+        o = _orders[remark]
+        o['filled'] += vol
+        if o['filled'] >= o['vol']:
+            o['status'] = 'filled'
+            print('[DEAL_CB] %s fully filled: %d/%d' % (code, o['filled'], o['vol']))
+        else:
+            print('[DEAL_CB] %s partial fill: %d/%d' % (code, o['filled'], o['vol']))
+    else:
+        print('[DEAL_CB] %s (unknown remark: %s)' % (code, remark))

@@ -24,7 +24,7 @@ STRATEGIES = {
         # Position management (per-strategy capital, not account total)
         'capital': 100000,
         'max_holdings': 5,
-        'max_per_stock': 0.25,
+        'max_per_stock': 0.20,
         # Rebalance
         'rebalance_days': 5,
         'sell_out_of': 15,
@@ -39,7 +39,7 @@ STRATEGIES = {
         # Position management (per-strategy capital, not account total)
         'capital': 100000,
         'max_holdings': 3,
-        'max_per_stock': 0.35,
+        'max_per_stock': 0.33,
         # Breadth filter
         'breadth_high': 0.50,
         'breadth_low': 0.30,

@@ -45,6 +45,16 @@ def init(C):
                         interval=interval, name='signal_timer')
         if DEBUG:
             print('[INIT] MODE=LIVE, schedule_run at %s, interval=%ds' % (target, TIMER_INTERVAL))
+    
+    # Register order check timer (every 10 seconds)
+    C.run_time('check_order_timer', '10nSecond', '2026-01-01 00:00:00')
+
+
+def check_order_timer(C):
+    """Periodic order check - cancel stale orders and re-order."""
+    from qmt_adapter.trading import check_order_timeout, process_pending_reorders
+    check_order_timeout(C, max_seconds=60)
+    process_pending_reorders(C)
 
 
 def handlebar(C):

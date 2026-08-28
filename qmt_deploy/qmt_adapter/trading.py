@@ -13,7 +13,8 @@ import datetime
 
 
 # Module-level order tracking
-_orders = {}  # remark -> {status, code, shares, price, filled, ts}
+_orders = {}  # remark -> {status, stock, vol, price, filled, timestamp, ...}
+_pending_reorders = []  # list of (code, remaining, reason) to re-order after cancel  # remark -> {status, code, shares, price, filled, ts}
 _risk_debug = False
 
 

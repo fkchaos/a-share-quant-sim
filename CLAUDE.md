@@ -108,7 +108,7 @@
 15. **⚠️ 科创板(688/689)过滤分层** — 数据源层已放开（`get_tradeable_codes`返回全量），WF层默认过滤（`--no-exclude-star`可放开），策略层v75a硬编码过滤（新策略v75n绕过）。回测含科创板时需同时满足：①WF不过滤 ②策略不排除 ③数据已回补
 16. **⚠️ QMT adapter重写不能简化策略逻辑** — 重写qmt_adapter时必须完整移植原有选股逻辑（v61c低换手+小市值、v75j科技趋势+流动性+广度过滤），不能只用市值/流动性排序简化版。参考原始策略：`scripts/strategies/v61_turnover_size.py`和`v75j_liquidity_only.py`
 17. **⚠️ QMT回测看不到交易记录** — passorder调用成功但回测界面无记录，可能是回测初始资金/账户配置问题，需在QMT界面确认。详见`docs/qmt/QMT_ADAPTER_TODO.md`
-18. **⚠️ QMT get_market_data_ex必须传end_time** — 不传end_time返回今天的价格而非bar日期价格，导致买入价/风控PnL计算错误。正确用法：`C.get_market_data_ex(['close'], [code], end_time=bar_date, period='1d', count=1)`
+18. **⚠️ QMT get_market_data_ex end_time** — 不传end_time返回最新价，传end_time返回指定日期收盘价。买入用最新价（不传end_time），风控PnL用bar日期收盘价（传end_time）
 19. **⚠️ QMT get_market_data_ex subscribe参数** — `subscribe=False`仅主图品种有效，非主图品种返回空。交易非主图股票必须用`subscribe=True`（默认值）
 20. **⚠️ QMT passorder quickTrade参数** — 回测必须用`quickTrade=0`（逐K线模式），不能用1（仅最新K线触发）
 22. **⚠️ QMT m_dOpenPrice是真实成本** — 不要自己记录买入价覆盖m_dOpenPrice。如果m_dOpenPrice与预期不符，先检查end_time参数，再检查账户状态

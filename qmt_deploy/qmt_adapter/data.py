@@ -83,10 +83,10 @@ def load_kline(C, stock_list, days=120):
 
 
 def get_close_price(C, code, bar_date=''):
-    """Get close price for a stock.
+    """Get latest close price for a stock.
 
-    NOTE: subscribe=False only works for main chart stock.
-    For non-main-chart stocks, must subscribe=True first.
+    Uses latest available data (no end_time) for current price.
+    For non-main-chart stocks, must subscribe first.
     """
     try:
         # Subscribe first (required for non-main-chart stocks)
@@ -94,21 +94,19 @@ def get_close_price(C, code, bar_date=''):
             C.subscribe_quote(code, period='1d', count=1)
         except Exception:
             pass
-        kwargs = {'field_list': ['close'], 'stock_list': [code], 'period': '1d', 'count': 1, 'subscribe': True}
-        if bar_date:
-            kwargs['end_time'] = bar_date
-        data = C.get_market_data_ex(**kwargs)
+        # Get latest price (no end_time = latest available)
+        data = C.get_market_data_ex(['close'], [code], period='1d', count=1)
         if code in data and len(data[code]) > 0:
             return data[code]['close'].iloc[-1]
-    except Exception:
-        pass
+    except Exception as e:
+        print('[DEBUG] get_close_price error: %s %s' % (code, e))
     return 0.0
 
 
 def get_close_prices_batch(C, stock_list, bar_date=''):
-    """Get close prices for multiple stocks.
+    """Get latest close prices for multiple stocks.
 
-    NOTE: subscribe=False only works for main chart stock.
+    Uses latest available data (no end_time) for current prices.
     For non-main-chart stocks, must subscribe first.
     """
     try:
@@ -118,10 +116,8 @@ def get_close_prices_batch(C, stock_list, bar_date=''):
                 C.subscribe_quote(code, period='1d', count=1)
             except Exception:
                 pass
-        kwargs = {'field_list': ['close'], 'stock_list': stock_list, 'period': '1d', 'count': 1, 'subscribe': True}
-        if bar_date:
-            kwargs['end_time'] = bar_date
-        data = C.get_market_data_ex(**kwargs)
+        # Get latest prices (no end_time = latest available)
+        data = C.get_market_data_ex(['close'], stock_list, period='1d', count=1)
         result = {}
         for code in stock_list:
             if code in data and len(data[code]) > 0:

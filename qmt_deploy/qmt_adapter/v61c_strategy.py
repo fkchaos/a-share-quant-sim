@@ -260,9 +260,26 @@ def on_signal(C):
     if not selected:
         return
 
-    # Filter out currently held stocks
+    # Filter out currently held stocks and limit up stocks
     held_codes = set(p['code'] for p in holdings)
-    buy_list = [c for c in selected if c not in held_codes][:slots]
+    filtered = []
+    for c in selected:
+        if c in held_codes:
+            continue
+        # Limit up check: exclude if close == high (ÕÇÍ£²»Âò)
+        if c in kline_data:
+            df = kline_data[c]
+            if len(df) > 0:
+                last_close = df['close'].iloc[-1]
+                last_high = df['high'].iloc[-1]
+                if last_close > 0 and last_high > 0 and last_close >= last_high:
+                    if _DEBUG:
+                        print('[V61C] SKIP %s: limit up (close==high)' % c)
+                    continue
+        filtered.append(c)
+    
+    # Select top N from filtered list
+    buy_list = filtered[:slots]
 
     if not buy_list:
         return
@@ -318,11 +335,6 @@ def _select_stocks(C):
             continue
         df = kline_data[code]
         if len(df) < 3:
-            continue
-        # Limit up check: exclude if close == high (ÕÇÍ£²»Âò)
-        last_close = df['close'].iloc[-1]
-        last_high = df['high'].iloc[-1]
-        if last_close > 0 and last_high > 0 and last_close >= last_high:
             continue
         candidates.append(code)
 

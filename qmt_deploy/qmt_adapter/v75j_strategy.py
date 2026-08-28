@@ -239,9 +239,26 @@ def on_signal(C):
     if not selected:
         return
 
-    # Filter out currently held stocks
+    # Filter out currently held stocks and limit up stocks
     held_codes = set(p['code'] for p in holdings)
-    buy_list = [c for c in selected if c not in held_codes][:slots]
+    filtered = []
+    for c in selected:
+        if c in held_codes:
+            continue
+        # Limit up check: exclude if close == high (ÕÇÍ£²»Âò)
+        if c in kline_data:
+            df = kline_data[c]
+            if len(df) > 0:
+                last_close = df['close'].iloc[-1]
+                last_high = df['high'].iloc[-1]
+                if last_close > 0 and last_high > 0 and last_close >= last_high:
+                    if _DEBUG:
+                        print('[V75J] SKIP %s: limit up (close==high)' % c)
+                    continue
+        filtered.append(c)
+    
+    # Select top N from filtered list
+    buy_list = filtered[:slots]
 
     if not buy_list:
         return
@@ -342,10 +359,7 @@ def _select_stocks(C, breadth=None):
             continue
         if latest_close > 300:
             continue
-        # Limit up check: exclude if close == high (ÕÇÍ£²»Âò)
-        latest_high = df['high'].values[-1]
-        if not np.isnan(latest_high) and latest_high > 0 and latest_close >= latest_high:
-            continue
+        # Limit up check will be done in buy_list generation
         # 20-day average amount
         amounts = df['amount'].values[-20:]
         avg_amount = np.nanmean(amounts)

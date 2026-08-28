@@ -342,6 +342,10 @@ def _select_stocks(C, breadth=None):
             continue
         if latest_close > 300:
             continue
+        # Limit up check: exclude if close == high (ÕÇÍ£²»Âò)
+        latest_high = df['high'].values[-1]
+        if not np.isnan(latest_high) and latest_high > 0 and latest_close >= latest_high:
+            continue
         # 20-day average amount
         amounts = df['amount'].values[-20:]
         avg_amount = np.nanmean(amounts)

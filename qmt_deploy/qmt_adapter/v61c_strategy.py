@@ -306,6 +306,7 @@ def _select_stocks(C):
         _kline_cache_date = today
 
     # Filter candidates: must have float_shares and kline data
+    # Also exclude limit up stocks (close == high)
     candidates = []
     for code in _stock_list:
         if code not in FLOAT_SHARES:
@@ -317,6 +318,11 @@ def _select_stocks(C):
             continue
         df = kline_data[code]
         if len(df) < 3:
+            continue
+        # Limit up check: exclude if close == high (ÕÇÍ£²»Âò)
+        last_close = df['close'].iloc[-1]
+        last_high = df['high'].iloc[-1]
+        if last_close > 0 and last_high > 0 and last_close >= last_high:
             continue
         candidates.append(code)
 

@@ -23,6 +23,13 @@ def set_risk_debug(flag):
     _risk_debug = flag
 
 
+
+def _get_account_id():
+    """Get account_id from ACCOUNT_CONFIG."""
+    from .config import ACCOUNT_CONFIG
+    return str(ACCOUNT_CONFIG.get('account_id', ''))
+
+
 def _get_qmt_func():
     """Get QMT built-in functions by walking up ALL frames."""
     frame = sys._getframe(1)

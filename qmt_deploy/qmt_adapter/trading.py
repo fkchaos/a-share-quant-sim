@@ -217,6 +217,7 @@ class QmtAccount(object):
 
         # Register order for callback tracking
         from . import trading as _trading_mod
+        import time as _time
         if hasattr(_trading_mod, '_orders'):
             _trading_mod._orders[remark] = {
                 'status': 'pending',
@@ -225,6 +226,7 @@ class QmtAccount(object):
                 'price': price,
                 'filled': 0,
                 'name': '',
+                'timestamp': _time.time(),
             }
 
         if _risk_debug:
@@ -281,6 +283,7 @@ class QmtAccount(object):
 
         # Register order for callback tracking
         from . import trading as _trading_mod
+        import time as _time
         if hasattr(_trading_mod, '_orders'):
             _trading_mod._orders[remark] = {
                 'status': 'pending',
@@ -289,6 +292,7 @@ class QmtAccount(object):
                 'price': price,
                 'filled': 0,
                 'name': '',
+                'timestamp': _time.time(),
             }
             self.C                  # ContextInfo
         )
@@ -332,6 +336,22 @@ class QmtAccount(object):
 
 
 # ============================================================
+# Order timeout check (call periodically)
+# ============================================================
+
+def check_order_timeout(timeout_seconds=60):
+    """Check for orders that never received order_callback (likely rejected)."""
+    import time
+    now = time.time()
+    for remark, o in list(_orders.items()):
+        if o['status'] == 'pending':
+            age = now - o.get('timestamp', now)
+            if age > timeout_seconds:
+                o['status'] = 'rejected'
+                print('[TIMEOUT] %s rejected after %ds: %s' % (o['stock'], age, remark))
+
+
+# ============================================================
 # Callback functions (QMT auto-calls these, no registration needed)
 # ============================================================
 
@@ -356,7 +376,7 @@ def order_callback(ContextInfo, orderInfo):
 
 def deal_callback(ContextInfo, dealInfo):
     """deal callback - called when order is (partially) filled.
-    Updates position tracking and order state.
+    Updates position JSON and order state.
     """
     remark = getattr(dealInfo, 'm_strRemark', '')
     code = getattr(dealInfo, 'm_strInstrumentID', '') + '.' + getattr(dealInfo, 'm_strExchangeID', '')
@@ -377,7 +397,16 @@ def deal_callback(ContextInfo, dealInfo):
         if o['filled'] >= o['vol']:
             o['status'] = 'filled'
             print('[DEAL_CB] %s fully filled: %d/%d' % (code, o['filled'], o['vol']))
+            # Update position JSON
+            from . import qmt_runner
+            strategy_name = remark.split('-')[0].lower() if '-' in remark else 'v61c'
+            if direction == 48:  # BUY
+                qmt_runner.strategy_buy(strategy_name, code, o['vol'], price, '')
+                print('[DEAL_CB] position JSON updated: BUY %s %d @ %.2f' % (code, o['vol'], price))
+            else:  # SELL
+                qmt_runner.strategy_sell(strategy_name, code, o['vol'])
+                print('[DEAL_CB] position JSON updated: SELL %s %d' % (code, o['vol']))
         else:
-            print('[DEAL_CB] %s partial fill: %d/%d' % (code, o['filled'], o['vol']))
+            print('[DEAL_CB] %s partial fill: %d/%d, waiting...' % (code, o['filled'], o['vol']))
     else:
         print('[DEAL_CB] %s (unknown remark: %s)' % (code, remark))

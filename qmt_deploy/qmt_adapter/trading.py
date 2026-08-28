@@ -227,6 +227,9 @@ class QmtAccount(object):
                 'filled': 0,
                 'name': '',
                 'timestamp': _time.time(),
+                'account_id': self.account_id,
+                'account_type': self.account_type,
+                'context': self.C,
             }
 
         if _risk_debug:
@@ -293,6 +296,9 @@ class QmtAccount(object):
                 'filled': 0,
                 'name': '',
                 'timestamp': _time.time(),
+                'account_id': self.account_id,
+                'account_type': self.account_type,
+                'context': self.C,
             }
             self.C                  # ContextInfo
         )
@@ -340,15 +346,47 @@ class QmtAccount(object):
 # ============================================================
 
 def check_order_timeout(timeout_seconds=60):
-    """Check for orders that never received order_callback (likely rejected)."""
+    """Check for orders and cancel stale ones.
+    - pending + timeout: no order_callback -> cancel
+    - ordered + timeout: partial fill or no fill -> cancel remaining
+    """
     import time
     now = time.time()
     for remark, o in list(_orders.items()):
+        if o['status'] not in ('pending', 'ordered'):
+            continue
+        age = now - o.get('timestamp', now)
+        if age <= timeout_seconds:
+            continue
+
+        code = o['stock']
+        remaining = o['vol'] - o['filled']
+
         if o['status'] == 'pending':
-            age = now - o.get('timestamp', now)
-            if age > timeout_seconds:
-                o['status'] = 'rejected'
-                print('[TIMEOUT] %s rejected after %ds: %s' % (o['stock'], age, remark))
+            # Never got order_callback -> likely rejected
+            o['status'] = 'rejected'
+            print('[TIMEOUT] %s rejected after %ds (no order_callback): %s' % (code, age, remark))
+
+        elif o['status'] == 'ordered' and remaining > 0:
+            # Got order_callback but partial/no fill -> cancel remaining
+            order_id = o.get('order_id', '')
+            if order_id:
+                try:
+                    _get_qmt_func()
+                    from . import trading
+                    acct = o.get('account_id', '')
+                    acct_type = o.get('account_type', 'STOCK')
+                    ctx = o.get('context', None)
+                    if ctx:
+                        result = trading.cancel(order_id, acct, acct_type, ctx)
+                        print('[CANCEL] %s cancel sent: order_id=%s remaining=%d result=%s' % (code, order_id, remaining, result))
+                        o['status'] = 'cancelled'
+                    else:
+                        print('[CANCEL] %s no ContextInfo, cannot cancel: %s' % (code, remark))
+                except Exception as e:
+                    print('[CANCEL] %s cancel failed: %s' % (code, e))
+            else:
+                print('[TIMEOUT] %s ordered but no order_id, cannot cancel: %s' % (code, remark))
 
 
 # ============================================================

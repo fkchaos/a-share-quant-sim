@@ -278,8 +278,22 @@ def on_signal(C):
                     continue
         filtered.append(c)
     
+    # Capital filter: skip if cannot afford 1 lot (100 shares)
+    capital_per_stock = _params.get('capital', 50000) * _params.get('max_per_stock', 0.25)
+    capital_filtered = []
+    for c in filtered:
+        if c in kline_data:
+            df = kline_data[c]
+            if len(df) > 0:
+                price = df['close'].iloc[-1]
+                if price > 0 and price * 100 > capital_per_stock:
+                    if _DEBUG:
+                        print('[V61C] SKIP %s: cannot afford 1 lot (price=%.2f, need=%.0f, have=%.0f)' % (c, price, price*100, capital_per_stock))
+                    continue
+        capital_filtered.append(c)
+    
     # Select top N from filtered list
-    buy_list = filtered[:slots]
+    buy_list = capital_filtered[:slots]
 
     if not buy_list:
         return

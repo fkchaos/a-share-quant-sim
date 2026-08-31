@@ -396,8 +396,13 @@ def test_buy_sell_flow(C, bar_date):
 # Entry Points
 # ============================================================
 def init(ContextInfo):
+    # Propagate DEBUG to trading module (controls passorder/position query prints)
+    from qmt_adapter.qmt_runner import set_risk_debug
+    set_risk_debug(DEBUG)
+
     _diag_log('=== QMT Diagnostic v2 (dual trigger) ===')
     _diag_log('MODE: %s' % MODE)
+    _diag_log('DEBUG: %s' % DEBUG)
     _diag_log('Account: %s' % account_id)
 
     # Live mode: register schedule_run timer

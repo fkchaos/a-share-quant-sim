@@ -1,4 +1,5 @@
 
+
 <h1 align="center">a-share-quant-sim</h1>
 
 <p align="center">
@@ -149,7 +150,7 @@ These three files are, honestly, the most useful things here:
     momentum-continuation, not reversal. That is a real result, and it is the kind nobody
     publishes because it is not a win.
 - **`ic_results_zz800.csv`** — the raw per-factor information-coefficient table computed over
-  the CSI 1800 universe. Unpolished, and you are welcome to disagree with it.
+  the CSI 800 universe. Unpolished, and you are welcome to disagree with it.
 - **[`docs/strategy/RESULTS_LOG.md`](docs/strategy/RESULTS_LOG.md)** — the running experiment
   log. **If you want performance figures, they are in here, in full methodological context.**
   I deliberately do not quote them in this README. A Sharpe ratio without its fold

@@ -449,6 +449,15 @@ def update_all_stocks(target_date=None):
 
         print("=" * 60)
 
+    # Update indices (sh000001, sz399001, sz399006)
+    try:
+        print("\n📈 更新指数数据...")
+        from fetch_index_data import fetch_all_indices
+        fetch_all_indices()
+        print("✅ 指数更新完成")
+    except Exception as e:
+        print(f"⚠️ 指数更新失败: {e}")
+
     return fail == 0
 
 def check_status():

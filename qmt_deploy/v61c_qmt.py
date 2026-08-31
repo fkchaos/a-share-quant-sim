@@ -7,7 +7,7 @@ MODE = 'LIVE'      -> schedule_run timer (live only, supports call auction etc)
 Business logic lives in v61c_strategy.on_signal(), shared by both modes.
 """
 # ========== CONFIG ==========
-MODE = 'BACKTEST'       # 'BACKTEST' or 'LIVE'
+MODE = 'LIVE'          # 'BACKTEST' or 'LIVE'
 TIMER_INTERVAL = 24 * 3600  # seconds (1 day = 86400)
 TIMER_TIME = '145000'  # HHMMSS format
 # =============================

@@ -8,6 +8,7 @@ Business logic lives in v61c_strategy.on_signal(), shared by both modes.
 """
 # ========== CONFIG ==========
 MODE = 'LIVE'          # 'BACKTEST' or 'LIVE'
+DEBUG = True           # master debug switch: controls ALL prints
 TIMER_INTERVAL = 24 * 3600  # seconds (1 day = 86400)
 TIMER_TIME = '145000'  # HHMMSS format
 # =============================
@@ -16,8 +17,6 @@ TIMER_TIME = '145000'  # HHMMSS format
 _VALID_MODES = ('BACKTEST', 'LIVE')
 if MODE not in _VALID_MODES:
     raise ValueError("MODE must be %s, got %r" % (' or '.join(_VALID_MODES), MODE))
-
-DEBUG = True
 
 from qmt_adapter.v61c_strategy import (
     init as _init,

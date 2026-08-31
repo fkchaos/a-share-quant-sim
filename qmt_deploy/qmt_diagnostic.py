@@ -19,9 +19,10 @@ Debug: set trading._risk_debug = True for verbose output.
 """
 # ========== CONFIG ==========
 MODE = 'LIVE'          # 'BACKTEST' or 'LIVE'
+DEBUG = True           # master debug switch: controls ALL prints
 TIMER_INTERVAL = 24 * 3600  # seconds (1 day = 86400)
 TIMER_TIME = '145000'  # HHMMSS format
-# =============================
+# ===========================
 
 # Validate MODE
 _VALID_MODES = ('BACKTEST', 'LIVE')
@@ -41,7 +42,8 @@ _diag_results = []  # (test_name, passed, detail)
 
 
 def _diag_log(msg):
-    print('[DIAG] %s' % msg)
+    if DEBUG:
+        print('[DIAG] %s' % msg)
 
 
 def _diag_result(test_name, passed, detail=''):

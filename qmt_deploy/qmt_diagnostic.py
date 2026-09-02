@@ -31,6 +31,12 @@ if MODE not in _VALID_MODES:
 
 import datetime
 import os
+
+# Fallback for __file__ (not defined when QMT loads via exec)
+try:
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    _SCRIPT_DIR = r"D:\software\QMT-SIMU\python"
 import sys
 import json
 
@@ -84,13 +90,13 @@ def test_account_config(C):
     _diag_log('--- Test 1: Account Config ---')
 
     # Method 1: QMT frame walking
-    from .trading import _find_account_from_frames, _find_account_type_from_frames
+    from qmt_adapter.trading import _find_account_from_frames, _find_account_type_from_frames
     frame_account = _find_account_from_frames()
     frame_type = _find_account_type_from_frames()
 
     # Method 2: config.py fallback
     try:
-        from .config import ACCOUNT_CONFIG
+        from qmt_adapter.config import ACCOUNT_CONFIG
         config_account = ACCOUNT_CONFIG.get('account_id', '')
     except Exception:
         config_account = ''
@@ -100,7 +106,7 @@ def test_account_config(C):
 
     # Method 4: Actual resolved value in QmtAccount
     try:
-        from .trading import QmtAccount
+        from qmt_adapter.trading import QmtAccount
         acc = QmtAccount(C)
         resolved_account = acc.account_id
         resolved_type = acc.account_type
@@ -128,7 +134,7 @@ def test_position_sources(C):
     _diag_log('--- Test 2: Position Sources ---')
 
     try:
-        from .trading import QmtAccount
+        from qmt_adapter.trading import QmtAccount
         acc = QmtAccount(C)
     except Exception as e:
         _diag_result('2:PositionSources', False, 'QmtAccount init failed: %s' % e)
@@ -157,7 +163,7 @@ def test_position_sources(C):
     _diag_log('  Per-strategy JSON:')
     for sname in ('v61c', 'v75j'):
         try:
-            from .qmt_runner import load_strategy_positions
+            from qmt_adapter.qmt_runner import load_strategy_positions
             pos = load_strategy_positions(sname)
             count = len([v for v in pos.values() if v.get('shares', 0) > 0])
             _diag_log('    %s: %d positions' % (sname, count))
@@ -197,7 +203,7 @@ def test_cost_price(C, bar_date):
 
     _diag_log('--- Test 4: Cost Price ---')
     try:
-        from .trading import QmtAccount
+        from qmt_adapter.trading import QmtAccount
         acc = QmtAccount(C)
         positions = acc.get_holdings()
     except Exception as e:
@@ -225,7 +231,7 @@ def test_hold_days_persistence():
     _diag_log('--- Test 5: hold_days.json ---')
 
     for sname in ('v61c', 'v75j'):
-        persist_path = os.path.join(os.path.dirname(__file__), '_hold_days.json')
+        persist_path = os.path.join(_SCRIPT_DIR, '_hold_days.json')
         if sname == 'v75j':
             # v75j uses same file name, check both exist
             pass
@@ -266,7 +272,7 @@ def test_per_strategy_json():
     _diag_log('--- Test 6: Per-strategy JSON ---')
 
     for sname in ('v61c', 'v75j'):
-        path = os.path.join(os.path.dirname(__file__), '_positions_%s.json' % sname)
+        path = os.path.join(_SCRIPT_DIR, '_positions_%s.json' % sname)
         exists = os.path.exists(path)
         if exists:
             try:
@@ -293,7 +299,7 @@ def test_consistency(C):
     _diag_log('--- Test 7: Consistency ---')
 
     try:
-        from .trading import QmtAccount
+        from qmt_adapter.trading import QmtAccount
         acc = QmtAccount(C)
     except Exception as e:
         _diag_result('7:Consistency', False, 'QmtAccount init failed: %s' % e)
@@ -305,7 +311,7 @@ def test_consistency(C):
     _diag_log('  account.get_holdings(): %d stocks' % len(acc_holdings))
 
     # get_strategy_holdings() for each strategy
-    from .qmt_runner import get_strategy_holdings
+    from qmt_adapter.qmt_runner import get_strategy_holdings
     for sname in ('v61c', 'v75j'):
         strat_holdings = get_strategy_holdings(sname, acc)
         strat_codes = set(h['code'] for h in strat_holdings)
@@ -349,7 +355,7 @@ def test_buy_sell_flow(C, bar_date):
 
     # Enable debug for this test
     try:
-        from . import trading
+        from qmt_adapter import trading
         old_debug = trading._risk_debug
         trading._risk_debug = True
     except Exception:
@@ -454,7 +460,7 @@ def _on_signal(ContextInfo):
         _diag_log('Close price: %.4f' % cur_close)
 
         try:
-            from .trading import QmtAccount
+            from qmt_adapter.trading import QmtAccount
             acc = QmtAccount(C)
             positions = acc.get_holdings()
         except Exception:

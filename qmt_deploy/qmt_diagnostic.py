@@ -22,6 +22,7 @@ MODE = 'LIVE'          # 'BACKTEST' or 'LIVE'
 DEBUG = True           # master debug switch: controls ALL prints
 TIMER_INTERVAL = 24 * 3600  # seconds (1 day = 86400)
 TIMER_TIME = '145000'  # HHMMSS format
+_ENABLE_BUY_TEST = False  # Set True to enable real buy test
 # ===========================
 
 # Validate MODE
@@ -334,7 +335,6 @@ def test_consistency(C):
 # ============================================================
 # Test 8: Buy/Sell Flow (DEFAULT OFF - enable manually)
 # ============================================================
-_ENABLE_BUY_TEST = False  # Set True to enable real buy test
 
 def test_buy_sell_flow(C, bar_date):
     """Test passorder -> order_callback -> deal_callback chain.

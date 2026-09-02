@@ -40,7 +40,7 @@ except NameError:
 import sys
 import json
 
-account_id = 'SIMTEST'
+account_id = None  # resolved from QMT at runtime
 bought = False
 buy_price_used = 0
 buy_shares = 0
@@ -377,10 +377,16 @@ def test_buy_sell_flow(C, bar_date):
     buy_price_used = price
     buy_shares = shares
 
+    # Get real account from QmtAccount (same as v75j/v61c)
+    from qmt_adapter.trading import QmtAccount
+    acc = QmtAccount(C)
+    real_account_id = acc.account_id
+    _diag_log('  Using account: %s (type: %s)' % (real_account_id, acc.account_type))
+
     now = datetime.datetime.now()
     remark = 'DIAG-%s' % now.strftime('%H%M%S')
     passorder(
-        23, 1101, account_id, code,
+        23, 1101, real_account_id, code,
         14, -1, shares,
         'DIAG', 1, remark, C
     )

@@ -294,7 +294,9 @@ class QmtAccount(object):
             shares,                 # volume
             'V61C',                 # strategyName
             0,                      # quickTrade: 0=backtest mode
-            remark,                 # userOrderId
+            remark,                 # userOrderId,
+            self.C                  # ContextInfo
+        )
 
         # Register order for callback tracking
         import time as _time
@@ -310,8 +312,6 @@ class QmtAccount(object):
                 'account_type': self.account_type,
                 'context': self.C,
             }
-            self.C                  # ContextInfo
-        )
 
         if _risk_debug:
             print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))

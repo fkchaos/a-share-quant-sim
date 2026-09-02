@@ -36,7 +36,7 @@ def _get_qmt_func():
     while frame is not None:
         g = frame.f_globals
         if 'get_trade_detail_data' in g:
-            from . import trading
+            trading = sys.modules[__name__]
             trading.get_trade_detail_data = g['get_trade_detail_data']
             if 'passorder' in g:
                 trading.passorder = g['passorder']
@@ -106,7 +106,7 @@ class QmtAccount(object):
         strDatatype must be UPPERCASE: 'POSITION', 'ORDER', 'DEAL', 'ACCOUNT', 'TASK'
         """
         _get_qmt_func()
-        from . import trading
+        trading = sys.modules[__name__]
         has_func = hasattr(trading, 'get_trade_detail_data') and trading.get_trade_detail_data is not None
         if not has_func:
             if _risk_debug:
@@ -209,7 +209,7 @@ class QmtAccount(object):
             if o['code'] == stock_code and o['status'] in ('pending', 'ordered', 'partial'):
                 print('[BUY] SKIP %s: duplicate order pending (remark=%s)' % (stock_code, remark))
                 return None
-        from . import trading
+        trading = sys.modules[__name__]
 
         # Generate unique userOrderId for callback matching
         now = datetime.datetime.now()
@@ -230,10 +230,8 @@ class QmtAccount(object):
         )
 
         # Register order for callback tracking
-        from . import trading as _trading_mod
         import time as _time
-        if hasattr(_trading_mod, '_orders'):
-            _trading_mod._orders[remark] = {
+        _orders[remark] = {
                 'status': 'pending',
                 'stock': stock_code,
                 'vol': shares,
@@ -281,7 +279,7 @@ class QmtAccount(object):
           prType=14 (counterparty price), quickTrade=0 (backtest mode)
         """
         _get_qmt_func()
-        from . import trading
+        trading = sys.modules[__name__]
 
         now = datetime.datetime.now()
         remark = '%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S'))
@@ -299,10 +297,8 @@ class QmtAccount(object):
             remark,                 # userOrderId
 
         # Register order for callback tracking
-        from . import trading as _trading_mod
         import time as _time
-        if hasattr(_trading_mod, '_orders'):
-            _trading_mod._orders[remark] = {
+        _orders[remark] = {
                 'status': 'pending',
                 'stock': stock_code,
                 'vol': shares,
@@ -387,7 +383,7 @@ def check_order_timeout(timeout_seconds=60):
             if order_id:
                 try:
                     _get_qmt_func()
-                    from . import trading
+                    trading = sys.modules[__name__]
                     acct = o.get('account_id', '')
                     acct_type = o.get('account_type', 'STOCK')
                     ctx = o.get('context', None)

@@ -500,3 +500,17 @@ def _on_signal(ContextInfo):
 
     # First bar: buy test
     test_buy_sell_flow(ContextInfo, bar_date)
+
+
+# ========== QMT CALLBACKS ==========
+# QMT requires these at module level to call them
+def order_callback(ContextInfo, orderInfo):
+    """Forward to trading.order_callback."""
+    from qmt_adapter.trading import order_callback as _cb
+    _cb(ContextInfo, orderInfo)
+
+
+def deal_callback(ContextInfo, dealInfo):
+    """Forward to trading.deal_callback."""
+    from qmt_adapter.trading import deal_callback as _cb
+    _cb(ContextInfo, dealInfo)

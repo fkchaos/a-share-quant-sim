@@ -425,6 +425,9 @@ def init(ContextInfo):
         interval = datetime.timedelta(seconds=TIMER_INTERVAL)
         ContextInfo.schedule_run(on_timer, target.strftime('%Y%m%d%H%M%S'), repeat_times=-1,
                                  interval=interval, name='diag_timer')
+
+    # Register order check timer (every 10 seconds)
+    ContextInfo.run_time('check_order_timer', '10nSecond', '2026-01-01 00:00:00')
         _diag_log('schedule_run at %s, interval=%ds' % (target, TIMER_INTERVAL))
         _diag_log('Waiting for timer trigger...')
     else:
@@ -434,6 +437,13 @@ def init(ContextInfo):
     test_hold_days_persistence()
     test_per_strategy_json()
 
+
+
+
+def check_order_timer(ContextInfo):
+    """Periodic order check - cancel stale orders."""
+    from qmt_adapter.trading import check_order_timeout
+    check_order_timeout(max_seconds=60)
 
 def handlebar(ContextInfo):
     """Backtest mode: triggered on each bar close."""

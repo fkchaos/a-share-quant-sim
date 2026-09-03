@@ -220,11 +220,11 @@ class QmtAccount(object):
             1101,                   # orderType: single stock, shares
             self.account_id,        # account
             stock_code,             # orderCode
-            14,                     # prType: counterparty price (counterparty)
-            -1,                     # price: -1 for prType=14
+            5,                      # prType: latest price (5=最新价)
+            -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             'V61C',                 # strategyName
-            0,                      # quickTrade: 0=backtest mode
+            2,                      # quickTrade: 2=immediate (live mode)
             remark,                 # userOrderId -> m_strRemark in callback
             self.C                  # ContextInfo
         )
@@ -289,11 +289,11 @@ class QmtAccount(object):
             1101,                   # orderType: single stock, shares
             self.account_id,        # account
             stock_code,             # orderCode
-            14,                     # prType: counterparty price
-            -1,                     # price: -1 for prType=14
+            5,                      # prType: latest price (5=最新价)
+            -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             'V61C',                 # strategyName
-            0,                      # quickTrade: 0=backtest mode
+            2,                      # quickTrade: 2=immediate (live mode)
             remark,                 # userOrderId,
             self.C                  # ContextInfo
         )

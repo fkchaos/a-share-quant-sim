@@ -269,6 +269,8 @@ class QmtAccount(object):
                 'name': '',
             }
 
+        # Start order poll after placing order
+        start_order_poll(self.C)
         return remark
 
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
@@ -325,6 +327,8 @@ class QmtAccount(object):
             if self._internal_positions[stock_code]['shares'] <= 0:
                 del self._internal_positions[stock_code]
 
+        # Start order poll after placing order
+        start_order_poll(self.C)
         return remark
 
     def sell_all(self, stock_code, price=-1, reason='SELL_ALL'):

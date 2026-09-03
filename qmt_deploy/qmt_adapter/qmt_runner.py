@@ -111,11 +111,6 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
                 account.sell_all(code)
                 sold.append(code)
 
-    # Start order poll if any sells placed
-    if sold:
-        from .trading import start_order_poll
-        start_order_poll(C)
-
     return sold
 
 
@@ -156,11 +151,6 @@ def execute_buy(C, account, target_weight, bar_date='', capital=50000):
         account.buy_value(code, buy_amount, price)
         print('[BUY] EXECUTED %s: %.0f CNY -> %d lots' % (code, buy_amount, lots))
         bought.append(code)
-
-    # Start order poll if any orders placed
-    if bought:
-        from .trading import start_order_poll
-        start_order_poll(C)
 
     return bought
 

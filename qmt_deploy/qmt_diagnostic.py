@@ -414,7 +414,15 @@ def test_buy_sell_flow(C, bar_date):
         'account_type': acc.account_type,
         'context': C,
     }
-    _diag_log('  registered in _orders, polling will track it')
+    _diag_log('  registered in _orders, starting order poll...')
+
+    # Start order check timer (every 10s) - only now, after placing order
+    import datetime as _dt
+    now_dt = _dt.datetime.now()
+    target_dt = now_dt + _dt.timedelta(seconds=10)
+    C.schedule_run(_on_order_check, target_dt.strftime('%Y%m%d%H%M%S'),
+                   repeat_times=-1, interval=_dt.timedelta(seconds=10),
+                   name='order_poll')
 
     bought = True
 
@@ -454,8 +462,8 @@ def init(ContextInfo):
     else:
         _diag_log('Backtest mode: waiting for handlebar...')
 
-    # Register order check timer (every 10 seconds) - both modes
-    ContextInfo.run_time('check_order_timer', '10nSecond', '2026-01-01 00:00:00')
+    # DON'T register order check timer here - start after placing order
+    _diag_log('Order polling will start after placing an order')
 
     # Run static tests (no market data needed)
     test_hold_days_persistence()
@@ -464,13 +472,19 @@ def init(ContextInfo):
 
 
 
-def check_order_timer(ContextInfo):
-    """Periodic order check - only active when there are orders to track."""
+def _on_order_check(ContextInfo):
+    """Order polling - cancel timer when all orders resolved."""
     from qmt_adapter.trading import check_order_timeout, _orders
     active = [r for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
     if not active:
-        return  # no active orders, skip
-    print('[DIAG] check_order_timer: %d active orders' % len(active))
+        # All orders resolved, cancel polling
+        print('[DIAG] order_poll: no active orders, stopping')
+        try:
+            ContextInfo.cancel_schedule_run('order_poll')
+        except Exception:
+            pass
+        return
+    print('[DIAG] order_poll: %d active orders' % len(active))
     check_order_timeout(timeout_seconds=60)
 
 def handlebar(ContextInfo):

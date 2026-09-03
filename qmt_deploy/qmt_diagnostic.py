@@ -71,12 +71,20 @@ def _get_bar_date(C):
 
 
 def _get_bar_close(C, code, bar_date):
-    """Get latest price using official QMT way (no end_time = latest)."""
-    data = C.get_market_data_ex(
-        ['close'], [code],
-        period='1d', count=1,
-        subscribe=False
-    )
+    """Get close price: backtest uses end_time+subscribe=False, live uses latest+subscribe=True."""
+    is_backtest = getattr(C, 'do_back_test', False)
+    params = {
+        'field_list': ['close'],
+        'stock_list': [code],
+        'period': '1d',
+        'count': 1,
+    }
+    if is_backtest:
+        params['subscribe'] = False
+        params['end_time'] = bar_date
+    else:
+        params['subscribe'] = True
+    data = C.get_market_data_ex(**params)
     if code in data and len(data[code]) > 0:
         return data[code]['close'].iloc[-1]
     return 0

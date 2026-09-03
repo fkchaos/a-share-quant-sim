@@ -389,8 +389,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
         acct = _get_account_id()
         qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER')
     except Exception as e:
-        if _risk_debug:
-            print('[ORDER_POLL][%s] query failed: %s' % (remark, e))
+        print('[ORDER_POLL][%s] query failed: %s' % (remark, e))  # always
         return
 
     # Match by remark
@@ -419,32 +418,27 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
                     _internal_positions[code]['shares'] += delta
                 else:
                     _internal_positions[code] = {'shares': delta, 'cost': o.get('price', 0), 'name': ''}
-                if _risk_debug:
-                    print('[ORDER_POLL][%s] fill +%d -> %d/%d' % (remark, delta, traded, vol))
+                print('[ORDER_POLL][%s] fill +%d -> %d/%d' % (remark, delta, traded, vol))
             elif reason in ('SELL', 'SELL_ALL', 'RISK'):
                 if code in _internal_positions:
                     _internal_positions[code]['shares'] -= delta
                     if _internal_positions[code]['shares'] <= 0:
                         del _internal_positions[code]
-                if _risk_debug:
-                    print('[ORDER_POLL][%s] fill -%d -> %d/%d' % (remark, delta, traded, vol))
+                print('[ORDER_POLL][%s] fill -%d -> %d/%d' % (remark, delta, traded, vol))
 
         # Status transitions
         if traded >= vol and vol > 0 and o['status'] != 'filled':
             o['status'] = 'filled'
-            if _risk_debug:
-                print('[ORDER_POLL][%s] fully filled %d/%d' % (remark, traded, vol))
+            print('[ORDER_POLL][%s] fully filled %d/%d' % (remark, traded, vol))
             return  # done
         elif traded > 0 and o['status'] in ('pending', 'ordered'):
             o['status'] = 'partial'
-            o['ordered_time'] = now  # record when we first saw it ordered
-            if _risk_debug:
-                print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
+            o['ordered_time'] = now
+            print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
         elif o['status'] == 'pending' and traded == 0:
             o['status'] = 'ordered'
-            o['ordered_time'] = now  # record when first ordered
-            if _risk_debug:
-                print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
+            o['ordered_time'] = now
+            print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
         break
 
     # If QMT didn't find the order, just return — don't timeout yet
@@ -452,16 +446,14 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     if not found:
         return
 
-    # Timeout handling
-    # Use ordered_time if available, otherwise timestamp
+    # Timeout handling — use ordered_time if available, otherwise timestamp
     ref_time = o.get('ordered_time', o.get('timestamp', now))
     age = now - ref_time
 
     # Pending + 60s with no QMT record → rejected (QMT never accepted it)
     if o['status'] == 'pending' and age > 60:
         o['status'] = 'rejected'
-        if _risk_debug:
-            print('[ORDER_POLL][%s] rejected after %ds (QMT never accepted)' % (remark, int(age)))
+        print('[ORDER_POLL][%s] rejected after %ds (QMT never accepted)' % (remark, int(age)))
         _orders.pop(remark, None)
         return
 
@@ -474,16 +466,14 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
                 if ctx:
                     trading = sys.modules[__name__]
                     result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
-                    if _risk_debug:
-                        print('[ORDER_POLL][%s] cancel: order_id=%s (%d/%d filled after %ds) result=%s'
-                              % (remark, order_id, o['filled'], o['vol'], int(age), result))
+                    print('[ORDER_POLL][%s] cancel: order_id=%s (%d/%d filled after %ds) result=%s'
+                          % (remark, order_id, o['filled'], o['vol'], int(age), result))
                     o['status'] = 'cancelled'
                     _orders.pop(remark, None)
             except Exception as e:
-                print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))  # always log errors
+                print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))
         else:
-            if _risk_debug:
-                print('[ORDER_POLL][%s] ordered but no order_id' % remark)
+            print('[ORDER_POLL][%s] ordered but no order_id' % remark)
 
 # ============================================================
 # Callback functions (QMT auto-calls these, no registration needed)

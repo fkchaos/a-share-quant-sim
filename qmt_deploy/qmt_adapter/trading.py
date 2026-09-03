@@ -422,21 +422,43 @@ def _confirm_fill(remark, o, fill_price=0):
         print('[FILL] strategy JSON update failed: %s' % e)
 
 def start_order_poll(C):
-    """Start order polling timer. Call after placing an order.
-    Only one poll timer at a time (same name=reuse).
-    """
+    """Start order polling timer. Always cancels existing timer first to prevent zombies."""
     import datetime as _dt
+    # Kill existing timer to prevent stacking
+    try:
+        C.cancel_schedule_run('order_poll')
+    except Exception:
+        pass
     now = _dt.datetime.now()
     target = now + _dt.timedelta(seconds=10)
     C.schedule_run(_on_order_check, target.strftime('%Y%m%d%H%M%S'),
                    repeat_times=-1, interval=_dt.timedelta(seconds=10),
                    name='order_poll')
+    print('[ORDER_POLL] timer started')
 
 
 def _on_order_check(ContextInfo):
     """Order poll callback - query ORDER status, update _orders, timeout/cancel.
-    Cancels itself when all orders resolved.
+    Wraps entire body to prevent zombie timers from exceptions.
+    Always checks for cancel at the end.
     """
+    try:
+        _do_order_check(ContextInfo)
+    except Exception as e:
+        print('[ORDER_POLL] ERROR in check: %s' % e)
+    finally:
+        # Always check: if no active orders, stop timer
+        active = [r for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
+        if not active:
+            print('[ORDER_POLL] no active orders, stopping timer')
+            try:
+                ContextInfo.cancel_schedule_run('order_poll')
+            except Exception:
+                pass
+
+
+def _do_order_check(ContextInfo):
+    """Inner order check logic - called by _on_order_check with error guard."""
     import time
     now = time.time()
 
@@ -466,7 +488,7 @@ def _on_order_check(ContextInfo):
                     if traded >= vol and vol > 0:
                         o['status'] = 'filled'
                         print('[ORDER_POLL] %s filled %d/%d remark=%s' % (o['stock'], traded, vol, remark))
-                        _confirm_fill(remark, o, fill_price=0)  # ORDER query has no price, deal_cb will provide
+                        _confirm_fill(remark, o, fill_price=0)
                     elif traded > 0:
                         o['status'] = 'partial'
                         print('[ORDER_POLL] %s partial %d/%d remark=%s' % (o['stock'], traded, vol, remark))
@@ -498,17 +520,8 @@ def _on_order_check(ContextInfo):
                         o['status'] = 'cancelled'
                 except Exception as e:
                     print('[ORDER_POLL] %s cancel failed: %s' % (code, e))
-
-    # Check if all done, stop polling
-    active = [r for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
-    if not active:
-        print('[ORDER_POLL] all orders resolved, stopping')
-        try:
-            ContextInfo.cancel_schedule_run('order_poll')
-        except Exception:
-            pass
-
-
+            else:
+                print('[ORDER_POLL] %s ordered but no order_id, cannot cancel: %s' % (code, remark))
 # ============================================================
 # Callback functions (QMT auto-calls these, no registration needed)
 # ============================================================

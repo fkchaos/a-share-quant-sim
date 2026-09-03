@@ -248,7 +248,7 @@ class QmtAccount(object):
             print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
 
         # Start order poll after placing order
-        start_order_poll(self.C)
+        start_order_poll(self.C, remark)
         return remark
 
     def sell(self, stock_code, shares, price=-1, reason='SELL'):
@@ -297,7 +297,7 @@ class QmtAccount(object):
             print('[SELL] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
 
         # Start order poll after placing order
-        start_order_poll(self.C)
+        start_order_poll(self.C, remark)
         return remark
 
     def sell_all(self, stock_code, price=-1, reason='SELL_ALL'):
@@ -421,118 +421,118 @@ def _confirm_fill(remark, o, fill_price=0):
     except Exception as e:
         print('[FILL] strategy JSON update failed: %s' % e)
 
-def start_order_poll(C):
-    """Start order polling timer. Always cancels existing timer first to prevent zombies."""
+def start_order_poll(C, remark, strategy_name='default'):
+    """Start per-order polling timer. One timer per order, self-cancels on resolve."""
     import datetime as _dt
-    # Kill existing timer to prevent stacking
+    timer_name = 'opoll_' + remark
+    def _make_cb(r, s):
+        def cb(ContextInfo):
+            try:
+                _do_order_check_single(ContextInfo, r, s)
+            except Exception as e:
+                print('[ORDER_POLL][%s] ERROR: %s' % (r, e))
+            finally:
+                import time as _t
+                o = _orders.get(r)
+                if not o or o['status'] not in ('pending', 'ordered', 'partial'):
+                    try:
+                        ContextInfo.cancel_schedule_run('opoll_' + r)
+                    except Exception:
+                        pass
+                elif _t.time() - o.get('timestamp', _t.time()) > 300:
+                    print('[ORDER_POLL][%s] WARN: >300s, force stop' % r)
+                    try:
+                        ContextInfo.cancel_schedule_run('opoll_' + r)
+                    except Exception:
+                        pass
+        return cb
+    # Kill existing timer for same order
     try:
-        C.cancel_schedule_run('order_poll')
+        C.cancel_schedule_run(timer_name)
     except Exception:
         pass
     now = _dt.datetime.now()
     target = now + _dt.timedelta(seconds=10)
-    C.schedule_run(_on_order_check, target.strftime('%Y%m%d%H%M%S'),
+    C.schedule_run(_make_cb(remark, strategy_name), target.strftime('%Y%m%d%H%M%S'),
                    repeat_times=-1, interval=_dt.timedelta(seconds=10),
-                   name='order_poll')
-    print('[ORDER_POLL] timer started')
+                   name=timer_name)
+    print('[ORDER_POLL] timer started: %s' % timer_name)
 
 
-def _on_order_check(ContextInfo):
-    """Order poll callback - query ORDER status, update _orders, timeout/cancel.
-    Wraps entire body to prevent zombie timers from exceptions.
-    Always checks for cancel in finally (no active orders or max lifetime exceeded).
-    """
+def _stop_poll(C, remark):
+    """Cancel the per-order poll timer."""
     try:
-        _do_order_check(ContextInfo)
-    except Exception as e:
-        print('[ORDER_POLL] ERROR in check: %s' % e)
-    finally:
-        # Stop if: no active orders OR timer exceeded max lifetime (5 min)
-        import time as _t
-        active = [r for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
-        if not active:
-            print('[ORDER_POLL] no active orders, stopping timer')
-            _stop_poll(ContextInfo)
-        else:
-            ages = [_t.time() - o.get('timestamp', _t.time()) for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
-            if ages and max(ages) > 300:
-                print('[ORDER_POLL] WARN: orders active >300s, force stopping timer')
-                _stop_poll(ContextInfo)
-
-
-def _stop_poll(C):
-    """Cancel the order poll timer."""
-    try:
-        C.cancel_schedule_run('order_poll')
+        C.cancel_schedule_run('opoll_' + remark)
     except Exception:
         pass
 
 
-def _do_order_check(ContextInfo):
-    """Inner order check logic - called by _on_order_check with error guard."""
+def _do_order_check_single(ContextInfo, remark, strategy_name):
+    """Check status of a single order."""
     import time
     now = time.time()
+    o = _orders.get(remark)
+    if not o or o['status'] not in ('pending', 'ordered', 'partial'):
+        return
 
-    # Query all orders from QMT
+    # Query ORDER from QMT
     try:
         _get_qmt_func()
         trading = sys.modules[__name__]
         acct = _get_account_id()
         qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER')
     except Exception as e:
-        print('[ORDER_POLL] query failed: %s' % e)
-        qmt_orders = []
+        print('[ORDER_POLL][%s] query failed: %s' % (remark, e))
+        return
 
-    # Match by remark, update _orders
-    if qmt_orders:
-        for order in qmt_orders:
-            remark = getattr(order, 'm_strRemark', '')
-            traded = getattr(order, 'm_nVolumeTraded', 0)
-            vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
-            order_id = getattr(order, 'm_strOrderSysID', '')
-            if remark and remark in _orders:
-                o = _orders[remark]
-                if o['status'] in ('pending', 'ordered', 'partial'):
-                    o['filled'] = traded
-                    if order_id:
-                        o['order_id'] = order_id
-                    if traded >= vol and vol > 0:
-                        o['status'] = 'filled'
-                        print('[ORDER_POLL] %s filled %d/%d remark=%s' % (o['stock'], traded, vol, remark))
-                        _confirm_fill(remark, o, fill_price=0)
-                    elif traded > 0:
-                        o['status'] = 'partial'
-                        print('[ORDER_POLL] %s partial %d/%d remark=%s' % (o['stock'], traded, vol, remark))
-                    elif o['status'] == 'pending':
-                        o['status'] = 'ordered'
-                        print('[ORDER_POLL] %s ordered, vol=%d remark=%s' % (o['stock'], vol, remark))
-
-    # Timeout check + cancel
-    for remark, o in list(_orders.items()):
-        if o['status'] not in ('pending', 'ordered', 'partial'):
+    # Match by remark
+    for order in (qmt_orders or []):
+        r = getattr(order, 'm_strRemark', '')
+        if r != remark:
             continue
-        age = now - o.get('timestamp', now)
-        if age <= 60:
-            continue
-        code = o['stock']
-        remaining = o['vol'] - o['filled']
-        if o['status'] == 'pending':
-            o['status'] = 'rejected'
-            print('[ORDER_POLL] %s rejected after %ds (no ORDER callback): %s' % (code, int(age), remark))
-        elif remaining > 0:
-            order_id = o.get('order_id', '')
+        traded = getattr(order, 'm_nVolumeTraded', 0)
+        vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
+        order_id = getattr(order, 'm_strOrderSysID', '')
+        if o['status'] in ('pending', 'ordered', 'partial'):
+            o['filled'] = traded
             if order_id:
-                try:
-                    ctx = o.get('context', None)
-                    if ctx:
-                        trading = sys.modules[__name__]
-                        result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
-                        print('[ORDER_POLL] %s cancel sent: order_id=%s remaining=%d result=%s' % (code, order_id, remaining, result))
-                        o['status'] = 'cancelled'
-                except Exception as e:
-                    print('[ORDER_POLL] %s cancel failed: %s' % (code, e))
-            else:
-                print('[ORDER_POLL] %s ordered but no order_id, cannot cancel: %s' % (code, remark))
+                o['order_id'] = order_id
+            if traded >= vol and vol > 0:
+                o['status'] = 'filled'
+                print('[ORDER_POLL][%s] filled %d/%d' % (remark, traded, vol))
+                _confirm_fill(remark, o, fill_price=0)
+            elif traded > 0:
+                o['status'] = 'partial'
+                print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
+            elif o['status'] == 'pending':
+                o['status'] = 'ordered'
+                print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
+        break  # found our order, done
+
+    # Timeout check
+    age = now - o.get('timestamp', now)
+    if age <= 60:
+        return
+    code = o['stock']
+    remaining = o['vol'] - o['filled']
+    if o['status'] == 'pending':
+        o['status'] = 'rejected'
+        print('[ORDER_POLL][%s] rejected after %ds (no callback)' % (remark, int(age)))
+    elif remaining > 0:
+        order_id = o.get('order_id', '')
+        if order_id:
+            try:
+                ctx = o.get('context', None)
+                if ctx:
+                    trading = sys.modules[__name__]
+                    result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
+                    print('[ORDER_POLL][%s] cancel: order_id=%s remaining=%d result=%s' % (remark, order_id, remaining, result))
+                    o['status'] = 'cancelled'
+            except Exception as e:
+                print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))
+        else:
+            print('[ORDER_POLL][%s] ordered but no order_id' % remark)
+
 # ============================================================
 # Callback functions (QMT auto-calls these, no registration needed)
 # ============================================================

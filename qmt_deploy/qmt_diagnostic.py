@@ -418,7 +418,7 @@ def test_buy_sell_flow(C, bar_date):
 
     # Start order poll timer (reuse trading.py's start_order_poll)
     from qmt_adapter.trading import start_order_poll
-    start_order_poll(C)
+    start_order_poll(C, remark)
 
     bought = True
 

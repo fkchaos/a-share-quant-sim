@@ -219,7 +219,7 @@ class QmtAccount(object):
             1101,                   # orderType: single stock, shares
             self.account_id,        # account
             stock_code,             # orderCode
-            14,                     # prType: counterparty price (对手价)
+            14,                     # prType: counterparty price (counterparty)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             strategy_name,          # strategyName
@@ -269,7 +269,7 @@ class QmtAccount(object):
             1101,                   # orderType: single stock, shares
             self.account_id,        # account
             stock_code,             # orderCode
-            14,                     # prType: counterparty price (对手价)
+            14,                     # prType: counterparty price (counterparty)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             strategy_name,          # strategyName
@@ -380,7 +380,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     now = time.time()
     o = _orders.get(remark)
     if not o or o['status'] not in ('pending', 'ordered', 'partial'):
-        return  # finished or unknown — skip
+        return  # finished or unknown - skip
 
     # Query ORDER from QMT
     try:
@@ -441,23 +441,23 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
         break
 
-    # If QMT didn't find the order, just return — don't timeout yet
+    # If QMT didn't find the order, just return - don't timeout yet
     # (QMT may not have processed it yet)
     if not found:
         return
 
-    # Timeout handling — use ordered_time if available, otherwise timestamp
+    # Timeout handling - use ordered_time if available, otherwise timestamp
     ref_time = o.get('ordered_time', o.get('timestamp', now))
     age = now - ref_time
 
-    # Pending + 60s with no QMT record → rejected (QMT never accepted it)
+    # Pending + 60s with no QMT record -> rejected (QMT never accepted it)
     if o['status'] == 'pending' and age > 60:
         o['status'] = 'rejected'
         print('[ORDER_POLL][%s] rejected after %ds (QMT never accepted)' % (remark, int(age)))
         _orders.pop(remark, None)
         return
 
-    # Ordered/partial + 120s → cancel entire order
+    # Ordered/partial + 120s -> cancel entire order
     if o['status'] in ('ordered', 'partial') and age > 120:
         order_id = o.get('order_id', '')
         if order_id:

@@ -451,9 +451,14 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
         break
 
-    # If QMT didn't find the order, just return - don't timeout yet
-    # (QMT may not have processed it yet)
+    # If QMT didn't find the order, check timeout
+    # (QMT may not have processed it yet, or it was silently rejected)
     if not found:
+        age = now - o.get('timestamp', now)
+        if o['status'] == 'pending' and age > 60:
+            o['status'] = 'rejected'
+            print('[ORDER_POLL][%s] rejected after %ds (QMT never acknowledged)' % (remark, int(age)))
+            _orders.pop(remark, None)
         return
 
     # Timeout handling - use ordered_time if available, otherwise timestamp

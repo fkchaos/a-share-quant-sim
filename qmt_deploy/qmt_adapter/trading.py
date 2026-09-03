@@ -400,6 +400,97 @@ def check_order_timeout(timeout_seconds=60):
 
 
 # ============================================================
+# Order polling lifecycle (schedule_run based)
+# ============================================================
+
+def start_order_poll(C):
+    """Start order polling timer. Call after placing an order.
+    Only one poll timer at a time (same name=reuse).
+    """
+    import datetime as _dt
+    now = _dt.datetime.now()
+    target = now + _dt.timedelta(seconds=10)
+    C.schedule_run(_on_order_check, target.strftime('%Y%m%d%H%M%S'),
+                   repeat_times=-1, interval=_dt.timedelta(seconds=10),
+                   name='order_poll')
+
+
+def _on_order_check(ContextInfo):
+    """Order poll callback - query ORDER status, update _orders, timeout/cancel.
+    Cancels itself when all orders resolved.
+    """
+    import time
+    now = time.time()
+
+    # Query all orders from QMT
+    try:
+        _get_qmt_func()
+        trading = sys.modules[__name__]
+        acct = _get_account_id()
+        qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER')
+    except Exception as e:
+        print('[ORDER_POLL] query failed: %s' % e)
+        qmt_orders = []
+
+    # Match by remark, update _orders
+    if qmt_orders:
+        for order in qmt_orders:
+            remark = getattr(order, 'm_strRemark', '')
+            traded = getattr(order, 'm_nVolumeTraded', 0)
+            vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
+            order_id = getattr(order, 'm_strOrderSysID', '')
+            if remark and remark in _orders:
+                o = _orders[remark]
+                if o['status'] in ('pending', 'ordered', 'partial'):
+                    o['filled'] = traded
+                    if order_id:
+                        o['order_id'] = order_id
+                    if traded >= vol and vol > 0:
+                        o['status'] = 'filled'
+                        print('[ORDER_POLL] %s filled %d/%d remark=%s' % (o['stock'], traded, vol, remark))
+                    elif traded > 0:
+                        o['status'] = 'partial'
+                        print('[ORDER_POLL] %s partial %d/%d remark=%s' % (o['stock'], traded, vol, remark))
+                    elif o['status'] == 'pending':
+                        o['status'] = 'ordered'
+                        print('[ORDER_POLL] %s ordered, vol=%d remark=%s' % (o['stock'], vol, remark))
+
+    # Timeout check + cancel
+    for remark, o in list(_orders.items()):
+        if o['status'] not in ('pending', 'ordered', 'partial'):
+            continue
+        age = now - o.get('timestamp', now)
+        if age <= 60:
+            continue
+        code = o['stock']
+        remaining = o['vol'] - o['filled']
+        if o['status'] == 'pending':
+            o['status'] = 'rejected'
+            print('[ORDER_POLL] %s rejected after %ds (no ORDER callback): %s' % (code, int(age), remark))
+        elif remaining > 0:
+            order_id = o.get('order_id', '')
+            if order_id:
+                try:
+                    ctx = o.get('context', None)
+                    if ctx:
+                        trading = sys.modules[__name__]
+                        result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
+                        print('[ORDER_POLL] %s cancel sent: order_id=%s remaining=%d result=%s' % (code, order_id, remaining, result))
+                        o['status'] = 'cancelled'
+                except Exception as e:
+                    print('[ORDER_POLL] %s cancel failed: %s' % (code, e))
+
+    # Check if all done, stop polling
+    active = [r for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
+    if not active:
+        print('[ORDER_POLL] all orders resolved, stopping')
+        try:
+            ContextInfo.cancel_schedule_run('order_poll')
+        except Exception:
+            pass
+
+
+# ============================================================
 # Callback functions (QMT auto-calls these, no registration needed)
 # ============================================================
 

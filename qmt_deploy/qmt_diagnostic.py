@@ -416,13 +416,9 @@ def test_buy_sell_flow(C, bar_date):
     }
     _diag_log('  registered in _orders, starting order poll...')
 
-    # Start order check timer (every 10s) - only now, after placing order
-    import datetime as _dt
-    now_dt = _dt.datetime.now()
-    target_dt = now_dt + _dt.timedelta(seconds=10)
-    C.schedule_run(_on_order_check, target_dt.strftime('%Y%m%d%H%M%S'),
-                   repeat_times=-1, interval=_dt.timedelta(seconds=10),
-                   name='order_poll')
+    # Start order poll timer (reuse trading.py's start_order_poll)
+    from qmt_adapter.trading import start_order_poll
+    start_order_poll(C)
 
     bought = True
 
@@ -471,21 +467,6 @@ def init(ContextInfo):
 
 
 
-
-def _on_order_check(ContextInfo):
-    """Order polling - cancel timer when all orders resolved."""
-    from qmt_adapter.trading import check_order_timeout, _orders
-    active = [r for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
-    if not active:
-        # All orders resolved, cancel polling
-        print('[DIAG] order_poll: no active orders, stopping')
-        try:
-            ContextInfo.cancel_schedule_run('order_poll')
-        except Exception:
-            pass
-        return
-    print('[DIAG] order_poll: %d active orders' % len(active))
-    check_order_timeout(timeout_seconds=60)
 
 def handlebar(ContextInfo):
     """Backtest mode: triggered on each bar close."""

@@ -444,7 +444,7 @@ def init(ContextInfo):
 def check_order_timer(ContextInfo):
     """Periodic order check - cancel stale orders."""
     from qmt_adapter.trading import check_order_timeout
-    check_order_timeout(max_seconds=60)
+    check_order_timeout(timeout_seconds=60)
 
 def handlebar(ContextInfo):
     """Backtest mode: triggered on each bar close."""

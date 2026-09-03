@@ -74,7 +74,6 @@ def _get_bar_close(C, code, bar_date):
     """Get close price: backtest uses end_time+subscribe=False, live uses latest+subscribe=True."""
     is_backtest = getattr(C, 'do_back_test', False)
     params = {
-        'field_list': ['close'],
         'stock_list': [code],
         'period': '1d',
         'count': 1,

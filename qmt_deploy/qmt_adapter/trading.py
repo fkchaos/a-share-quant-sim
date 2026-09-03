@@ -376,11 +376,20 @@ def check_order_timeout(timeout_seconds=60):
 # Order polling lifecycle (schedule_run based)
 # ============================================================
 
-def _confirm_fill(remark, o):
-    """Update _internal_positions and strategy JSON after order fill."""
+def _confirm_fill(remark, o, fill_price=0):
+    """Update _internal_positions and strategy JSON after order fill.
+    Guard: only runs once per order (sets o['confirmed']=True).
+    fill_price: actual trade price (from dealInfo or ORDER query).
+    """
+    if o.get('confirmed'):
+        return  # already processed, skip
+    o['confirmed'] = True
+
     code = o['stock']
     filled = o['filled']
-    price = o.get('price', 0)
+    price = fill_price if fill_price > 0 else o.get('price', 0)
+    if price <= 0:
+        print('[FILL] WARN %s no valid price (fill=%.2f order=%.2f)' % (code, fill_price, o.get('price', 0)))
     reason = remark.split('-')[0] if '-' in remark else ''
 
     # Update _internal_positions
@@ -457,7 +466,7 @@ def _on_order_check(ContextInfo):
                     if traded >= vol and vol > 0:
                         o['status'] = 'filled'
                         print('[ORDER_POLL] %s filled %d/%d remark=%s' % (o['stock'], traded, vol, remark))
-                        _confirm_fill(remark, o)
+                        _confirm_fill(remark, o, fill_price=0)  # ORDER query has no price, deal_cb will provide
                     elif traded > 0:
                         o['status'] = 'partial'
                         print('[ORDER_POLL] %s partial %d/%d remark=%s' % (o['stock'], traded, vol, remark))
@@ -546,7 +555,7 @@ def deal_callback(ContextInfo, dealInfo):
         if o['filled'] >= o['vol']:
             o['status'] = 'filled'
             print('[DEAL_CB] %s fully filled: %d/%d' % (code, o['filled'], o['vol']))
-            _confirm_fill(remark, o)
+            _confirm_fill(remark, o, fill_price=price)  # actual trade price from dealInfo
         else:
             print('[DEAL_CB] %s partial fill: %d/%d, waiting...' % (code, o['filled'], o['vol']))
     else:

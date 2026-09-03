@@ -449,8 +449,10 @@ def init(ContextInfo):
 
 
 def check_order_timer(ContextInfo):
-    """Periodic order check - cancel stale orders."""
+    """Periodic order check - only prints when there are active orders."""
     from qmt_adapter.trading import check_order_timeout, _orders
+    if not _orders:
+        return
     print('[DIAG] check_order_timer fired, _orders=%d' % len(_orders))
     check_order_timeout(timeout_seconds=60)
 

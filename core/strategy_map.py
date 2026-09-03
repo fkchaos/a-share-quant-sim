@@ -1168,6 +1168,28 @@ STRATEGY_MAP = {
             "REBALANCE_DAYS": 5,
         },
     },
+    # ── v61e: v61c排名掉出Top15 + 涨跌幅确认启动信号 ──
+    "v61e": {
+        "mode": "custom",
+        "description": "v61e 启动信号: v61c排名掉出Top15+涨幅确认, 止损-8%/止盈+25%",
+        "timing": "intraday",
+        "select_fn": "scripts.strategies.v61e_rank_drop.select_stocks_v61e",
+        "calc_factors_fn": "scripts.strategies.v61e_rank_drop.calc_factors_v61e",
+        "params": {
+            "STOP_LOSS": -0.08,
+            "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 5,
+            "SELL_OUT_OF": 15,
+            "MAX_DAILY_BUY": 5,
+            "MAX_POSITION": 0.20,
+            "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+            "RANK_TODAY_N": 15,
+            "MIN_RANK_CHANGE": 5,
+            "MIN_PCT_3D": 0.01,
+            "MIN_PCT_5D": 0.02,
+        },
+    },
 
     # ── v74a: 行业动量增强（v61b + 行业动量因子） ──
     "v74a": {

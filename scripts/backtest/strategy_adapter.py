@@ -620,6 +620,34 @@ class StrategyAdapter:
         }
         self._regime_params["v61d"] = {}
 
+        # ── v61e: v61c排名掉出Top15 + 涨跌幅确认启动信号 ──
+        self._overlay_scripts["v61e"] = {
+            "module": "scripts.backtest.v61e_rank_scan",
+            "entry_func": "run_wf_overlay",
+            "select_func": "select_v61e",
+            "params": {
+                "REBALANCE_DAYS": 3,   # 快进快出
+                "TOP_N": 5,
+                "STOP_LOSS": -0.05,    # 更紧止损
+                "TAKE_PROFIT": 0.15,   # 更快止盈
+                "HOLD_DAYS_MAX": 3,    # 最多持有3天
+                "SELL_OUT_OF": 15,
+                "RANK_TODAY_N": 15,
+                "LOOKBACK_BARS": 3,    # 3天前排名
+                "MIN_PCT_3D": 0.005,   # 0.5%
+                "MIN_PCT_5D": 0.01,    # 1%
+            }
+        }
+        self._select_fns["v61e"] = self._v61e_select
+        self._risk_params["v61e"] = {
+            "STOP_LOSS": -0.08, "TAKE_PROFIT": 0.25,
+            "HOLD_DAYS_MAX": 5, "MAX_DAILY_BUY": 5,
+            "SELL_OUT_OF": 15, "MAX_POSITION": 0.20, "MAX_HOLDINGS": 5,
+            "REBALANCE_DAYS": 5,
+            "RANK_TODAY_N": 15, "MIN_RANK_CHANGE": 5, "MIN_PCT_3D": 0.01, "MIN_PCT_5D": 0.02,
+        }
+        self._regime_params["v61e"] = {}
+
         # ── v74a: 行业动量增强（v61b + 行业动量因子） ──
         self._select_fns["v74a"] = self._v74a_select
         self._risk_params["v74a"] = {
@@ -1521,6 +1549,32 @@ class StrategyAdapter:
         candidates = select_stocks_v61d(factors, date, close_panel, volume_panel, amount_panel,
                                         high_panel, low_panel, open_panel, current_holdings,
                                         merged_params, sold_recently=sold_recently)
+        return candidates
+
+    def _v61e_select(self, factors, date, close_panel, volume_panel, amount_panel,
+                    high_panel, low_panel, open_panel, current_holdings, params,
+                    sold_recently=None, return_all=False):
+        """v61e 选股: v61c排名掉出Top15 + 涨跌幅确认启动信号"""
+        import sys
+        print(f"[ADAPTER] _v61e_select called, date={date}, factors={type(factors)}", file=sys.stderr)
+        from scripts.strategies.v61e_rank_drop import select_stocks_v61e, calc_factors_v61e
+        if factors is None:
+            factors = calc_factors_v61e(close_panel, volume_panel, amount_panel,
+                                        high_panel, low_panel, open_panel)
+        print(f"[ADAPTER] calling select_stocks_v61e", file=sys.stderr)
+        try:
+            merged_params = dict(self._risk_params["v61e"])
+            if params:
+                merged_params.update(params)
+            candidates = select_stocks_v61e(factors, date, close_panel, volume_panel, amount_panel,
+                                            high_panel, low_panel, open_panel, current_holdings,
+                                            merged_params, sold_recently=sold_recently)
+        except Exception as e:
+            print(f"[ADAPTER] Exception: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            candidates = []
+        print(f"[ADAPTER] candidates={len(candidates)}", file=sys.stderr)
         return candidates
 
     def _v74a_select(self, factors, date, close_panel, volume_panel, amount_panel,

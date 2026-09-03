@@ -350,8 +350,18 @@ def start_order_poll(C, remark, strategy_name='default'):
                     except Exception:
                         pass
                 elif _t.time() - o.get('timestamp', _t.time()) > 300:
-                    if _risk_debug:
-                        print('[ORDER_POLL][%s] WARN: >300s, force stop' % r)
+                    print('[ORDER_POLL][%s] WARN: >300s, force stop + cancel' % r)
+                    # Cancel order on QMT before stopping timer
+                    order_id = o.get('order_id', '')
+                    if order_id and o['status'] in ('ordered', 'partial'):
+                        try:
+                            trading = sys.modules.get('qmt_adapter.trading')
+                            if trading:
+                                trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ContextInfo)
+                        except Exception:
+                            pass
+                    o['status'] = 'cancelled'
+                    _orders.pop(r, None)
                     try:
                         ContextInfo.cancel_schedule_run('opoll_' + r)
                     except Exception:

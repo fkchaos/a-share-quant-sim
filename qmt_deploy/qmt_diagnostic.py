@@ -71,12 +71,11 @@ def _get_bar_date(C):
 
 
 def _get_bar_close(C, code, bar_date):
-    """Get close price for bar date using official QMT way."""
+    """Get latest price using official QMT way (no end_time = latest)."""
     data = C.get_market_data_ex(
         ['close'], [code],
         period='1d', count=1,
-        subscribe=False,
-        end_time=bar_date
+        subscribe=False
     )
     if code in data and len(data[code]) > 0:
         return data[code]['close'].iloc[-1]

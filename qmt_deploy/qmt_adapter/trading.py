@@ -220,7 +220,7 @@ class QmtAccount(object):
             1101,                   # orderType: single stock, shares
             self.account_id,        # account
             stock_code,             # orderCode
-            5,                      # prType: latest price (5=最新价)
+            14,                     # prType: counterparty price (对手价)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             'V61C',                 # strategyName
@@ -289,7 +289,7 @@ class QmtAccount(object):
             1101,                   # orderType: single stock, shares
             self.account_id,        # account
             stock_code,             # orderCode
-            5,                      # prType: latest price (5=最新价)
+            14,                     # prType: counterparty price (对手价)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             'V61C',                 # strategyName

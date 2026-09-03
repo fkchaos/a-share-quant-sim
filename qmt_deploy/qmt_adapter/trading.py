@@ -525,6 +525,23 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
                     result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
                     print('[ORDER_POLL][%s] cancel: order_id=%s remaining=%d result=%s' % (remark, order_id, remaining, result))
                     o['status'] = 'cancelled'
+                    # Record partial fills before cleanup
+                    if o['filled'] > 0:
+                        code = o['stock']
+                        filled = o['filled']
+                        reason = remark.split('-')[0] if '-' in remark else ''
+                        if reason == 'BUY':
+                            if code in _internal_positions:
+                                _internal_positions[code]['shares'] += filled
+                            else:
+                                _internal_positions[code] = {'shares': filled, 'cost': o.get('price', 0), 'name': ''}
+                            print('[ORDER_POLL][%s] partial fill recorded: BUY %d shares' % (remark, filled))
+                        elif reason in ('SELL', 'SELL_ALL', 'RISK'):
+                            if code in _internal_positions:
+                                _internal_positions[code]['shares'] -= filled
+                                if _internal_positions[code]['shares'] <= 0:
+                                    del _internal_positions[code]
+                            print('[ORDER_POLL][%s] partial fill recorded: SELL %d shares' % (remark, filled))
                     _orders.pop(remark, None)
             except Exception as e:
                 print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))

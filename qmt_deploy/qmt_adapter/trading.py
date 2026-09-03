@@ -247,28 +247,6 @@ class QmtAccount(object):
         if _risk_debug:
             print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
 
-        if _risk_debug:
-            print('[SELL] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
-
-        # Internal position tracking (for backtest)
-        if stock_code in self._internal_positions:
-            old = self._internal_positions[stock_code]
-            old_shares = old['shares']
-            old_cost = old['cost']
-            new_shares = old_shares + shares
-            new_cost = (old_cost * old_shares + price * shares) / new_shares if new_shares > 0 else 0
-            self._internal_positions[stock_code] = {
-                'shares': new_shares,
-                'cost': new_cost,
-                'name': old.get('name', ''),
-            }
-        else:
-            self._internal_positions[stock_code] = {
-                'shares': shares,
-                'cost': price if price > 0 else 0,
-                'name': '',
-            }
-
         # Start order poll after placing order
         start_order_poll(self.C)
         return remark
@@ -316,16 +294,7 @@ class QmtAccount(object):
             }
 
         if _risk_debug:
-            print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
-
-        if _risk_debug:
             print('[SELL] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
-
-        # Internal position tracking (for backtest)
-        if stock_code in self._internal_positions:
-            self._internal_positions[stock_code]['shares'] -= shares
-            if self._internal_positions[stock_code]['shares'] <= 0:
-                del self._internal_positions[stock_code]
 
         # Start order poll after placing order
         start_order_poll(self.C)
@@ -407,6 +376,42 @@ def check_order_timeout(timeout_seconds=60):
 # Order polling lifecycle (schedule_run based)
 # ============================================================
 
+def _confirm_fill(remark, o):
+    """Update _internal_positions and strategy JSON after order fill."""
+    code = o['stock']
+    filled = o['filled']
+    price = o.get('price', 0)
+    reason = remark.split('-')[0] if '-' in remark else ''
+
+    # Update _internal_positions
+    if reason == 'BUY':
+        if code in _internal_positions:
+            old = _internal_positions[code]
+            new_shares = old['shares'] + filled
+            new_cost = (old['cost'] * old['shares'] + price * filled) / new_shares if new_shares > 0 else 0
+            _internal_positions[code] = {'shares': new_shares, 'cost': new_cost, 'name': old.get('name', '')}
+        else:
+            _internal_positions[code] = {'shares': filled, 'cost': price, 'name': ''}
+        print('[FILL] %s BUY %d shares @ %.2f -> _internal_positions updated' % (code, filled, price))
+    elif reason in ('SELL', 'SELL_ALL', 'RISK'):
+        if code in _internal_positions:
+            _internal_positions[code]['shares'] -= filled
+            if _internal_positions[code]['shares'] <= 0:
+                del _internal_positions[code]
+        print('[FILL] %s SELL %d shares -> _internal_positions updated' % (code, filled))
+
+    # Update strategy position JSON
+    try:
+        from . import qmt_runner
+        strategy_name = reason.lower() if reason else 'v61c'
+        if reason == 'BUY':
+            qmt_runner.strategy_buy(strategy_name, code, filled, price, '')
+        else:
+            qmt_runner.strategy_sell(strategy_name, code, filled)
+        print('[FILL] strategy JSON updated: %s %s %d' % (strategy_name, code, filled))
+    except Exception as e:
+        print('[FILL] strategy JSON update failed: %s' % e)
+
 def start_order_poll(C):
     """Start order polling timer. Call after placing an order.
     Only one poll timer at a time (same name=reuse).
@@ -452,6 +457,7 @@ def _on_order_check(ContextInfo):
                     if traded >= vol and vol > 0:
                         o['status'] = 'filled'
                         print('[ORDER_POLL] %s filled %d/%d remark=%s' % (o['stock'], traded, vol, remark))
+                        _confirm_fill(remark, o)
                     elif traded > 0:
                         o['status'] = 'partial'
                         print('[ORDER_POLL] %s partial %d/%d remark=%s' % (o['stock'], traded, vol, remark))
@@ -540,15 +546,7 @@ def deal_callback(ContextInfo, dealInfo):
         if o['filled'] >= o['vol']:
             o['status'] = 'filled'
             print('[DEAL_CB] %s fully filled: %d/%d' % (code, o['filled'], o['vol']))
-            # Update position JSON
-            from . import qmt_runner
-            strategy_name = remark.split('-')[0].lower() if '-' in remark else 'v61c'
-            if direction == 48:  # BUY
-                qmt_runner.strategy_buy(strategy_name, code, o['vol'], price, '')
-                print('[DEAL_CB] position JSON updated: BUY %s %d @ %.2f' % (code, o['vol'], price))
-            else:  # SELL
-                qmt_runner.strategy_sell(strategy_name, code, o['vol'])
-                print('[DEAL_CB] position JSON updated: SELL %s %d' % (code, o['vol']))
+            _confirm_fill(remark, o)
         else:
             print('[DEAL_CB] %s partial fill: %d/%d, waiting...' % (code, o['filled'], o['vol']))
     else:

@@ -395,10 +395,26 @@ def test_buy_sell_flow(C, bar_date):
     passorder(
         23, 1101, real_account_id, code,
         14, -1, shares,
-        'DIAG', 1, remark, C
+        'DIAG', 2, remark, C
     )
     _diag_log('  passorder sent, remark=%s' % remark)
-    _diag_log('  Waiting for deal_callback to update position JSON...')
+
+    # Register in _orders so check_order_timeout can track it
+    import time as _time
+    from qmt_adapter import trading
+    trading._orders[remark] = {
+        'status': 'pending',
+        'stock': code,
+        'vol': shares,
+        'price': price,
+        'filled': 0,
+        'name': '',
+        'timestamp': _time.time(),
+        'account_id': real_account_id,
+        'account_type': acc.account_type,
+        'context': C,
+    }
+    _diag_log('  registered in _orders, polling will track it')
 
     bought = True
 
@@ -449,10 +465,8 @@ def init(ContextInfo):
 
 
 def check_order_timer(ContextInfo):
-    """Periodic order check - only prints when there are active orders."""
+    """Periodic order check - cancel stale orders."""
     from qmt_adapter.trading import check_order_timeout, _orders
-    if not _orders:
-        return
     print('[DIAG] check_order_timer fired, _orders=%d' % len(_orders))
     check_order_timeout(timeout_seconds=60)
 

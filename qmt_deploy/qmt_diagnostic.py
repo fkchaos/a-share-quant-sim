@@ -426,12 +426,13 @@ def init(ContextInfo):
         ContextInfo.schedule_run(on_timer, target.strftime('%Y%m%d%H%M%S'), repeat_times=-1,
                                  interval=interval, name='diag_timer')
 
-    # Register order check timer (every 10 seconds)
-    ContextInfo.run_time('check_order_timer', '10nSecond', '2026-01-01 00:00:00')
         _diag_log('schedule_run at %s, interval=%ds' % (target, TIMER_INTERVAL))
         _diag_log('Waiting for timer trigger...')
     else:
         _diag_log('Backtest mode: waiting for handlebar...')
+
+    # Register order check timer (every 10 seconds) - both modes
+    ContextInfo.run_time('check_order_timer', '10nSecond', '2026-01-01 00:00:00')
 
     # Run static tests (no market data needed)
     test_hold_days_persistence()

@@ -114,12 +114,17 @@ def on_signal(C):
     """Core business logic - shared by both handlebar and run_time triggers.
 
     Per-stock flow each bar:
-    1. Increment hold_days
-    2. Risk control (SL/TP/HD) -> sell if triggered
-    3. Per-stock time exit: sell if hold_days >= REBALANCE_DAYS
-    4. If any slots empty -> select new stocks -> buy
+    1. Process pending reorders (from timeout/cancel)
+    2. Increment hold_days
+    3. Risk control (SL/TP/HD) -> sell if triggered
+    4. Per-stock time exit: sell if hold_days >= REBALANCE_DAYS
+    5. If any slots empty -> select new stocks -> buy
     """
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list
+
+    # Process pending reorders first
+    from qmt_adapter.trading import process_pending_reorders
+    process_pending_reorders(C)
     global _kline_cache, _kline_cache_date, _risk_config, _last_buy_date
 
     if _account is None:
@@ -266,7 +271,7 @@ def on_signal(C):
     for c in selected:
         if c in held_codes:
             continue
-        # Limit up check: exclude if close == high (ÕÇÍ£²»Âò)
+        # Limit up check: exclude if close == high (ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½)
         if c in kline_data:
             df = kline_data[c]
             if len(df) > 0:

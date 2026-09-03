@@ -145,6 +145,10 @@ def on_signal(C):
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list
     global _kline_cache_tech, _kline_cache_date, _risk_config, _hold_days_max
 
+    # Process pending reorders first
+    from qmt_adapter.trading import process_pending_reorders
+    process_pending_reorders(C)
+
     if _account is None:
         from .qmt_data import ZZ1800_STOCKS
         from .trading import QmtAccount

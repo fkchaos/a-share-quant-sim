@@ -515,6 +515,17 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     if o['status'] == 'pending':
         o['status'] = 'rejected'
         print('[ORDER_POLL][%s] rejected after %ds (no callback)' % (remark, int(age)))
+        # Queue remaining for re-order (if buy)
+        remaining = o['vol'] - o['filled']
+        reason = remark.split('-')[0] if '-' in remark else ''
+        if reason == 'BUY' and remaining > 0:
+            _pending_reorders.append({
+                'code': o['stock'], 'shares': remaining, 'price': o.get('price', -1),
+                'reason': reason, 'strategy_name': o.get('strategy_name', 'V61C'),
+                'account_id': o.get('account_id'), 'account_type': o.get('account_type', 'STOCK'),
+                'context': o.get('context'),
+            })
+            print('[ORDER_POLL][%s] queued %d shares for re-order' % (remark, remaining))
         _orders.pop(remark, None)
     elif remaining > 0:
         order_id = o.get('order_id', '')
@@ -526,6 +537,16 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
                     result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
                     print('[ORDER_POLL][%s] cancel: order_id=%s remaining=%d result=%s' % (remark, order_id, remaining, result))
                     o['status'] = 'cancelled'
+                    # Queue remaining for re-order
+                    reason = remark.split('-')[0] if '-' in remark else ''
+                    if remaining > 0:
+                        _pending_reorders.append({
+                            'code': o['stock'], 'shares': remaining, 'price': o.get('price', -1),
+                            'reason': reason, 'strategy_name': o.get('strategy_name', 'V61C'),
+                            'account_id': o.get('account_id'), 'account_type': o.get('account_type', 'STOCK'),
+                            'context': o.get('context'),
+                        })
+                        print('[ORDER_POLL][%s] queued %d shares for re-order' % (remark, remaining))
                     _orders.pop(remark, None)
             except Exception as e:
                 print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))
@@ -537,6 +558,35 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
 # ============================================================
 
 _orders = {}  # remark -> {status, stock, vol, price, filled, name}
+_pending_reorders = []  # [{code, shares, price, reason, strategy_name, account_id, account_type, context}, ...]
+
+def process_pending_reorders(C):
+    """Process pending reorders - re-place orders that were cancelled with remaining shares.
+    Called from on_signal (strategy level) each cycle.
+    """
+    if not _pending_reorders:
+        return
+    # Take one per cycle to avoid flooding
+    item = _pending_reorders.pop(0)
+    code = item['code']
+    shares = item['shares']
+    price = item['price']
+    reason = item['reason']
+    strategy_name = item['strategy_name']
+    print('[REORDER] re-placing %s %d shares reason=%s' % (code, shares, reason))
+    # Use QmtAccount's buy/sell which handles remark generation + _orders registration + start_order_poll
+    _get_qmt_func()
+    trading = sys.modules[__name__]
+    acct = _get_account_id()
+    # Create a temporary QmtAccount to use buy/sell
+    ctx = item['context']
+    account = QmtAccount(ctx, item['account_id'], item['account_type'])
+    if reason in ('BUY',):
+        account.buy(code, shares, price, reason='BUY', strategy_name=strategy_name)
+    elif reason in ('SELL', 'SELL_ALL', 'RISK'):
+        account.sell(code, shares, price, reason=reason, strategy_name=strategy_name)
+    else:
+        print('[REORDER] unknown reason: %s' % reason)
 
 def order_callback(ContextInfo, orderInfo):
     """order callback - called when order status changes.

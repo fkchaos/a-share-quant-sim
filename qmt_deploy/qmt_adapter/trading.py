@@ -195,12 +195,12 @@ class QmtAccount(object):
             return 0
         return accounts[0].m_dStockValue + accounts[0].m_dFundValue
 
-    def buy(self, stock_code, shares, price=-1, reason='BUY'):
+    def buy(self, stock_code, shares, price=-1, reason='BUY', strategy_name='V61C'):
         """Buy order.
 
         passorder params (official):
           opType=23 (stock buy), orderType=1101 (single, shares),
-          prType=14 (counterparty price), quickTrade=0 (backtest mode)
+          prType=14 (counterparty price), quickTrade=2 (immediate)
         """
         _get_qmt_func()
         
@@ -223,7 +223,7 @@ class QmtAccount(object):
             14,                     # prType: counterparty price (对手价)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
-            'V61C',                 # strategyName
+            strategy_name,          # strategyName
             2,                      # quickTrade: 2=immediate (live mode)
             remark,                 # userOrderId -> m_strRemark in callback
             self.C                  # ContextInfo
@@ -242,6 +242,7 @@ class QmtAccount(object):
                 'account_id': self.account_id,
                 'account_type': self.account_type,
                 'context': self.C,
+                'strategy_name': strategy_name,
             }
 
         if _risk_debug:
@@ -251,12 +252,12 @@ class QmtAccount(object):
         start_order_poll(self.C, remark)
         return remark
 
-    def sell(self, stock_code, shares, price=-1, reason='SELL'):
+    def sell(self, stock_code, shares, price=-1, reason='SELL', strategy_name='V61C'):
         """Sell order.
 
         passorder params (official):
           opType=24 (stock sell), orderType=1101 (single, shares),
-          prType=14 (counterparty price), quickTrade=0 (backtest mode)
+          prType=14 (counterparty price), quickTrade=2 (immediate)
         """
         _get_qmt_func()
         trading = sys.modules[__name__]
@@ -272,7 +273,7 @@ class QmtAccount(object):
             14,                     # prType: counterparty price (对手价)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
-            'V61C',                 # strategyName
+            strategy_name,          # strategyName
             2,                      # quickTrade: 2=immediate (live mode)
             remark,                 # userOrderId,
             self.C                  # ContextInfo
@@ -291,6 +292,7 @@ class QmtAccount(object):
                 'account_id': self.account_id,
                 'account_type': self.account_type,
                 'context': self.C,
+                'strategy_name': strategy_name,
             }
 
         if _risk_debug:
@@ -380,16 +382,19 @@ def _confirm_fill(remark, o, fill_price=0):
     """Update _internal_positions and strategy JSON after order fill.
     Guard: only runs once per order (sets o['confirmed']=True).
     fill_price: actual trade price (from dealInfo or ORDER query).
+    Skips accounting if price <= 0 (waits for deal_callback).
     """
     if o.get('confirmed'):
         return  # already processed, skip
-    o['confirmed'] = True
-
     code = o['stock']
     filled = o['filled']
     price = fill_price if fill_price > 0 else o.get('price', 0)
     if price <= 0:
-        print('[FILL] WARN %s no valid price (fill=%.2f order=%.2f)' % (code, fill_price, o.get('price', 0)))
+        print('[FILL] SKIP %s: no valid price (fill=%.2f order=%.2f), wait for deal_cb' % (code, fill_price, o.get('price', 0)))
+        return
+
+    o['confirmed'] = True
+    strategy_name = o.get('strategy_name', 'V61C')
     reason = remark.split('-')[0] if '-' in remark else ''
 
     # Update _internal_positions
@@ -401,25 +406,25 @@ def _confirm_fill(remark, o, fill_price=0):
             _internal_positions[code] = {'shares': new_shares, 'cost': new_cost, 'name': old.get('name', '')}
         else:
             _internal_positions[code] = {'shares': filled, 'cost': price, 'name': ''}
-        print('[FILL] %s BUY %d shares @ %.2f -> _internal_positions updated' % (code, filled, price))
+        print('[FILL] %s BUY %d @ %.2f -> _internal_positions' % (code, filled, price))
     elif reason in ('SELL', 'SELL_ALL', 'RISK'):
         if code in _internal_positions:
             _internal_positions[code]['shares'] -= filled
             if _internal_positions[code]['shares'] <= 0:
                 del _internal_positions[code]
-        print('[FILL] %s SELL %d shares -> _internal_positions updated' % (code, filled))
+        print('[FILL] %s SELL %d -> _internal_positions' % (code, filled))
 
     # Update strategy position JSON
     try:
         from . import qmt_runner
-        strategy_name = reason.lower() if reason else 'v61c'
+        sn = strategy_name.lower()
         if reason == 'BUY':
-            qmt_runner.strategy_buy(strategy_name, code, filled, price, '')
+            qmt_runner.strategy_buy(sn, code, filled, price, '')
         else:
-            qmt_runner.strategy_sell(strategy_name, code, filled)
-        print('[FILL] strategy JSON updated: %s %s %d' % (strategy_name, code, filled))
+            qmt_runner.strategy_sell(sn, code, filled)
+        print('[FILL] strategy JSON: %s %s %d' % (sn, code, filled))
     except Exception as e:
-        print('[FILL] strategy JSON update failed: %s' % e)
+        print('[FILL] strategy JSON failed: %s' % e)
 
 def start_order_poll(C, remark, strategy_name='default'):
     """Start per-order polling timer. One timer per order, self-cancels on resolve."""
@@ -459,16 +464,8 @@ def start_order_poll(C, remark, strategy_name='default'):
     print('[ORDER_POLL] timer started: %s' % timer_name)
 
 
-def _stop_poll(C, remark):
-    """Cancel the per-order poll timer."""
-    try:
-        C.cancel_schedule_run('opoll_' + remark)
-    except Exception:
-        pass
-
-
 def _do_order_check_single(ContextInfo, remark, strategy_name):
-    """Check status of a single order."""
+    """Check status of a single order. Status only - fill accounting in deal_callback."""
     import time
     now = time.time()
     o = _orders.get(remark)
@@ -500,7 +497,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             if traded >= vol and vol > 0:
                 o['status'] = 'filled'
                 print('[ORDER_POLL][%s] filled %d/%d' % (remark, traded, vol))
-                _confirm_fill(remark, o, fill_price=0)
+                # fill accounting handled by deal_callback (has real price)
             elif traded > 0:
                 o['status'] = 'partial'
                 print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
@@ -518,6 +515,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     if o['status'] == 'pending':
         o['status'] = 'rejected'
         print('[ORDER_POLL][%s] rejected after %ds (no callback)' % (remark, int(age)))
+        _orders.pop(remark, None)
     elif remaining > 0:
         order_id = o.get('order_id', '')
         if order_id:
@@ -528,6 +526,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
                     result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
                     print('[ORDER_POLL][%s] cancel: order_id=%s remaining=%d result=%s' % (remark, order_id, remaining, result))
                     o['status'] = 'cancelled'
+                    _orders.pop(remark, None)
             except Exception as e:
                 print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))
         else:
@@ -579,7 +578,10 @@ def deal_callback(ContextInfo, dealInfo):
         if o['filled'] >= o['vol']:
             o['status'] = 'filled'
             print('[DEAL_CB] %s fully filled: %d/%d' % (code, o['filled'], o['vol']))
-            _confirm_fill(remark, o, fill_price=price)  # actual trade price from dealInfo
+            _confirm_fill(remark, o, fill_price=price)
+            # Clean up _orders after confirmed fill
+            if o.get('confirmed'):
+                _orders.pop(remark, None)
         else:
             print('[DEAL_CB] %s partial fill: %d/%d, waiting...' % (code, o['filled'], o['vol']))
     else:

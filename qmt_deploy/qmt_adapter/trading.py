@@ -328,102 +328,8 @@ class QmtAccount(object):
 # ============================================================
 # Order timeout check (call periodically)
 # ============================================================
-
-def check_order_timeout(timeout_seconds=60):
-    """Check for orders and cancel stale ones.
-    - pending + timeout: no order_callback -> cancel
-    - ordered + timeout: partial fill or no fill -> cancel remaining
-    """
-    import time
-    now = time.time()
-    for remark, o in list(_orders.items()):
-        if o['status'] not in ('pending', 'ordered'):
-            continue
-        age = now - o.get('timestamp', now)
-        if age <= timeout_seconds:
-            continue
-
-        code = o['stock']
-        remaining = o['vol'] - o['filled']
-
-        if o['status'] == 'pending':
-            # Never got order_callback -> likely rejected
-            o['status'] = 'rejected'
-            print('[TIMEOUT] %s rejected after %ds (no order_callback): %s' % (code, age, remark))
-
-        elif o['status'] == 'ordered' and remaining > 0:
-            # Got order_callback but partial/no fill -> cancel remaining
-            order_id = o.get('order_id', '')
-            if order_id:
-                try:
-                    _get_qmt_func()
-                    trading = sys.modules[__name__]
-                    acct = o.get('account_id', '')
-                    acct_type = o.get('account_type', 'STOCK')
-                    ctx = o.get('context', None)
-                    if ctx:
-                        result = trading.cancel(order_id, acct, acct_type, ctx)
-                        print('[CANCEL] %s cancel sent: order_id=%s remaining=%d result=%s' % (code, order_id, remaining, result))
-                        o['status'] = 'cancelled'
-                    else:
-                        print('[CANCEL] %s no ContextInfo, cannot cancel: %s' % (code, remark))
-                except Exception as e:
-                    print('[CANCEL] %s cancel failed: %s' % (code, e))
-            else:
-                print('[TIMEOUT] %s ordered but no order_id, cannot cancel: %s' % (code, remark))
-
-
-# ============================================================
 # Order polling lifecycle (schedule_run based)
 # ============================================================
-
-def _confirm_fill(remark, o, fill_price=0):
-    """Update _internal_positions and strategy JSON after order fill.
-    Guard: only runs once per order (sets o['confirmed']=True).
-    fill_price: actual trade price (from dealInfo or ORDER query).
-    Skips accounting if price <= 0 (waits for deal_callback).
-    """
-    if o.get('confirmed'):
-        return  # already processed, skip
-    code = o['stock']
-    filled = o['filled']
-    price = fill_price if fill_price > 0 else o.get('price', 0)
-    if price <= 0:
-        print('[FILL] SKIP %s: no valid price (fill=%.2f order=%.2f), wait for deal_cb' % (code, fill_price, o.get('price', 0)))
-        return
-
-    o['confirmed'] = True
-    strategy_name = o.get('strategy_name', 'V61C')
-    reason = remark.split('-')[0] if '-' in remark else ''
-
-    # Update _internal_positions
-    if reason == 'BUY':
-        if code in _internal_positions:
-            old = _internal_positions[code]
-            new_shares = old['shares'] + filled
-            new_cost = (old['cost'] * old['shares'] + price * filled) / new_shares if new_shares > 0 else 0
-            _internal_positions[code] = {'shares': new_shares, 'cost': new_cost, 'name': old.get('name', '')}
-        else:
-            _internal_positions[code] = {'shares': filled, 'cost': price, 'name': ''}
-        print('[FILL] %s BUY %d @ %.2f -> _internal_positions' % (code, filled, price))
-    elif reason in ('SELL', 'SELL_ALL', 'RISK'):
-        if code in _internal_positions:
-            _internal_positions[code]['shares'] -= filled
-            if _internal_positions[code]['shares'] <= 0:
-                del _internal_positions[code]
-        print('[FILL] %s SELL %d -> _internal_positions' % (code, filled))
-
-    # Update strategy position JSON
-    try:
-        from . import qmt_runner
-        sn = strategy_name.lower()
-        if reason == 'BUY':
-            qmt_runner.strategy_buy(sn, code, filled, price, '')
-        else:
-            qmt_runner.strategy_sell(sn, code, filled)
-        print('[FILL] strategy JSON: %s %s %d' % (sn, code, filled))
-    except Exception as e:
-        print('[FILL] strategy JSON failed: %s' % e)
 
 def start_order_poll(C, remark, strategy_name='default'):
     """Start per-order polling timer. One timer per order, self-cancels on resolve."""
@@ -464,11 +370,14 @@ def start_order_poll(C, remark, strategy_name='default'):
 
 
 def _do_order_check_single(ContextInfo, remark, strategy_name):
-    """Check status of a single order. Status only - fill accounting in deal_callback."""
+    """Check status of a single order.
+    SINGLE SOURCE OF TRUTH: all fill accounting happens here via ORDER query.
+    deal_callback is logging-only (callback timing is unreliable).
+    """
     import time
     now = time.time()
     o = _orders.get(remark)
-    if not o or o['status'] not in ('pending', 'ordered', 'partial'):
+    if not o or o['status'] not in ('pending', 'ordered', 'partial', 'filled'):
         return
 
     # Query ORDER from QMT
@@ -489,33 +398,52 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
         traded = getattr(order, 'm_nVolumeTraded', 0)
         vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
         order_id = getattr(order, 'm_strOrderSysID', '')
-        if o['status'] in ('pending', 'ordered', 'partial'):
-            o['filled'] = traded
-            if order_id:
-                o['order_id'] = order_id
-            if traded >= vol and vol > 0:
-                o['status'] = 'filled'
-                print('[ORDER_POLL][%s] filled %d/%d' % (remark, traded, vol))
-                # fill accounting handled by deal_callback (has real price)
-            elif traded > 0:
-                o['status'] = 'partial'
-                print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
-            elif o['status'] == 'pending':
-                o['status'] = 'ordered'
-                print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
-        break  # found our order, done
+        if order_id:
+            o['order_id'] = order_id
 
-    # Timeout check
+        # Delta fill: new volume since last check
+        prev_filled = o['filled']
+        delta = traded - prev_filled
+        if delta > 0:
+            o['filled'] = traded
+            # Record delta into _internal_positions
+            code = o['stock']
+            reason = remark.split('-')[0] if '-' in remark else ''
+            if reason == 'BUY':
+                if code in _internal_positions:
+                    _internal_positions[code]['shares'] += delta
+                else:
+                    _internal_positions[code] = {'shares': delta, 'cost': o.get('price', 0), 'name': ''}
+                print('[ORDER_POLL][%s] fill +%d -> %d/%d (total %d)' % (remark, delta, traded, vol, o['filled']))
+            elif reason in ('SELL', 'SELL_ALL', 'RISK'):
+                if code in _internal_positions:
+                    _internal_positions[code]['shares'] -= delta
+                    if _internal_positions[code]['shares'] <= 0:
+                        del _internal_positions[code]
+                print('[ORDER_POLL][%s] fill -%d -> %d/%d (total %d)' % (remark, delta, traded, vol, o['filled']))
+
+        # Status transitions
+        if traded >= vol and vol > 0 and o['status'] != 'filled':
+            o['status'] = 'filled'
+            print('[ORDER_POLL][%s] fully filled %d/%d' % (remark, traded, vol))
+        elif traded > 0 and o['status'] in ('pending', 'ordered'):
+            o['status'] = 'partial'
+            print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
+        elif o['status'] == 'pending' and traded == 0:
+            o['status'] = 'ordered'
+            print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
+        break
+
+    # Timeout handling
     age = now - o.get('timestamp', now)
     if age <= 60:
         return
-    code = o['stock']
-    remaining = o['vol'] - o['filled']
     if o['status'] == 'pending':
         o['status'] = 'rejected'
         print('[ORDER_POLL][%s] rejected after %ds (no callback)' % (remark, int(age)))
         _orders.pop(remark, None)
-    elif remaining > 0:
+    elif o['status'] in ('ordered', 'partial') and age > 120:
+        # >120s: cancel entire order
         order_id = o.get('order_id', '')
         if order_id:
             try:
@@ -523,25 +451,9 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
                 if ctx:
                     trading = sys.modules[__name__]
                     result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
-                    print('[ORDER_POLL][%s] cancel: order_id=%s remaining=%d result=%s' % (remark, order_id, remaining, result))
+                    print('[ORDER_POLL][%s] cancel: order_id=%s (%d/%d filled after %ds) result=%s'
+                          % (remark, order_id, o['filled'], o['vol'], int(age), result))
                     o['status'] = 'cancelled'
-                    # Record partial fills before cleanup
-                    if o['filled'] > 0:
-                        code = o['stock']
-                        filled = o['filled']
-                        reason = remark.split('-')[0] if '-' in remark else ''
-                        if reason == 'BUY':
-                            if code in _internal_positions:
-                                _internal_positions[code]['shares'] += filled
-                            else:
-                                _internal_positions[code] = {'shares': filled, 'cost': o.get('price', 0), 'name': ''}
-                            print('[ORDER_POLL][%s] partial fill recorded: BUY %d shares' % (remark, filled))
-                        elif reason in ('SELL', 'SELL_ALL', 'RISK'):
-                            if code in _internal_positions:
-                                _internal_positions[code]['shares'] -= filled
-                                if _internal_positions[code]['shares'] <= 0:
-                                    del _internal_positions[code]
-                            print('[ORDER_POLL][%s] partial fill recorded: SELL %d shares' % (remark, filled))
                     _orders.pop(remark, None)
             except Exception as e:
                 print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))
@@ -555,26 +467,17 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
 _orders = {}  # remark -> {status, stock, vol, price, filled, name}
 
 def order_callback(ContextInfo, orderInfo):
-    """order callback - called when order status changes.
-    Tracks order state via userOrderId (m_strRemark).
-    """
+    """Order callback - LOGGING ONLY. Status transitions in _do_order_check_single."""
     remark = getattr(orderInfo, 'm_strRemark', '')
     code = getattr(orderInfo, 'm_strInstrumentID', '') + '.' + getattr(orderInfo, 'm_strExchangeID', '')
     vol = getattr(orderInfo, 'm_nVolumeTotalOriginal', 0)
     traded = getattr(orderInfo, 'm_nVolumeTraded', 0)
     status = getattr(orderInfo, 'm_nOrderStatus', -1)
-
-    if remark and remark in _orders:
-        _orders[remark]['status'] = 'ordered'
-        print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
-    else:
-        print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s (unknown)' % (code, vol, traded, status, remark))
+    print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
 
 
 def deal_callback(ContextInfo, dealInfo):
-    """deal callback - called when order is (partially) filled.
-    Updates position JSON and order state.
-    """
+    """Deal callback - LOGGING ONLY. All accounting in _do_order_check_single."""
     remark = getattr(dealInfo, 'm_strRemark', '')
     code = getattr(dealInfo, 'm_strInstrumentID', '') + '.' + getattr(dealInfo, 'm_strExchangeID', '')
     name = getattr(dealInfo, 'm_strInstrumentName', '')
@@ -586,19 +489,3 @@ def deal_callback(ContextInfo, dealInfo):
     dir_str = 'BUY' if direction == 48 else 'SELL'
     print('[DEAL_CB] %s %s %s %d shares @ %.2f = %.0f CNY remark=%s' % (
         code, name, dir_str, vol, price, amount, remark))
-
-    # Update order state
-    if remark and remark in _orders:
-        o = _orders[remark]
-        o['filled'] += vol
-        if o['filled'] >= o['vol']:
-            o['status'] = 'filled'
-            print('[DEAL_CB] %s fully filled: %d/%d' % (code, o['filled'], o['vol']))
-            _confirm_fill(remark, o, fill_price=price)
-            # Clean up _orders after confirmed fill
-            if o.get('confirmed'):
-                _orders.pop(remark, None)
-        else:
-            print('[DEAL_CB] %s partial fill: %d/%d, waiting...' % (code, o['filled'], o['vol']))
-    else:
-        print('[DEAL_CB] %s (unknown remark: %s)' % (code, remark))

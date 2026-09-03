@@ -440,21 +440,32 @@ def start_order_poll(C):
 def _on_order_check(ContextInfo):
     """Order poll callback - query ORDER status, update _orders, timeout/cancel.
     Wraps entire body to prevent zombie timers from exceptions.
-    Always checks for cancel at the end.
+    Always checks for cancel in finally (no active orders or max lifetime exceeded).
     """
     try:
         _do_order_check(ContextInfo)
     except Exception as e:
         print('[ORDER_POLL] ERROR in check: %s' % e)
     finally:
-        # Always check: if no active orders, stop timer
+        # Stop if: no active orders OR timer exceeded max lifetime (5 min)
+        import time as _t
         active = [r for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
         if not active:
             print('[ORDER_POLL] no active orders, stopping timer')
-            try:
-                ContextInfo.cancel_schedule_run('order_poll')
-            except Exception:
-                pass
+            _stop_poll(ContextInfo)
+        else:
+            ages = [_t.time() - o.get('timestamp', _t.time()) for r, o in _orders.items() if o['status'] in ('pending', 'ordered', 'partial')]
+            if ages and max(ages) > 300:
+                print('[ORDER_POLL] WARN: orders active >300s, force stopping timer')
+                _stop_poll(ContextInfo)
+
+
+def _stop_poll(C):
+    """Cancel the order poll timer."""
+    try:
+        C.cancel_schedule_run('order_poll')
+    except Exception:
+        pass
 
 
 def _do_order_check(ContextInfo):

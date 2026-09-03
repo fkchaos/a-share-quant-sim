@@ -267,7 +267,7 @@ def on_signal(C):
     for c in selected:
         if c in held_codes:
             continue
-        # Limit up check: exclude if close == high (��ͣ����)
+        # Limit up check: exclude if close == high ()
         if c in kline_data:
             df = kline_data[c]
             if len(df) > 0:

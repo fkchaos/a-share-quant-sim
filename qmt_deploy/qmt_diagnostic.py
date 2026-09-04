@@ -43,6 +43,7 @@ import json
 
 account_id = None  # resolved from QMT at runtime
 bought = False
+sold = False
 buy_price_used = 0
 buy_shares = 0
 _diag_results = []  # (test_name, passed, detail)
@@ -357,7 +358,7 @@ def test_buy_sell_flow(C, bar_date):
         return
 
     _diag_log('--- Test 8: Buy/Sell Flow ---')
-    code = '600584.SH'
+    code = '118027.SH'  # convertible bond (T+0)
 
     # Enable debug for passorder print
     from qmt_adapter import trading
@@ -457,7 +458,8 @@ def _on_signal(ContextInfo):
     test_consistency(ContextInfo)
 
     if bought:
-        cur_close = _get_bar_close(ContextInfo, '600584.SH', bar_date)
+        diag_code = '118027.SH'
+        cur_close = _get_bar_close(ContextInfo, diag_code, bar_date)
 
         _diag_log('--- Bar %s ---' % bar_date)
         _diag_log('Close price: %.4f' % cur_close)
@@ -487,6 +489,30 @@ def _on_signal(ContextInfo):
 
         test_cost_price(ContextInfo, bar_date)
 
+        # Auto-sell after buy: sell all shares of diag_code if we haven't sold yet
+        global sold
+        if not sold:
+            sell_pos = None
+            for p in positions:
+                if p['code'] == diag_code and p['shares'] > 0:
+                    sell_pos = p
+                    break
+            if sell_pos:
+                _diag_log('--- Sell Test ---')
+                sell_shares = sell_pos['shares']
+                sell_price = cur_close if cur_close > 0 else -1
+                _diag_log('  Sell: %d shares %s at ~%.2f' % (sell_shares, diag_code, sell_price))
+                from qmt_adapter.trading import QmtAccount
+                acc2 = QmtAccount(ContextInfo)
+                sell_remark = acc2.sell(diag_code, sell_shares, sell_price, reason='DIAG', strategy_name='DIAG')
+                if sell_remark is None:
+                    _diag_log('  acc.sell() returned None')
+                else:
+                    _diag_log('  acc.sell() OK, remark=%s' % sell_remark)
+                sold = True
+            else:
+                _diag_log('  Position not filled yet, waiting...')
+
         # Print summary
         _diag_log('=== RESULTS ===')
         for test_name, passed, detail in _diag_results:
@@ -502,12 +528,20 @@ def _on_signal(ContextInfo):
 # ========== QMT CALLBACKS ==========
 # QMT requires these at module level to call them
 def order_callback(ContextInfo, orderInfo):
-    """Forward to trading.order_callback."""
-    from qmt_adapter.trading import order_callback as _cb
-    _cb(ContextInfo, orderInfo)
+    """Print order status changes from QMT."""
+    status = getattr(orderInfo, 'm_nOrderStatus', '?')
+    remark = getattr(orderInfo, 'm_strRemark', '')
+    code = getattr(orderInfo, 'm_strStockCode', '')
+    vol = getattr(orderInfo, 'm_nVolumeTotalOriginal', 0)
+    traded = getattr(orderInfo, 'm_nVolumeTraded', 0)
+    print('[ORDER_CALLBACK] status=%s code=%s vol=%d traded=%d remark=%s' % (status, code, vol, traded, remark))
 
 
 def deal_callback(ContextInfo, dealInfo):
-    """Forward to trading.deal_callback."""
-    from qmt_adapter.trading import deal_callback as _cb
-    _cb(ContextInfo, dealInfo)
+    """Print deal confirmations from QMT."""
+    code = getattr(dealInfo, 'm_strStockCode', '')
+    vol = getattr(dealInfo, 'm_nVolume', 0)
+    price = getattr(dealInfo, 'm_dPrice', 0)
+    remark = getattr(dealInfo, 'm_strRemark', '')
+    direction = getattr(dealInfo, 'm_nDirection', '?')
+    print('[DEAL_CALLBACK] direction=%s code=%s vol=%d price=%.4f remark=%s' % (direction, code, vol, price, remark))

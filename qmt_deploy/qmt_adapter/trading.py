@@ -214,6 +214,8 @@ class QmtAccount(object):
         now = datetime.datetime.now()
         remark = '%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S'))
 
+        print('[PASSORDER] opType=23, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=2, remark=%s' % (
+            self.account_id, stock_code, shares, strategy_name, remark))
         trading.passorder(
             23,                     # opType: stock buy
             1101,                   # orderType: single stock, shares
@@ -264,6 +266,8 @@ class QmtAccount(object):
         now = datetime.datetime.now()
         remark = '%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S'))
 
+        print('[PASSORDER] opType=24, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=2, remark=%s' % (
+            self.account_id, stock_code, shares, strategy_name, remark))
         trading.passorder(
             24,                     # opType: stock sell
             1101,                   # orderType: single stock, shares

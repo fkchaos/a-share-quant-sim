@@ -22,7 +22,6 @@ MODE = 'LIVE'          # 'BACKTEST' or 'LIVE'
 DEBUG = True           # master debug switch: controls ALL prints
 TIMER_INTERVAL = 24 * 3600  # seconds (1 day = 86400)
 TIMER_TIME = '145000'  # HHMMSS format
-_ENABLE_BUY_TEST = False  # Set True to enable real buy test
 # ===========================
 
 # Validate MODE
@@ -348,10 +347,6 @@ def test_buy_sell_flow(C, bar_date):
     WARNING: This actually places an order! Only enable for testing.
     """
     global bought, buy_price_used, buy_shares
-
-    if not _ENABLE_BUY_TEST:
-        _diag_result('8:BuySellFlow', True, 'skipped (set _ENABLE_BUY_TEST=True)')
-        return
 
     if bought:
         _diag_result('8:BuySellFlow', True, 'already tested')

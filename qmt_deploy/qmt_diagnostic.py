@@ -460,6 +460,10 @@ def _on_signal(ContextInfo):
     diag_code = '118027.SH'
     diag_strategy = 'DIAG'
 
+    # --- BUY (only on first run) ---
+    if not bought and not sold:
+        test_buy_sell_flow(ContextInfo, bar_date)
+
     # --- SELL CHECK (read from _positions_DIAG.json, same as real strategies) ---
     if bought and not sold:
         cur_close = _get_bar_close(ContextInfo, diag_code, bar_date)
@@ -486,10 +490,6 @@ def _on_signal(ContextInfo):
             sold = True
         else:
             _diag_log('  Position not in JSON yet, retrying on next timer...')
-
-    # --- BUY (only on first run, after sell is done) ---
-    if not bought and not sold:
-        test_buy_sell_flow(ContextInfo, bar_date)
 
     # --- SUMMARY ---
     _diag_log('=== RESULTS ===')

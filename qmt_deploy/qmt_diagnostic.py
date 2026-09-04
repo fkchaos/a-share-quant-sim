@@ -391,6 +391,8 @@ def test_buy_sell_flow(C, bar_date):
 
     now = datetime.datetime.now()
     remark = 'DIAG-%s' % now.strftime('%H%M%S')
+    print('[PASSORDER] opType=23, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=2, remark=%s' % (
+        real_account_id, code, shares, 'DIAG', remark))
     passorder(
         23, 1101, real_account_id, code,
         14, -1, shares,

@@ -359,13 +359,9 @@ def test_buy_sell_flow(C, bar_date):
     _diag_log('--- Test 8: Buy/Sell Flow ---')
     code = '600584.SH'
 
-    # Enable debug for this test
-    try:
-        from qmt_adapter import trading
-        old_debug = trading._risk_debug
-        trading._risk_debug = True
-    except Exception:
-        old_debug = False
+    # Enable debug for passorder print
+    from qmt_adapter import trading
+    trading._risk_debug = True
 
     # Get price
     price = _get_bar_close(C, code, bar_date)
@@ -386,48 +382,15 @@ def test_buy_sell_flow(C, bar_date):
     # Get real account from QmtAccount (same as v75j/v61c)
     from qmt_adapter.trading import QmtAccount
     acc = QmtAccount(C)
-    real_account_id = acc.account_id
-    _diag_log('  Using account: %s (type: %s)' % (real_account_id, acc.account_type))
+    _diag_log('  Using account: %s (type: %s)' % (acc.account_id, acc.account_type))
 
-    now = datetime.datetime.now()
-    remark = 'DIAG-%s' % now.strftime('%H%M%S')
-    print('[PASSORDER] opType=23, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=2, remark=%s' % (
-        real_account_id, code, shares, 'DIAG', remark))
-    passorder(
-        23, 1101, real_account_id, code,
-        14, -1, shares,
-        'DIAG', 2, remark, C
-    )
-    _diag_log('  passorder sent, remark=%s' % remark)
-
-    # Register in _orders so check_order_timeout can track it
-    import time as _time
-    from qmt_adapter import trading
-    trading._orders[remark] = {
-        'status': 'pending',
-        'stock': code,
-        'vol': shares,
-        'price': price,
-        'filled': 0,
-        'name': '',
-        'timestamp': _time.time(),
-        'account_id': real_account_id,
-        'account_type': acc.account_type,
-        'context': C,
-    }
-    _diag_log('  registered in _orders, starting order poll...')
-
-    # Start order poll timer (reuse trading.py's start_order_poll)
-    from qmt_adapter.trading import start_order_poll
-    start_order_poll(C, remark)
+    remark = acc.buy(code, shares, price, reason='DIAG', strategy_name='DIAG')
+    if remark is None:
+        _diag_result('8:BuySellFlow', False, 'acc.buy() returned None')
+        return
+    _diag_log('  acc.buy() OK, remark=%s' % remark)
 
     bought = True
-
-    # Restore debug
-    try:
-        trading._risk_debug = old_debug
-    except Exception:
-        pass
 
     _diag_result('8:BuySellFlow', True, 'order sent, check deal_callback output')
 

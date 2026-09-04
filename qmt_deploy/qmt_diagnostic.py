@@ -384,7 +384,7 @@ def test_buy_sell_flow(C, bar_date):
         acc = QmtAccount(C)
         _diag_log('  Using account: %s (type: %s)' % (acc.account_id, acc.account_type))
 
-        remark = acc.buy(diag_code, shares, price, reason='DIAG', strategy_name=diag_strategy)
+        remark = acc.buy(diag_code, shares, price, reason='DIAG-B', strategy_name=diag_strategy)
         if remark is None:
             _diag_result('8:BuySellFlow', False, 'acc.buy() returned None')
             return
@@ -412,7 +412,7 @@ def test_buy_sell_flow(C, bar_date):
             _diag_log('  Sell: %d shares %s at ~%.2f' % (sell_shares, diag_code, sell_price))
             from qmt_adapter.trading import QmtAccount
             acc2 = QmtAccount(C)
-            sell_remark = acc2.sell(diag_code, sell_shares, sell_price, reason='DIAG', strategy_name=diag_strategy)
+            sell_remark = acc2.sell(diag_code, sell_shares, sell_price, reason='DIAG-S', strategy_name=diag_strategy)
             if sell_remark is None:
                 _diag_log('  acc.sell() returned None')
             else:

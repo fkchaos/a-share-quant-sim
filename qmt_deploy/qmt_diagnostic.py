@@ -346,54 +346,83 @@ def test_buy_sell_flow(C, bar_date):
     """Test passorder -> order_callback -> deal_callback chain.
     WARNING: This actually places an order! Only enable for testing.
     """
-    global bought, buy_price_used, buy_shares
+    global bought, buy_price_used, buy_shares, sold
 
-    if bought:
+    if bought and sold:
         _diag_result('8:BuySellFlow', True, 'already tested')
         return
 
-    _diag_log('--- Test 8: Buy/Sell Flow ---')
-    code = '118027.SH'  # convertible bond (T+0)
+    diag_code = '118027.SH'
+    diag_strategy = 'DIAG'
 
     # Enable debug for passorder print
     from qmt_adapter import trading
     trading._risk_debug = True
 
-    # Get price
-    price = _get_bar_close(C, code, bar_date)
-    if price <= 0:
-        _diag_result('8:BuySellFlow', False, 'cannot get price for %s' % code)
-        return
+    # --- BUY ---
+    if not bought:
+        _diag_log('--- Test 8: Buy/Sell Flow ---')
 
-    shares = int(10000 / price / 100) * 100
-    if shares <= 0:
-        _diag_result('8:BuySellFlow', False, 'cannot afford 1 lot at %.2f' % price)
-        return
+        # Get price
+        price = _get_bar_close(C, diag_code, bar_date)
+        if price <= 0:
+            _diag_result('8:BuySellFlow', False, 'cannot get price for %s' % diag_code)
+            return
 
-    _diag_log('  Buy: %d shares %s at ~%.2f' % (shares, code, price))
+        shares = int(10000 / price / 100) * 100
+        if shares <= 0:
+            _diag_result('8:BuySellFlow', False, 'cannot afford 1 lot at %.2f' % price)
+            return
 
-    buy_price_used = price
-    buy_shares = shares
+        _diag_log('  Buy: %d shares %s at ~%.2f' % (shares, diag_code, price))
 
-    # Get real account from QmtAccount (same as v75j/v61c)
-    from qmt_adapter.trading import QmtAccount
-    acc = QmtAccount(C)
-    _diag_log('  Using account: %s (type: %s)' % (acc.account_id, acc.account_type))
+        buy_price_used = price
+        buy_shares = shares
 
-    remark = acc.buy(code, shares, price, reason='DIAG', strategy_name='DIAG')
-    if remark is None:
-        _diag_result('8:BuySellFlow', False, 'acc.buy() returned None')
-        return
-    _diag_log('  acc.buy() OK, remark=%s' % remark)
+        # Get real account from QmtAccount (same as v75j/v61c)
+        from qmt_adapter.trading import QmtAccount
+        acc = QmtAccount(C)
+        _diag_log('  Using account: %s (type: %s)' % (acc.account_id, acc.account_type))
 
-    bought = True
+        remark = acc.buy(diag_code, shares, price, reason='DIAG', strategy_name=diag_strategy)
+        if remark is None:
+            _diag_result('8:BuySellFlow', False, 'acc.buy() returned None')
+            return
+        _diag_log('  acc.buy() OK, remark=%s' % remark)
 
-    # Record to _positions_DIAG.json (same as real strategies)
-    from qmt_adapter.qmt_runner import strategy_buy
-    strategy_buy('DIAG', code, shares, price, date=bar_date)
-    _diag_log('  Recorded to _positions_DIAG.json')
+        bought = True
 
-    _diag_result('8:BuySellFlow', True, 'order sent, sell on next timer')
+        # Record to _positions_DIAG.json (same as real strategies)
+        from qmt_adapter.qmt_runner import strategy_buy
+        strategy_buy(diag_strategy, diag_code, shares, price, date=bar_date)
+        _diag_log('  Recorded to _positions_DIAG.json')
+
+    # --- SELL (read from _positions_DIAG.json) ---
+    if bought and not sold:
+        cur_close = _get_bar_close(C, diag_code, bar_date)
+        _diag_log('  Sell check (close=%.4f)' % cur_close)
+
+        from qmt_adapter.qmt_runner import load_strategy_positions, strategy_sell
+        pos = load_strategy_positions(diag_strategy)
+
+        sell_pos = pos.get(diag_code)
+        if sell_pos and sell_pos.get('shares', 0) > 0:
+            sell_shares = sell_pos['shares']
+            sell_price = cur_close if cur_close > 0 else -1
+            _diag_log('  Sell: %d shares %s at ~%.2f' % (sell_shares, diag_code, sell_price))
+            from qmt_adapter.trading import QmtAccount
+            acc2 = QmtAccount(C)
+            sell_remark = acc2.sell(diag_code, sell_shares, sell_price, reason='DIAG', strategy_name=diag_strategy)
+            if sell_remark is None:
+                _diag_log('  acc.sell() returned None')
+            else:
+                _diag_log('  acc.sell() OK, remark=%s' % sell_remark)
+            strategy_sell(diag_strategy, diag_code, sell_shares)
+            sold = True
+            _diag_result('8:BuySellFlow', True, 'buy+sell done')
+        else:
+            _diag_log('  Position not in JSON yet, retrying on next timer...')
+            _diag_result('8:BuySellFlow', True, 'buy done, sell pending')
 
 
 # ============================================================
@@ -457,39 +486,8 @@ def _on_signal(ContextInfo):
     test_position_sources(ContextInfo)
     test_consistency(ContextInfo)
 
-    diag_code = '118027.SH'
-    diag_strategy = 'DIAG'
-
-    # --- BUY (only on first run) ---
-    if not bought and not sold:
-        test_buy_sell_flow(ContextInfo, bar_date)
-
-    # --- SELL CHECK (read from _positions_DIAG.json, same as real strategies) ---
-    if bought and not sold:
-        cur_close = _get_bar_close(ContextInfo, diag_code, bar_date)
-        _diag_log('--- Pending Sell Check (close=%.4f) ---' % cur_close)
-
-        from qmt_adapter.qmt_runner import load_strategy_positions, strategy_sell
-        pos = load_strategy_positions(diag_strategy)
-        _diag_log('  JSON positions: %s' % list(pos.keys()))
-
-        sell_pos = pos.get(diag_code)
-        if sell_pos and sell_pos.get('shares', 0) > 0:
-            _diag_log('--- Sell Test ---')
-            sell_shares = sell_pos['shares']
-            sell_price = cur_close if cur_close > 0 else -1
-            _diag_log('  Sell: %d shares %s at ~%.2f' % (sell_shares, diag_code, sell_price))
-            from qmt_adapter.trading import QmtAccount
-            acc2 = QmtAccount(ContextInfo)
-            sell_remark = acc2.sell(diag_code, sell_shares, sell_price, reason='DIAG', strategy_name=diag_strategy)
-            if sell_remark is None:
-                _diag_log('  acc.sell() returned None')
-            else:
-                _diag_log('  acc.sell() OK, remark=%s' % sell_remark)
-            strategy_sell(diag_strategy, diag_code, sell_shares)
-            sold = True
-        else:
-            _diag_log('  Position not in JSON yet, retrying on next timer...')
+    # Test 8: buy + sell flow (self-contained)
+    test_buy_sell_flow(ContextInfo, bar_date)
 
     # --- SUMMARY ---
     _diag_log('=== RESULTS ===')

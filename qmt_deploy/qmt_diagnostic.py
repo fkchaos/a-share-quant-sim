@@ -43,6 +43,8 @@ import json
 account_id = None  # resolved from QMT at runtime
 bought = False
 sold = False
+pending_sell = False  # True after buy, sell on next timer fire
+pending_sell_code = ''  # code to sell
 buy_price_used = 0
 buy_shares = 0
 _diag_results = []  # (test_name, passed, detail)
@@ -346,7 +348,7 @@ def test_buy_sell_flow(C, bar_date):
     """Test passorder -> order_callback -> deal_callback chain.
     WARNING: This actually places an order! Only enable for testing.
     """
-    global bought, buy_price_used, buy_shares
+    global bought, buy_price_used, buy_shares, pending_sell, pending_sell_code
 
     if bought:
         _diag_result('8:BuySellFlow', True, 'already tested')
@@ -387,8 +389,20 @@ def test_buy_sell_flow(C, bar_date):
     _diag_log('  acc.buy() OK, remark=%s' % remark)
 
     bought = True
+    pending_sell = True
+    pending_sell_code = code
 
-    _diag_result('8:BuySellFlow', True, 'order sent, check deal_callback output')
+    # Schedule a short retry timer (5 min) so sell doesn't wait 24h
+    try:
+        now = datetime.datetime.now()
+        retry_target = (now + datetime.timedelta(minutes=5)).strftime('%Y%m%d%H%M%S')
+        C.schedule_run(on_timer, retry_target, repeat_times=1,
+                       interval=datetime.timedelta(seconds=300), name='diag_retry')
+        _diag_log('  Retry timer scheduled at %s (5 min)' % retry_target)
+    except Exception as e:
+        _diag_log('  Retry timer failed (will use 24h interval): %s' % e)
+
+    _diag_result('8:BuySellFlow', True, 'order sent, sell on next timer')
 
 
 # ============================================================
@@ -443,7 +457,7 @@ def on_timer(ContextInfo):
 
 def _on_signal(ContextInfo):
     """Core diagnostic logic."""
-    global bought, buy_price_used, buy_shares
+    global bought, buy_price_used, buy_shares, pending_sell, pending_sell_code, sold
 
     bar_date = _get_bar_date(ContextInfo)
 
@@ -452,72 +466,58 @@ def _on_signal(ContextInfo):
     test_position_sources(ContextInfo)
     test_consistency(ContextInfo)
 
-    if bought:
-        diag_code = '118027.SH'
-        cur_close = _get_bar_close(ContextInfo, diag_code, bar_date)
+    diag_code = '118027.SH'
 
-        _diag_log('--- Bar %s ---' % bar_date)
-        _diag_log('Close price: %.4f' % cur_close)
+    # --- SELL CHECK (runs first on every timer fire when pending_sell=True) ---
+    if pending_sell and not sold:
+        cur_close = _get_bar_close(ContextInfo, diag_code, bar_date)
+        _diag_log('--- Pending Sell Check (close=%.4f) ---' % cur_close)
 
         try:
             from qmt_adapter.trading import QmtAccount
-            acc = QmtAccount(C)
+            acc = QmtAccount(ContextInfo)
             positions = acc.get_holdings()
-        except Exception:
+        except Exception as e:
+            _diag_log('  get_holdings failed: %s' % e)
             positions = []
 
-        _diag_log('Position count: %d' % len(positions))
-
-        try:
-            accounts = get_trade_detail_data(account_id, 'stock', 'ACCOUNT')
-            for a in accounts:
-                _diag_log('Balance: %.2f  Available: %.2f' % (
-                    getattr(a, 'm_dBalance', 0), getattr(a, 'm_dAvailable', 0)))
-        except Exception as e:
-            _diag_log('Account query failed: %s' % str(e))
-
+        _diag_log('  Position count: %d' % len(positions))
         for p in positions:
-            code = p['code']
-            shares = p['shares']
-            qmt_cost = p.get('avg_cost', 0)
-            _diag_log('%s: %d shares cost=%.4f' % (code, shares, qmt_cost))
+            _diag_log('  %s: %d shares cost=%.4f' % (p['code'], p['shares'], p.get('avg_cost', 0)))
 
-        test_cost_price(ContextInfo, bar_date)
+        sell_pos = None
+        for p in positions:
+            if p['code'] == diag_code and p['shares'] > 0:
+                sell_pos = p
+                break
 
-        # Auto-sell after buy: sell all shares of diag_code if we haven't sold yet
-        global sold
-        if not sold:
-            sell_pos = None
-            for p in positions:
-                if p['code'] == diag_code and p['shares'] > 0:
-                    sell_pos = p
-                    break
-            if sell_pos:
-                _diag_log('--- Sell Test ---')
-                sell_shares = sell_pos['shares']
-                sell_price = cur_close if cur_close > 0 else -1
-                _diag_log('  Sell: %d shares %s at ~%.2f' % (sell_shares, diag_code, sell_price))
-                from qmt_adapter.trading import QmtAccount
-                acc2 = QmtAccount(ContextInfo)
-                sell_remark = acc2.sell(diag_code, sell_shares, sell_price, reason='DIAG', strategy_name='DIAG')
-                if sell_remark is None:
-                    _diag_log('  acc.sell() returned None')
-                else:
-                    _diag_log('  acc.sell() OK, remark=%s' % sell_remark)
-                sold = True
+        if sell_pos:
+            _diag_log('--- Sell Test ---')
+            sell_shares = sell_pos['shares']
+            sell_price = cur_close if cur_close > 0 else -1
+            _diag_log('  Sell: %d shares %s at ~%.2f' % (sell_shares, diag_code, sell_price))
+            from qmt_adapter.trading import QmtAccount
+            acc2 = QmtAccount(ContextInfo)
+            sell_remark = acc2.sell(diag_code, sell_shares, sell_price, reason='DIAG', strategy_name='DIAG')
+            if sell_remark is None:
+                _diag_log('  acc.sell() returned None')
             else:
-                _diag_log('  Position not filled yet, waiting...')
+                _diag_log('  acc.sell() OK, remark=%s' % sell_remark)
+            sold = True
+            pending_sell = False
+        else:
+            _diag_log('  Position not filled yet, retrying on next timer...')
 
-        # Print summary
-        _diag_log('=== RESULTS ===')
-        for test_name, passed, detail in _diag_results:
-            status = 'PASS' if passed else 'FAIL'
-            _diag_log('  %s: %s %s' % (test_name, status, detail))
-        _diag_log('=== END ===')
-        return
+    # --- BUY (only on first run, after sell is done) ---
+    if not bought and not pending_sell:
+        test_buy_sell_flow(ContextInfo, bar_date)
 
-    # First bar: buy test
-    test_buy_sell_flow(ContextInfo, bar_date)
+    # --- SUMMARY ---
+    _diag_log('=== RESULTS ===')
+    for test_name, passed, detail in _diag_results:
+        status = 'PASS' if passed else 'FAIL'
+        _diag_log('  %s: %s %s' % (test_name, status, detail))
+    _diag_log('=== END ===')
 
 
 # ========== QMT CALLBACKS ==========

@@ -205,7 +205,7 @@ class QmtAccount(object):
         
         # Duplicate order prevention: check if same stock has pending order
         for remark, o in _orders.items():
-            if o['code'] == stock_code and o['status'] in ('pending', 'ordered', 'partial'):
+            if o['stock'] == stock_code and o['status'] in ('pending', 'ordered', 'partial'):
                 print('[BUY] SKIP %s: duplicate order pending (remark=%s)' % (stock_code, remark))
                 return None
         trading = sys.modules[__name__]

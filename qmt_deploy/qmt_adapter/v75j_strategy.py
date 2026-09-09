@@ -101,7 +101,7 @@ def init(C):
     _today_buys = 0
     _params = get_strategy_params('v75j')
     _hold_days_max = _params.get('hold_days_max', 10)
-    _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max', 'hold_days_extend', 'hold_days_extend_pnl')}
+    _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
     _kline_cache_tech = None
     _kline_cache_date = None
 
@@ -156,7 +156,7 @@ def on_signal(C):
         _account = QmtAccount(C)
         _params = get_strategy_params('v75j')
         _hold_days_max = _params.get('hold_days_max', 10)
-        _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max', 'hold_days_extend', 'hold_days_extend_pnl')}
+        _risk_config = {k: _params[k] for k in ('stop_loss', 'take_profit', 'hold_days_max')}
         _kline_cache_tech = None
         _kline_cache_date = None
         if _tech_codes is None:

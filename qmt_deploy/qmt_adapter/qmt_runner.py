@@ -34,7 +34,7 @@ def qmt_init(C):
     _qmt_initialized = True
 
 
-def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
+def check_risk(C, account, holding_days, risk_config=None, bar_date=None, strategy_name='default'):
     """Common risk control. Returns list of sold codes."""
     if risk_config is None:
         from .config import RISK_CONFIG
@@ -88,12 +88,12 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
             'SELL' if (pnl < sl or (pnl > tp and not is_limit_up) or hold_days >= hd) else 'HOLD'))
 
         if pnl < sl:
-            account.sell_all(code)
+            account.sell_all(code, strategy_name=strategy_name)
             sold.append(code)
             continue
 
         if pnl > tp and not is_limit_up:
-            account.sell_all(code)
+            account.sell_all(code, strategy_name=strategy_name)
             sold.append(code)
             continue
 
@@ -103,18 +103,18 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None):
         if pnl >= hd_extend_pnl:
             # Profitable: use extended hold days
             if hold_days >= hd_extend:
-                account.sell_all(code)
+                account.sell_all(code, strategy_name=strategy_name)
                 sold.append(code)
         else:
             # Not profitable: use normal hold days
             if hold_days >= hd:
-                account.sell_all(code)
+                account.sell_all(code, strategy_name=strategy_name)
                 sold.append(code)
 
     return sold
 
 
-def execute_buy(C, account, target_weight, bar_date='', capital=50000):
+def execute_buy(C, account, target_weight, bar_date='', capital=50000, strategy_name='default'):
     """Common buy execution. Returns list of actually bought codes.
     
     Args:
@@ -148,7 +148,7 @@ def execute_buy(C, account, target_weight, bar_date='', capital=50000):
             continue
 
 
-        account.buy_value(code, buy_amount, price)
+        account.buy_value(code, buy_amount, price, strategy_name=strategy_name)
         print('[BUY] EXECUTED %s: %.0f CNY -> %d lots' % (code, buy_amount, lots))
         bought.append(code)
 

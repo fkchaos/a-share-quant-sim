@@ -305,7 +305,7 @@ class QmtAccount(object):
         start_order_poll(self.C, remark)
         return remark
 
-    def sell_all(self, stock_code, price=-1, reason='SELL_ALL'):
+    def sell_all(self, stock_code, price=-1, reason='SELL_ALL', strategy_name='default'):
         """Sell all shares of a stock.
 
         Uses m_nVolume (total) not m_nCanUseVolume (available).
@@ -313,16 +313,16 @@ class QmtAccount(object):
         """
         pos = self.get_position_detail(stock_code)
         if pos and pos['shares'] > 0:
-            return self.sell(stock_code, pos['shares'], price, reason)
+            return self.sell(stock_code, pos['shares'], price, reason, strategy_name=strategy_name)
         return None
 
-    def buy_value(self, stock_code, target_value, price, reason='BUY'):
+    def buy_value(self, stock_code, target_value, price, reason='BUY', strategy_name='default'):
         """Buy by target value (auto-calculate shares with lot sizing)."""
         if price <= 0:
             return None
         shares = int(target_value / price / 100) * 100
         if shares > 0:
-            return self.buy(stock_code, shares, price, reason)
+            return self.buy(stock_code, shares, price, reason, strategy_name=strategy_name)
         if _risk_debug:
             print("[BUY] SKIP %s: amount=%.0f price=%.2f -> lots=%d (need >=1)" % (
                 stock_code, target_value, price, shares))

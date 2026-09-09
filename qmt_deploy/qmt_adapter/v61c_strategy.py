@@ -156,7 +156,7 @@ def on_signal(C):
 
     # 2. Risk control (SL/TP/HD) - sells individually
     from . import qmt_runner
-    sold = qmt_runner.check_risk(C, _account, _hold_days, _risk_config, bar_date=today)
+    sold = qmt_runner.check_risk(C, _account, _hold_days, _risk_config, bar_date=today, strategy_name='V61C')
     for code in sold:
         _hold_days.pop(code, None)
 
@@ -208,7 +208,7 @@ def on_signal(C):
                 # Dropped out of ranking -> sell
                 if _DEBUG:
                     print('[%s][V61C] time exit: %s days=%d, NOT in Top%d -> SELL' % (today, code, days, _sell_out_of))
-                _account.sell_all(code)
+                _account.sell_all(code, strategy_name='V61C')
                 _hold_days.pop(code, None)
                 qmt_runner.strategy_sell('v61c', code, 999999)  # sell all
 
@@ -220,7 +220,7 @@ def on_signal(C):
             if code not in ranked_codes and _hold_days.get(code, 0) > 0:
                 if _DEBUG:
                     print('[%s][V61C] rank drop: %s NOT in Top%d -> SELL' % (today, code, _sell_out_of))
-                _account.sell_all(code)
+                _account.sell_all(code, strategy_name='V61C')
                 _hold_days.pop(code, None)
                 qmt_runner.strategy_sell('v61c', code, 999999)  # sell all
 
@@ -334,7 +334,7 @@ def on_signal(C):
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
-    bought = qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000))
+    bought = qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000), strategy_name='V61C')
     for code in bought:
         _hold_days[code] = 0
     _last_buy_date = today

@@ -175,7 +175,7 @@ def on_signal(C):
 
     # 2. Risk control (SL/TP/HD) - sells individually
     from . import qmt_runner
-    sold = qmt_runner.check_risk(C, _account, _hold_days, _risk_config, bar_date=today)
+    sold = qmt_runner.check_risk(C, _account, _hold_days, _risk_config, bar_date=today, strategy_name='V75J')
     for code in sold:
         _hold_days.pop(code, None)
 
@@ -187,7 +187,7 @@ def on_signal(C):
         if days >= _hold_days_max:
             if _DEBUG:
                 print('[V75J] time exit: %s days=%d >= %d -> SELL' % (code, days, _hold_days_max))
-            _account.sell_all(code)
+            _account.sell_all(code, strategy_name='V75J')
             _hold_days.pop(code, None)
             qmt_runner.strategy_sell('v75j', code, 999999)
 
@@ -312,7 +312,7 @@ def on_signal(C):
         for code, w in target.items():
             print('  %s weight=%.4f' % (code, w))
 
-    qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000))
+    qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000), strategy_name='V75J')
 
 
 

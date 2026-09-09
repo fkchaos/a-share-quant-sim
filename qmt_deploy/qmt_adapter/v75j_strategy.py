@@ -247,17 +247,23 @@ def on_signal(C):
     for c in selected:
         if c in held_codes:
             continue
-        # Limit up check: exclude if close == high (but skip vol=0 bars)
+        # Limit up check: price >= prev_close * threshold (board-specific)
         if c in kline_data:
             df = kline_data[c]
-            if len(df) > 0:
-                last_close = df['close'].iloc[-1]
-                last_high = df['high'].iloc[-1]
-                last_vol = df['volume'].iloc[-1] if 'volume' in df.columns else 0
-                if last_close > 0 and last_high > 0 and last_vol > 0 and last_close >= last_high:
-                    if _DEBUG:
-                        print('[V75J] SKIP %s: limit up (close==high)' % c)
-                    continue
+            if len(df) >= 2:
+                today_close = df['close'].iloc[-1]
+                prev_close_val = df['close'].iloc[-2]
+                if today_close > 0 and prev_close_val > 0:
+                    if c.startswith(('300', '301', '688', '689')):
+                        limit_price = prev_close_val * 1.195
+                    elif c.startswith(('8', '4')):
+                        limit_price = prev_close_val * 1.295
+                    else:
+                        limit_price = prev_close_val * 1.095
+                    if today_close >= limit_price:
+                        if _DEBUG:
+                            print('[V75J] SKIP %s: limit up (%.2f >= %.2f)' % (c, today_close, limit_price))
+                        continue
         filtered.append(c)
     
     # Price filter: skip if price > MAX_STOCK_PRICE

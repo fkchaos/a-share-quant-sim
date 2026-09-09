@@ -668,13 +668,26 @@ def _run_signal_impl(account_id, date, strategy_name=None):
             filtered.append((code, score))
         cands = filtered
 
-    # 涨停过滤：close==high时不买入（打分阶段不排除，仅买入计划排除）
-    if date in cp.index and hp is not None and date in hp.index:
+    # 涨停过滤：当前价 >= 前收盘价 * 板块涨停阈值时不买入
+    # 主板/中小板: 9.5%, 创业板/科创板: 19.5%, 北交所: 29.5%
+    if date in cp.index:
         close_today = cp.loc[date]
-        high_today = hp.loc[date]
-        cands = [(c, s) for c, s in cands
-                 if c in close_today.index and c in high_today.index
-                 and not (close_today[c] == high_today[c])]
+        idx_pos = cp.index.get_loc(date)
+        if isinstance(idx_pos, (int, np.integer)) and idx_pos > 0:
+            prev_close = cp.iloc[idx_pos - 1]
+            def _is_limit_up(code, price):
+                if pd.isna(price) or price <= 0:
+                    return False
+                pc = prev_close.get(code) if hasattr(prev_close, 'get') else (prev_close[code] if code in prev_close.index else None)
+                if pc is None or pd.isna(pc) or pc <= 0:
+                    return False
+                if code.startswith(('300', '301', '688', '689')):
+                    return price >= pc * 1.195
+                elif code.startswith(('8', '4')):
+                    return price >= pc * 1.295
+                else:
+                    return price >= pc * 1.095
+            cands = [(c, s) for c, s in cands if not _is_limit_up(c, close_today.get(c, 0) if hasattr(close_today, 'get') else (close_today[c] if c in close_today.index else 0))]
 
     # 生成计划：等权分配仓位，单只不超过 MAX_POSITION 上限
     remaining_after_sell = len(state.holdings) - len(to_sell)
@@ -958,10 +971,15 @@ def _run_execute_impl(account_id, date, strategy_name=None):
         if code in spot and code not in state.holdings and spot[code] > 0 and plan_qty > 0:
             price = spot[code]
 
-            # 涨停检测：当前价 >= 前收盘价 * 1.095（主板10%涨停，留一点余量）
+            # 涨停检测：按板块阈值判断（主板9.5%，创业板/科创板19.5%，北交所29.5%）
             is_limit_up = False
             if code in spot_prev and spot_prev[code] > 0:
-                limit_up_price = spot_prev[code] * 1.095
+                if code.startswith(('300', '301', '688', '689')):
+                    limit_up_price = spot_prev[code] * 1.195
+                elif code.startswith(('8', '4')):
+                    limit_up_price = spot_prev[code] * 1.295
+                else:
+                    limit_up_price = spot_prev[code] * 1.095
                 if price >= limit_up_price:
                     is_limit_up = True
 

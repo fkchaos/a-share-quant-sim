@@ -127,6 +127,12 @@ def get_close_prices_batch(C, stock_list, bar_date=''):
         return {}
 
 
+_DEBUG = False
+
+def set_debug(flag):
+    global _DEBUG
+    _DEBUG = flag
+
 def get_kline_data_multi(C, stock_list, count=10):
     """Get multi-day K-line data for multiple stocks.
 
@@ -152,7 +158,7 @@ def get_kline_data_multi(C, stock_list, count=10):
             _sub_fail += 1
             if len(_sub_fail_codes) < 10:
                 _sub_fail_codes.append(code)
-    if _sub_fail > 0:
+    if _sub_fail > 0 and _DEBUG:
         print('[KLINE] subscribe: ok=%d fail=%d codes=%s' % (_sub_ok, _sub_fail, ','.join(_sub_fail_codes)))
 
     # Batch fetch
@@ -171,9 +177,10 @@ def get_kline_data_multi(C, stock_list, count=10):
             else:
                 if len(_fetch_miss) < 10:
                     _fetch_miss.append(code)
-        if _fetch_miss:
-            print('[KLINE] fetch miss (%d): %s' % (len(_fetch_miss), ','.join(_fetch_miss)))
-        print('[KLINE] result: %d/%d stocks have kline data' % (_fetch_ok, len(stock_list)))
+        if _DEBUG:
+            if _fetch_miss:
+                print('[KLINE] fetch miss (%d): %s' % (len(_fetch_miss), ','.join(_fetch_miss)))
+            print('[KLINE] result: %d/%d stocks have kline data' % (_fetch_ok, len(stock_list)))
     except Exception:
         # Fallback: fetch one by one
         for code in stock_list:

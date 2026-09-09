@@ -32,10 +32,17 @@ def _normalize_code(code: str) -> str:
 
 
 def _to_bs_code(code: str) -> str:
-    """6位代码转 BaoStock 格式：600519 → sh.600519"""
+    """6位代码转 BaoStock 格式：600519 → sh.600519, sh000001 → sh.000001"""
     code = str(code).strip()
     if '.' in code:
         return code
+    # Handle prefixed codes (indices: sh000001, sz399001)
+    if code.startswith('sh'):
+        return f'sh.{code[2:]}'
+    elif code.startswith('sz'):
+        return f'sz.{code[2:]}'
+    elif code.startswith('bj'):
+        return f'bj.{code[2:]}'
     if code.startswith('6'):
         return f'sh.{code}'
     elif code.startswith('0') or code.startswith('3'):
@@ -101,7 +108,8 @@ class BaoStockProvider(DataProvider):
         self,
         codes: List[str],
         start_date: str,
-        end_date: str
+        end_date: str,
+        is_index: bool = False
     ) -> pd.DataFrame:
         """获取日K线数据（标准化后）
         
@@ -133,7 +141,7 @@ class BaoStockProvider(DataProvider):
                 # fields: date,code,open,high,low,close,volume,amount,turn,tradestatus,pctChg,isST
                 record = {
                     'date': row[0],
-                    'code': _normalize_code(row[1]),
+                    'code': code if is_index else _normalize_code(row[1]),
                     'open': _safe_float(row[2], 0),
                     'high': _safe_float(row[3], 0),
                     'low': _safe_float(row[4], 0),

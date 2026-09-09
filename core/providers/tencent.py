@@ -174,7 +174,8 @@ class TencentProvider(DataProvider):
         self,
         codes: List[str],
         start_date: str,
-        end_date: str
+        end_date: str,
+        is_index: bool = False
     ) -> pd.DataFrame:
         """获取日K线数据
 
@@ -221,7 +222,7 @@ class TencentProvider(DataProvider):
                 for date_idx, row in df.iterrows():
                     all_records.append({
                         'date': date_idx,
-                        'code': _normalize_code(code),
+                        'code': code if is_index else _normalize_code(code),
                         'open': row['open'],
                         'high': row['high'],
                         'low': row['low'],

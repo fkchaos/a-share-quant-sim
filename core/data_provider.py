@@ -58,15 +58,18 @@ class DataProvider(ABC):
         self,
         codes: List[str],
         start_date: str,
-        end_date: str
+        end_date: str,
+        is_index: bool = False
     ) -> pd.DataFrame:
         """获取日K线数据（标准化后）
-        
+
         Args:
             codes: 股票代码列表，6位数字，如 ['600519', '000001']
+                   指数代码带前缀，如 ['sh000001', 'sz399001']
             start_date: 开始日期，YYYY-MM-DD
             end_date: 结束日期，YYYY-MM-DD
-        
+            is_index: True=指数代码（保留sh/sz前缀），False=个股代码
+
         Returns:
             DataFrame，index=(date, code)，columns=KLINE_COLUMNS
             或者 MultiIndex DataFrame：index=date, columns=code, 每个cell是dict

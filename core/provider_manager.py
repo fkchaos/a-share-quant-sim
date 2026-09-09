@@ -113,28 +113,32 @@ class ProviderManager:
         codes: List[str],
         start_date: str,
         end_date: str,
-        provider: Optional[str] = None
+        provider: Optional[str] = None,
+        is_index: bool = False
     ) -> pd.DataFrame:
         """带 fallback 的数据获取
-        
+
         Args:
             codes: 股票代码列表
             start_date: 开始日期
             end_date: 结束日期
             provider: 指定数据源，None=自动fallback
+            is_index: True=指数代码（保留sh/sz前缀），False=个股代码
         """
         if provider:
-            return self.get_provider(provider).get_daily_kline(codes, start_date, end_date)
-        
+            return self.get_provider(provider).get_daily_kline(
+                codes, start_date, end_date, is_index=is_index)
+
         last_error = None
         for p in self._get_fallback_chain():
             try:
                 if p.health_check():
-                    return p.get_daily_kline(codes, start_date, end_date)
+                    return p.get_daily_kline(
+                        codes, start_date, end_date, is_index=is_index)
             except Exception as e:
                 last_error = e
                 continue
-        
+
         raise RuntimeError(f"All providers failed. Last error: {last_error}")
     
     def get_float_shares(

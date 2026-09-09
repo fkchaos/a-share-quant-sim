@@ -105,8 +105,9 @@ class TencentProvider(DataProvider):
                 df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
                 df = df.set_index('date').sort_index()
                 # K-line API does not provide amount; estimate from VWAP * volume
+                # Volume from Tencent K-line API is in lots (手), multiply by 100 for shares
                 vwap = (df['open'] + df['close'] + df['high'] + df['low']) / 4
-                df['amount'] = vwap * df['volume']
+                df['amount'] = vwap * df['volume'] * 100
                 return df
 
             except ConnectionError:

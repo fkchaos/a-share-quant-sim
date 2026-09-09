@@ -670,14 +670,21 @@ def _run_signal_impl(account_id, date, strategy_name=None):
 
     # 涨停过滤：当前价 >= 前收盘价 * 板块涨停阈值时不买入
     # 主板/中小板: 9.5%, 创业板/科创板: 19.5%, 北交所: 29.5%
+    # vol=0 的空bar跳过（盘后QMT返回占位数据）
     if date in cp.index:
         close_today = cp.loc[date]
+        vol_today = vp.loc[date] if vp is not None and date in vp.index else None
         idx_pos = cp.index.get_loc(date)
         if isinstance(idx_pos, (int, np.integer)) and idx_pos > 0:
             prev_close = cp.iloc[idx_pos - 1]
             def _is_limit_up(code, price):
                 if pd.isna(price) or price <= 0:
                     return False
+                # vol=0: no real trading, skip limit up check
+                if vol_today is not None:
+                    v = vol_today.get(code) if hasattr(vol_today, 'get') else (vol_today[code] if code in vol_today.index else 0)
+                    if v is None or pd.isna(v) or v <= 0:
+                        return False
                 pc = prev_close.get(code) if hasattr(prev_close, 'get') else (prev_close[code] if code in prev_close.index else None)
                 if pc is None or pd.isna(pc) or pc <= 0:
                     return False
@@ -972,6 +979,7 @@ def _run_execute_impl(account_id, date, strategy_name=None):
             price = spot[code]
 
             # 涨停检测：按板块阈值判断（主板9.5%，创业板/科创板19.5%，北交所29.5%）
+            # 注：实盘模式仅盘中运行，vol=0问题只在盘后信号模式出现
             is_limit_up = False
             if code in spot_prev and spot_prev[code] > 0:
                 if code.startswith(('300', '301', '688', '689')):

@@ -270,13 +270,14 @@ def on_signal(C):
         if c in held_codes:
             continue
         # Limit up check: price >= prev_close * threshold (board-specific)
-        # 主板 9.5%, 创业板/科创板 19.5%, 北交所 29.5%
+        # Skip vol=0 bars (empty data after market close)
         if c in kline_data:
             df = kline_data[c]
             if len(df) >= 2:
                 today_close = df['close'].iloc[-1]
+                today_vol = df['volume'].iloc[-1] if 'volume' in df.columns else 0
                 prev_close = df['close'].iloc[-2]
-                if today_close > 0 and prev_close > 0:
+                if today_close > 0 and prev_close > 0 and today_vol > 0:
                     if c.startswith(('300', '301', '688', '689')):
                         limit_price = prev_close * 1.195
                     elif c.startswith(('8', '4')):

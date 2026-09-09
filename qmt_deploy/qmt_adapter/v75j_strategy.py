@@ -239,6 +239,8 @@ def on_signal(C):
     if not selected:
         return
 
+    kline_data = _kline_cache_tech or {}
+
     # Filter out currently held stocks and limit up stocks
     held_codes = set(p['code'] for p in holdings)
     filtered = []

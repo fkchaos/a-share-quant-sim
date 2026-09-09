@@ -104,6 +104,9 @@ class TencentProvider(DataProvider):
                     return None
                 df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
                 df = df.set_index('date').sort_index()
+                # K-line API does not provide amount; estimate from VWAP * volume
+                vwap = (df['open'] + df['close'] + df['high'] + df['low']) / 4
+                df['amount'] = vwap * df['volume']
                 return df
 
             except ConnectionError:
@@ -228,7 +231,7 @@ class TencentProvider(DataProvider):
                         'low': row['low'],
                         'close': row['close'],
                         'volume': int(row['volume']),
-                        'amount': 0,
+                        'amount': float(row.get('amount', 0)),
                         'turnover': None,
                         'tradestatus': 1,
                         'pct_change': None,

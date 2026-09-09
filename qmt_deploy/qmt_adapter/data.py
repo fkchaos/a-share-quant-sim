@@ -141,31 +141,39 @@ def get_kline_data_multi(C, stock_list, count=10):
     result = {}
 
     # Batch subscribe for efficiency
+    _sub_ok = 0
+    _sub_fail = 0
+    _sub_fail_codes = []
     for code in stock_list:
         try:
             C.subscribe_quote(code, period=period, count=count)
-        except Exception:
-            pass
+            _sub_ok += 1
+        except Exception as e:
+            _sub_fail += 1
+            if len(_sub_fail_codes) < 10:
+                _sub_fail_codes.append(code)
+    if _sub_fail > 0:
+        print('[KLINE] subscribe: ok=%d fail=%d codes=%s' % (_sub_ok, _sub_fail, ','.join(_sub_fail_codes)))
 
     # Batch fetch
+    _fetch_ok = 0
+    _fetch_miss = []
     try:
         data = C.get_market_data_ex(
             fields, stock_list, period=period, count=count,
             subscribe=False
         )
-        _dbg_count = 0
         for code in stock_list:
             if code in data and len(data[code]) > 0:
                 df = data[code]
                 result[code] = df
-                # Debug: show raw data for first 3 stocks
-                if _dbg_count < 3:
-                    _dbg_count += 1
-                    last_close = df["close"].iloc[-1] if "close" in df.columns else 0
-                    last_vol = df["volume"].iloc[-1] if "volume" in df.columns else 0
-                    last_amount = df["amount"].iloc[-1] if "amount" in df.columns else 0
-                    print("  [KLINE] %s: close=%.2f vol=%.0f amount=%.0f rows=%d" % (
-                        code, last_close, last_vol, last_amount, len(df)))
+                _fetch_ok += 1
+            else:
+                if len(_fetch_miss) < 10:
+                    _fetch_miss.append(code)
+        if _fetch_miss:
+            print('[KLINE] fetch miss (%d): %s' % (len(_fetch_miss), ','.join(_fetch_miss)))
+        print('[KLINE] result: %d/%d stocks have kline data' % (_fetch_ok, len(stock_list)))
     except Exception:
         # Fallback: fetch one by one
         for code in stock_list:

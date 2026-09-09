@@ -332,6 +332,15 @@ class QmtAccount(object):
 # ============================================================
 # Order timeout check (call periodically)
 # ============================================================
+def cancel(order_id, account_id, account_type, C):
+    """Cancel an order by order_id. Returns result string."""
+    try:
+        C.cancel_stock_order(order_id)
+        return 'cancelled'
+    except Exception as e:
+        print('[CANCEL] failed: order_id=%s error=%s' % (order_id, e))
+        return 'error: %s' % e
+
 # Order polling lifecycle (schedule_run based)
 # ============================================================
 

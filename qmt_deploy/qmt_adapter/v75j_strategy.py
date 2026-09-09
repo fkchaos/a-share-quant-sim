@@ -119,11 +119,7 @@ def init(C):
 
 #coding:gbk
 def _build_industry_map(C):
-    """Build industry mapping from static data (qmt_data_static.py).
-
-    INDUSTRY keys have .SH/.SZ suffix (e.g. '603019.SH'), but stock_list
-    codes don't. Convert before lookup.
-    """
+    """Build industry mapping from static data (qmt_data_static.py)."""
     global _tech_codes, _industry_map
 
     from .qmt_data_static import INDUSTRY, TECH_SECTORS
@@ -132,12 +128,7 @@ def _build_industry_map(C):
     _tech_codes = []
 
     for code in _stock_list:
-        # Convert to INDUSTRY key format: 6xxxxx -> .SH, others -> .SZ
-        if code.startswith(('6',)):
-            lookup = code + '.SH'
-        else:
-            lookup = code + '.SZ'
-        industry = INDUSTRY.get(lookup, '')
+        industry = INDUSTRY.get(code, '')
         _industry_map[code] = industry
         if industry in TECH_SECTORS:
             _tech_codes.append(code)

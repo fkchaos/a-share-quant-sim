@@ -247,13 +247,14 @@ def on_signal(C):
     for c in selected:
         if c in held_codes:
             continue
-        # Limit up check: exclude if close == high (��ͣ����)
+        # Limit up check: exclude if close == high (but skip vol=0 bars)
         if c in kline_data:
             df = kline_data[c]
             if len(df) > 0:
                 last_close = df['close'].iloc[-1]
                 last_high = df['high'].iloc[-1]
-                if last_close > 0 and last_high > 0 and last_close >= last_high:
+                last_vol = df['volume'].iloc[-1] if 'volume' in df.columns else 0
+                if last_close > 0 and last_high > 0 and last_vol > 0 and last_close >= last_high:
                     if _DEBUG:
                         print('[V75J] SKIP %s: limit up (close==high)' % c)
                     continue

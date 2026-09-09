@@ -139,6 +139,7 @@ def get_kline_data_multi(C, stock_list, count=10):
     Returns dict: {code: DataFrame(index=date, columns=[close,volume,amount,high,low])}
     Used for turnover calculation (v61c) and liquidity/volume ratio (v75j).
     """
+    print('[KLINE] called: %d stocks, count=%d' % (len(stock_list), count))
     from .config import MARKET_CONFIG
     period = MARKET_CONFIG.get('period', '1d')
     dividend_type = MARKET_CONFIG.get('dividend_type', 'front')

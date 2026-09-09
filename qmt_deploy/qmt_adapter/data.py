@@ -139,7 +139,7 @@ def get_kline_data_multi(C, stock_list, count=10):
     Returns dict: {code: DataFrame(index=date, columns=[close,volume,amount,high,low])}
     Used for turnover calculation (v61c) and liquidity/volume ratio (v75j).
     """
-    print('[KLINE] called: %d stocks, count=%d' % (len(stock_list), count))
+    print('[KLINE] called: %d stocks, count=%d, DEBUG=%s' % (len(stock_list), count, _DEBUG))
     from .config import MARKET_CONFIG
     period = MARKET_CONFIG.get('period', '1d')
     dividend_type = MARKET_CONFIG.get('dividend_type', 'front')
@@ -159,7 +159,7 @@ def get_kline_data_multi(C, stock_list, count=10):
             _sub_fail += 1
             if len(_sub_fail_codes) < 10:
                 _sub_fail_codes.append(code)
-    if _sub_fail > 0 and _DEBUG:
+    if _sub_fail > 0:
         print('[KLINE] subscribe: ok=%d fail=%d codes=%s' % (_sub_ok, _sub_fail, ','.join(_sub_fail_codes)))
 
     # Batch fetch
@@ -178,10 +178,9 @@ def get_kline_data_multi(C, stock_list, count=10):
             else:
                 if len(_fetch_miss) < 10:
                     _fetch_miss.append(code)
-        if _DEBUG:
-            if _fetch_miss:
-                print('[KLINE] fetch miss (%d): %s' % (len(_fetch_miss), ','.join(_fetch_miss)))
-            print('[KLINE] result: %d/%d stocks have kline data' % (_fetch_ok, len(stock_list)))
+        if _fetch_miss:
+            print('[KLINE] fetch miss (%d): %s' % (len(_fetch_miss), ','.join(_fetch_miss)))
+        print('[KLINE] result: %d/%d stocks have kline data' % (_fetch_ok, len(stock_list)))
     except Exception:
         # Fallback: fetch one by one
         for code in stock_list:

@@ -186,10 +186,10 @@ def on_signal(C):
             _scores = pd.Series(0.0, index=_codes)
             _ts = pd.Series(_turn)
             if len(_ts) > 50:
-                _scores = _scores.add(1 - _ts.rank(ascending=True, pct=True), fill_value=0)
+                _scores = _scores.add(_ts.rank(ascending=True, pct=True), fill_value=0)
             _ms = pd.Series(_mcap)
             if len(_ms) > 50:
-                _scores = _scores.add(1 - _ms.rank(ascending=True, pct=True), fill_value=0)
+                _scores = _scores.add(_ms.rank(ascending=True, pct=True), fill_value=0)
             ranked_codes = _scores.sort_values(ascending=False).head(_sell_out_of).index.tolist()
     except Exception:
         pass
@@ -418,19 +418,20 @@ def _select_stocks(C):
         return []
 
     # Rank scoring (low turnover = high score, small cap = high score)
+    # Aligned with local simulation: rank(ascending=True) gives highest rank to smallest value
     codes = list(turnover_scores.keys())
     scores = pd.Series(0.0, index=codes)
 
-    # Turnover rank: lower is better -> ascending=True means lowest gets highest rank
+    # Turnover rank: lower is better
     turn_series = pd.Series(turnover_scores)
     if len(turn_series) > 50:
-        turn_rank = 1 - turn_series.rank(ascending=True, pct=True)
+        turn_rank = turn_series.rank(ascending=True, pct=True)
         scores = scores.add(turn_rank, fill_value=0)
 
-    # Market cap rank: smaller is better -> ascending=True means smallest gets highest rank
+    # Market cap rank: smaller is better
     mcap_series = pd.Series(mcap_scores)
     if len(mcap_series) > 50:
-        mcap_rank = 1 - mcap_series.rank(ascending=True, pct=True)
+        mcap_rank = mcap_series.rank(ascending=True, pct=True)
         scores = scores.add(mcap_rank, fill_value=0)
 
     ranked = scores.sort_values(ascending=False)

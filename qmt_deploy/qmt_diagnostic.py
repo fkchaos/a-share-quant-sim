@@ -238,10 +238,7 @@ def test_hold_days_persistence():
     _diag_log('--- Test 5: hold_days.json ---')
 
     for sname in ('v61c', 'v75j'):
-        persist_path = os.path.join(_SCRIPT_DIR, '_hold_days.json')
-        if sname == 'v75j':
-            # v75j uses same file name, check both exist
-            pass
+        persist_path = os.path.join(_SCRIPT_DIR, '_hold_days_%s.json' % sname)
 
         # Test: write -> read -> compare
         test_data = {'hold_days': {'123456': 5, '789012': 3}, 'last_date': '20260831'}

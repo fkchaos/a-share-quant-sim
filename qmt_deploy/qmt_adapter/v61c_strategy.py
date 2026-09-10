@@ -81,7 +81,7 @@ def init(C):
     # Load persisted hold_days from file
     import json as _json
     import os as _os
-    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days.json')
+    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days_v61c.json')
     _today_init = _get_bar_date(C)
     try:
         with open(_persist_path, 'r') as _f:
@@ -322,7 +322,7 @@ def on_signal(C):
     # Persist hold_days after all changes (sells + buys)
     import json as _json
     import os as _os
-    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days.json')
+    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days_v61c.json')
     try:
         with open(_persist_path, 'w') as _f:
             _json.dump({'hold_days': _hold_days, 'last_date': today}, _f)

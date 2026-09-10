@@ -407,6 +407,28 @@ def _select_stocks(C, breadth=None):
     if not scored:
         return []
 
+    # Debug: show kline details for top 10 to diagnose data freshness
+    if _DEBUG:
+        print('[V75J] kline data check (top 10 by avg_amount):')
+        for code, avg in sorted(scored, key=lambda x: x[1], reverse=True)[:10]:
+            df = kline_data[code]
+            n_days = len(df)
+            last_amt = df['amount'].values[-1]
+            last_date = str(df.index[-1])[:10]
+            print('  %s kline_days=%d last_date=%s last_amt=%.1f avg_amt=%.1f' % (
+                code, n_days, last_date, last_amt/1e8, avg/1e8))
+        # Diagnostic: show raw amount for 600183 (known discrepancy)
+        diag_code = '600183.SH'
+        if diag_code in kline_data:
+            df = kline_data[diag_code]
+            print('[V75J] DIAG 600183.SH: kline_days=%d' % len(df))
+            for i in range(-5, 0):
+                if abs(i) <= len(df):
+                    d = str(df.index[i])[:10]
+                    a = df['amount'].values[i]
+                    c = df['close'].values[i]
+                    print('  %s close=%.2f amount=%.1f亿' % (d, c, a/1e8))
+
     # Sort by avg amount descending (more liquid first)
     scored.sort(key=lambda x: x[1], reverse=True)
 

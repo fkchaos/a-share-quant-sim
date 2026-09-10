@@ -196,7 +196,112 @@ def on_signal(C):
     current_count = len([p for p in holdings if p.get('shares', 0) > 0])
     slots = max_holdings - current_count
 
-    # Persist hold_days to file
+    if _DEBUG and holdings:
+        for p in holdings:
+            print('[V75J] hold: %s shares=%d cost=%.2f days=%d' % (
+                p['code'], p['shares'], p['avg_cost'], _hold_days.get(p['code'], 0)))
+
+    if slots > 0:
+        # Breadth filter before buying
+        breadth = _calc_breadth(C)
+        high_thresh = _params.get('breadth_high', 0.50)
+        low_thresh = _params.get('breadth_low', 0.30)
+
+        if breadth < low_thresh:
+            if _DEBUG:
+                print('[V75J] breadth %.4f < %.2f -> SKIP (no buy)' % (breadth, low_thresh))
+        else:
+            # Linear position scaling based on breadth
+            if breadth < high_thresh:
+                scaled_slots = max(1, int(max_holdings * breadth / high_thresh))
+                slots = min(slots, scaled_slots)
+                if _DEBUG:
+                    print('[V75J] breadth %.4f in [%.2f, %.2f) -> scale to %d slots' % (
+                        breadth, low_thresh, high_thresh, slots))
+
+            if _DEBUG:
+                print('[V75J] %d slots available, selecting stocks...' % slots)
+
+            selected = _select_stocks(C, breadth)
+            if selected:
+                kline_data = _kline_cache_tech or {}
+
+                # Filter out currently held stocks and limit up stocks
+                held_codes = set(p['code'] for p in holdings)
+                filtered = []
+                for c in selected:
+                    if c in held_codes:
+                        continue
+                    # Limit up check: price >= prev_close * threshold (board-specific)
+                    # Skip vol=0 bars (empty data after market close)
+                    if c in kline_data:
+                        df = kline_data[c]
+                        if len(df) >= 2:
+                            today_close = df['close'].iloc[-1]
+                            today_vol = df['volume'].iloc[-1] if 'volume' in df.columns else 0
+                            prev_close_val = df['close'].iloc[-2]
+                            if today_close > 0 and prev_close_val > 0 and today_vol > 0:
+                                if c.startswith(('300', '301', '688', '689')):
+                                    limit_price = prev_close_val * 1.195
+                                elif c.startswith(('8', '4')):
+                                    limit_price = prev_close_val * 1.295
+                                else:
+                                    limit_price = prev_close_val * 1.095
+                                if today_close >= limit_price:
+                                    if _DEBUG:
+                                        print('[V75J] SKIP %s: limit up (%.2f >= %.2f)' % (c, today_close, limit_price))
+                                    continue
+                    filtered.append(c)
+
+                # Price filter: skip if price > MAX_STOCK_PRICE
+                max_stock_price = _params.get('max_stock_price', 0)
+                price_filtered = []
+                for c in filtered:
+                    if max_stock_price > 0 and c in kline_data:
+                        df = kline_data[c]
+                        if len(df) > 0:
+                            price = df['close'].iloc[-1]
+                            if price > max_stock_price:
+                                if _DEBUG:
+                                    print('[V75J] SKIP %s: price %.2f > max %d' % (c, price, max_stock_price))
+                                continue
+                    price_filtered.append(c)
+                filtered = price_filtered
+
+                # Capital filter: skip if cannot afford 1 lot (100 shares)
+                capital_per_stock = _params.get('capital', 50000) * _params.get('max_per_stock', 0.35)
+                capital_filtered = []
+                for c in filtered:
+                    if c in kline_data:
+                        df = kline_data[c]
+                        if len(df) > 0:
+                            price = df['close'].iloc[-1]
+                            if price > 0 and price * 100 > capital_per_stock:
+                                if _DEBUG:
+                                    print('[V75J] SKIP %s: cannot afford 1 lot (price=%.2f, need=%.0f, have=%.0f)' % (c, price, price*100, capital_per_stock))
+                                continue
+                    capital_filtered.append(c)
+
+                # Select top N from filtered list
+                buy_list = capital_filtered[:slots]
+
+                if buy_list:
+                    target = {}
+                    for code in buy_list:
+                        target[code] = max_per_stock
+
+                    if _DEBUG:
+                        print('[V75J] buy targets:')
+                        for code, w in target.items():
+                            print('  %s weight=%.4f' % (code, w))
+
+                    bought = qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000), strategy_name='V75J')
+
+                    # Add newly bought stocks to hold_days
+                    for code in bought:
+                        _hold_days[code] = 1
+
+    # Persist hold_days after all changes (sells + buys)
     import json as _json
     import os as _os
     _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days.json')
@@ -205,114 +310,6 @@ def on_signal(C):
             _json.dump({'hold_days': _hold_days, 'last_date': today}, _f)
     except Exception as _e:
         print('[WARN] failed to persist hold_days: %s' % str(_e))
-
-    if _DEBUG and holdings:
-        for p in holdings:
-            print('[V75J] hold: %s shares=%d cost=%.2f days=%d' % (
-                p['code'], p['shares'], p['avg_cost'], _hold_days.get(p['code'], 0)))
-
-    if slots <= 0:
-        return
-
-    # Breadth filter before buying
-    breadth = _calc_breadth(C)
-    high_thresh = _params.get('breadth_high', 0.50)
-    low_thresh = _params.get('breadth_low', 0.30)
-
-    if breadth < low_thresh:
-        if _DEBUG:
-            print('[V75J] breadth %.4f < %.2f -> SKIP (no buy)' % (breadth, low_thresh))
-        return
-
-    # Linear position scaling based on breadth
-    if breadth < high_thresh:
-        scaled_slots = max(1, int(max_holdings * breadth / high_thresh))
-        slots = min(slots, scaled_slots)
-        if _DEBUG:
-            print('[V75J] breadth %.4f in [%.2f, %.2f) -> scale to %d slots' % (
-                breadth, low_thresh, high_thresh, slots))
-
-    if _DEBUG:
-        print('[V75J] %d slots available, selecting stocks...' % slots)
-
-    selected = _select_stocks(C, breadth)
-    if not selected:
-        return
-
-    kline_data = _kline_cache_tech or {}
-
-    # Filter out currently held stocks and limit up stocks
-    held_codes = set(p['code'] for p in holdings)
-    filtered = []
-    for c in selected:
-        if c in held_codes:
-            continue
-        # Limit up check: price >= prev_close * threshold (board-specific)
-        # Skip vol=0 bars (empty data after market close)
-        if c in kline_data:
-            df = kline_data[c]
-            if len(df) >= 2:
-                today_close = df['close'].iloc[-1]
-                today_vol = df['volume'].iloc[-1] if 'volume' in df.columns else 0
-                prev_close_val = df['close'].iloc[-2]
-                if today_close > 0 and prev_close_val > 0 and today_vol > 0:
-                    if c.startswith(('300', '301', '688', '689')):
-                        limit_price = prev_close_val * 1.195
-                    elif c.startswith(('8', '4')):
-                        limit_price = prev_close_val * 1.295
-                    else:
-                        limit_price = prev_close_val * 1.095
-                    if today_close >= limit_price:
-                        if _DEBUG:
-                            print('[V75J] SKIP %s: limit up (%.2f >= %.2f)' % (c, today_close, limit_price))
-                        continue
-        filtered.append(c)
-    
-    # Price filter: skip if price > MAX_STOCK_PRICE
-    max_stock_price = _params.get('max_stock_price', 0)
-    price_filtered = []
-    for c in filtered:
-        if max_stock_price > 0 and c in kline_data:
-            df = kline_data[c]
-            if len(df) > 0:
-                price = df['close'].iloc[-1]
-                if price > max_stock_price:
-                    if _DEBUG:
-                        print('[V75J] SKIP %s: price %.2f > max %d' % (c, price, max_stock_price))
-                    continue
-        price_filtered.append(c)
-    filtered = price_filtered
-    
-    # Capital filter: skip if cannot afford 1 lot (100 shares)
-    capital_per_stock = _params.get('capital', 50000) * _params.get('max_per_stock', 0.35)
-    capital_filtered = []
-    for c in filtered:
-        if c in kline_data:
-            df = kline_data[c]
-            if len(df) > 0:
-                price = df['close'].iloc[-1]
-                if price > 0 and price * 100 > capital_per_stock:
-                    if _DEBUG:
-                        print('[V75J] SKIP %s: cannot afford 1 lot (price=%.2f, need=%.0f, have=%.0f)' % (c, price, price*100, capital_per_stock))
-                    continue
-        capital_filtered.append(c)
-    
-    # Select top N from filtered list
-    buy_list = capital_filtered[:slots]
-
-    if not buy_list:
-        return
-
-    target = {}
-    for code in buy_list:
-        target[code] = max_per_stock
-
-    if _DEBUG:
-        print('[V75J] buy targets:')
-        for code, w in target.items():
-            print('  %s weight=%.4f' % (code, w))
-
-    qmt_runner.execute_buy(C, _account, target, bar_date=today, capital=_params.get('capital', 50000), strategy_name='V75J')
 
 
 

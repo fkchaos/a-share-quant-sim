@@ -22,19 +22,18 @@ DEFAULT_PARAMS = {
     'W_LIQUIDITY': 0.25,
 }
 
-# 科技板块行业
-TECH_INDUSTRIES = {'电子', '计算机', '通信', '传媒'}
+# 科技板块行业 (synced with qmt_data_static.py for QMT/local consistency)
+try:
+    from qmt_adapter.qmt_data_static import INDUSTRY as _STATIC_INDUSTRY, TECH_SECTORS as TECH_INDUSTRIES
+except ImportError:
+    import sys as _sys
+    _sys.path.insert(0, 'qmt_deploy')
+    from qmt_adapter.qmt_data_static import INDUSTRY as _STATIC_INDUSTRY, TECH_SECTORS as TECH_INDUSTRIES
 
 
 def _load_industry_map(codes):
-    import sqlite3
-    conn = sqlite3.connect('data/quant_stocks.db', timeout=15)
-    df = pd.read_sql_query(
-        'SELECT code, industry FROM industry_map WHERE industry != ""',
-        conn, index_col='code'
-    )
-    conn.close()
-    return df['industry'].reindex(codes)
+    """Load industry from static dict (same source as QMT adapter)."""
+    return pd.Series({c: _STATIC_INDUSTRY.get(c, '') for c in codes})
 
 
 def calc_factors_v75a(close_panel, volume_panel, amount_panel,

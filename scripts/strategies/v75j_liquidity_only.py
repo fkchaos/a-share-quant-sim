@@ -25,23 +25,23 @@ from scripts.strategies.v75a_tech_momentum import (
 )
 from scripts.strategies.score_delta import save_scores, get_yesterday_scores, rerank_by_delta
 
-# 科技板块代码（与v75f相同）
-TECH_SECTORS = ['电子', '计算机', '通信', '传媒']
+# 科技板块代码 (synced with qmt_data_static.py)
+try:
+    from qmt_adapter.qmt_data_static import INDUSTRY as _STATIC_INDUSTRY, TECH_SECTORS as _TECH_SECTORS
+except ImportError:
+    import sys as _sys
+    _sys.path.insert(0, 'qmt_deploy')
+    from qmt_adapter.qmt_data_static import INDUSTRY as _STATIC_INDUSTRY, TECH_SECTORS as _TECH_SECTORS
+
 _tech_codes = None
 
 
 def _load_tech_codes():
+    """Load tech stock codes from static dict (same source as QMT adapter)."""
     global _tech_codes
     if _tech_codes is not None:
         return _tech_codes
-    import sqlite3
-    conn = sqlite3.connect('data/quant_stocks.db')
-    codes = []
-    for sector in TECH_SECTORS:
-        rows = conn.execute("SELECT code FROM industry_map WHERE industry=?", (sector,)).fetchall()
-        codes.extend([r[0] for r in rows])
-    conn.close()
-    _tech_codes = list(set(codes))
+    _tech_codes = [code for code, ind in _STATIC_INDUSTRY.items() if ind in _TECH_SECTORS]
     return _tech_codes
 
 

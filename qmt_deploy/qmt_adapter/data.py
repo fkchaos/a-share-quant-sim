@@ -63,10 +63,10 @@ def load_kline(C, stock_list, days=120):
         from .trading import get_trade_detail_data
         for code in stock_list:
             try:
-                C.subscribe_quote(code, period=period, count=-1)
-            except Exception:
-                pass
-    
+                C.subscribe_quote(code, period=period)
+            except Exception as e:
+                print('[KLINE] subscribe_quote error: %s %s' % (code, e))
+
     result = {}
     for code in stock_list:
         try:
@@ -91,9 +91,9 @@ def get_close_price(C, code, bar_date=''):
     try:
         # Subscribe first (required for non-main-chart stocks)
         try:
-            C.subscribe_quote(code, period='1d', count=1)
+            C.subscribe_quote(code, period='1d')
         except Exception:
-            pass
+            print('[KLINE] get_close_price subscribe error: %s' % code)
         # Get latest price (no end_time = latest available)
         data = C.get_market_data_ex(['close'], [code], period='1d', count=1)
         if code in data and len(data[code]) > 0:
@@ -113,9 +113,9 @@ def get_close_prices_batch(C, stock_list, bar_date=''):
         # Subscribe first (required for non-main-chart stocks)
         for code in stock_list:
             try:
-                C.subscribe_quote(code, period='1d', count=1)
+                C.subscribe_quote(code, period='1d')
             except Exception:
-                pass
+                pass  # individual stock, continue batch
         # Get latest prices (no end_time = latest available)
         data = C.get_market_data_ex(['close'], stock_list, period='1d', count=1)
         result = {}
@@ -153,12 +153,14 @@ def get_kline_data_multi(C, stock_list, count=10):
     _sub_fail_codes = []
     for code in stock_list:
         try:
-            C.subscribe_quote(code, period=period, count=count)
+            C.subscribe_quote(code, period=period)
             _sub_ok += 1
         except Exception as e:
             _sub_fail += 1
             if len(_sub_fail_codes) < 10:
                 _sub_fail_codes.append(code)
+            if _sub_fail <= 3:
+                print('[KLINE] subscribe_quote error: %s %s' % (code, e))
     if _sub_fail > 0:
         print('[KLINE] subscribe: ok=%d fail=%d codes=%s' % (_sub_ok, _sub_fail, ','.join(_sub_fail_codes)))
 

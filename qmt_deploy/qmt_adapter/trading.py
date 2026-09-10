@@ -85,7 +85,7 @@ class QmtAccount(object):
                 from .config import ACCOUNT_CONFIG
                 account = ACCOUNT_CONFIG.get('account_id', '')
             except Exception:
-                pass
+                print('[QMT] WARN: failed to load ACCOUNT_CONFIG')
         if not account:
             account = 'SIMTEST'
 
@@ -361,7 +361,7 @@ def start_order_poll(C, remark, strategy_name='default'):
                     try:
                         ContextInfo.cancel_schedule_run('opoll_' + r)
                     except Exception:
-                        pass
+                        print('[ORDER_POLL][%s] WARN: cancel_schedule_run failed' % r)
                 elif _t.time() - o.get('timestamp', _t.time()) > 300:
                     print('[ORDER_POLL][%s] WARN: >300s, force stop + cancel' % r)
                     # Cancel order on QMT before stopping timer
@@ -372,19 +372,19 @@ def start_order_poll(C, remark, strategy_name='default'):
                             if trading:
                                 trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ContextInfo)
                         except Exception:
-                            pass
+                            print('[ORDER_POLL][%s] WARN: cancel order failed: %s' % (r, order_id))
                     o['status'] = 'cancelled'
                     _orders.pop(r, None)
                     try:
                         ContextInfo.cancel_schedule_run('opoll_' + r)
                     except Exception:
-                        pass
+                        print('[ORDER_POLL][%s] WARN: cancel_schedule_run (force) failed' % r)
         return cb
     # Kill existing timer for same order
     try:
         C.cancel_schedule_run(timer_name)
     except Exception:
-        pass
+        print('[ORDER_POLL] WARN: cancel existing timer failed: %s' % timer_name)
     now = _dt.datetime.now()
     target = now + _dt.timedelta(seconds=10)
     C.schedule_run(_make_cb(remark, strategy_name), target.strftime('%Y%m%d%H%M%S'),

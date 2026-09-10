@@ -79,8 +79,8 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None, strate
                 last_high = df['high'].iloc[-1]
                 if last_close > 0 and last_high > 0 and last_close >= last_high:
                     is_limit_up = True
-        except Exception:
-            pass
+        except Exception as e:
+            print('[RISK] WARN: limit_up check failed for %s: %s' % (code, e))
 
         if _risk_debug:
             print('[%s][RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) limit_up=%s -> %s' % (bar_date or '??',
@@ -201,7 +201,7 @@ def load_strategy_positions(strategy_name):
     try:
         with open(path, 'r') as f:
             return json.load(f)
-    except:
+    except Exception:
         return {}
 
 def save_strategy_positions(strategy_name, positions):

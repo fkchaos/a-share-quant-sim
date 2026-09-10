@@ -191,8 +191,8 @@ def on_signal(C):
             if len(_ms) > 50:
                 _scores = _scores.add(_ms.rank(ascending=True, pct=True), fill_value=0)
             ranked_codes = _scores.sort_values(ascending=False).head(_sell_out_of).index.tolist()
-    except Exception:
-        pass
+    except Exception as e:
+        print('[V61C] WARN: ranking computation failed: %s' % e)
 
     holdings = qmt_runner.get_strategy_holdings('v61c', _account)
     for p in holdings:

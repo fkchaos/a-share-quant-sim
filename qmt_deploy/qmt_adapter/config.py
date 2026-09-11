@@ -51,8 +51,10 @@ STRATEGIES = {
 
 
 # ========== MODE ==========
-# Per-strategy position tracking (temporary: separates positions per strategy)
-PER_STRATEGY_POSITIONS = True
+# Per-strategy position tracking
+# DISABLED: _positions_*.json never populated (strategy_buy never called)
+# Use account.get_holdings() instead (reads QMT POSITION API)
+PER_STRATEGY_POSITIONS = False
 
 # ========== MARKET DATA ==========
 MARKET_CONFIG = {

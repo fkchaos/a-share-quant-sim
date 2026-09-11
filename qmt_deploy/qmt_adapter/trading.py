@@ -222,7 +222,7 @@ class QmtAccount(object):
 
         # Generate unique userOrderId for callback matching
         now = datetime.datetime.now()
-        remark = 'B-%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S'))
+        remark = 'B-%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S') + str(now.microsecond // 1000).zfill(3))
 
         _is_bt = getattr(self.C, 'do_back_test', False)
         _qt = 0 if _is_bt else 2
@@ -276,7 +276,7 @@ class QmtAccount(object):
         trading = sys.modules[__name__]
 
         now = datetime.datetime.now()
-        remark = 'S-%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S'))
+        remark = 'S-%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S') + str(now.microsecond // 1000).zfill(3))
 
         _is_bt = getattr(self.C, 'do_back_test', False)
         _qt = 0 if _is_bt else 2
@@ -290,7 +290,7 @@ class QmtAccount(object):
             14,                     # prType: counterparty price (counterparty)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
-            strategy_name,          # strategyName
+            strategy_name.upper(),  # strategyName (QMT requires UPPERCASE)
             _qt,                    # quickTrade: 0=backtest, 2=live
             remark,                 # userOrderId,
             self.C                  # ContextInfo

@@ -32,7 +32,6 @@ _account = None
 _hold_days = {}
 _last_trade_date = None
 _today_buys = 0
-_last_trade_date = None
 _hold_days_max = 10
 _tech_codes = None
 _industry_map = None

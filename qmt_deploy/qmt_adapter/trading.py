@@ -475,7 +475,27 @@ def _order_transition(o, remark, new_status, log_msg=None):
     if log_msg:
         print('[ORDER_POLL][%s] %s -> %s: %s' % (remark, old, new_status, log_msg))
     if new_status in ('filled', 'rejected', 'cancelled'):
+        # Auto-update per-strategy position tracking
+        if new_status == 'filled':
+            _sync_strategy_position(o, remark)
         _orders.pop(remark, None)
+
+
+def _sync_strategy_position(o, remark):
+    """Sync _positions_*.json after order fill."""
+    try:
+        from . import qmt_runner
+        strategy = o.get('strategy_name', '').lower()
+        code = o.get('stock', '')
+        shares = o.get('filled', 0)
+        price = o.get('price', 0)
+        reason = remark.split('-')[0] if '-' in remark else ''
+        if reason == 'BUY' and shares > 0:
+            qmt_runner.strategy_buy(strategy, code, shares, price)
+        elif reason in ('SELL', 'SELL_ALL', 'RISK') and shares > 0:
+            qmt_runner.strategy_sell(strategy, code, shares)
+    except Exception as e:
+        print('[ORDER_POLL] WARN: sync strategy position failed: %s' % e)
 
 
 def _do_order_check_single(ContextInfo, remark, strategy_name):

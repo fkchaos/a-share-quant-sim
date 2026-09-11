@@ -423,7 +423,10 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     trading = sys.modules[__name__]
     acct = _get_account_id()
 
-    # Layer 1: Query ORDER (委托列表)
+    # Layer 1: Query ORDER (????)
+    # Order status codes: 48=??, 49=??, 50=??, 51=????,
+    # 52=????, 53=??, 54=??, 55=??, 56=??, 57=??
+    _REJECTED_STATES = {57, 54, 53, 52, 51}  # 废单/已撤/部撤/部成待撤/已报待撤
     found = False
     try:
         qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER', strategy_name)
@@ -435,8 +438,18 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             traded = getattr(order, 'm_nVolumeTraded', 0)
             vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
             order_id = getattr(order, 'm_strOrderSysID', '')
+            order_status = getattr(order, 'm_nOrderStatus', 255)
             if order_id:
                 o['order_id'] = order_id
+
+            # Handle terminal states immediately
+            if order_status in _REJECTED_STATES:
+                _state_names = {57: 'rejected', 54: 'cancelled', 53: 'cancelled',
+                                52: 'cancelled', 51: 'cancelled'}
+                o['status'] = _state_names.get(order_status, 'rejected')
+                print('[ORDER_POLL][%s] %s (ORDER status=%d)' % (remark, o['status'], order_status))
+                _orders.pop(remark, None)
+                break
 
             # Delta fill: new volume since last check
             prev_filled = o['filled']
@@ -444,12 +457,26 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             if delta > 0:
                 o['filled'] = traded
                 _update_internal_fill(o, remark, delta, traded, vol)
+
+            # Status transitions
+            if traded >= vol and vol > 0 and o['status'] != 'filled':
+                o['status'] = 'filled'
+                print('[ORDER_POLL][%s] fully filled %d/%d' % (remark, traded, vol))
+                _orders.pop(remark, None)
+            elif traded > 0 and o['status'] in ('pending', 'ordered'):
+                o['status'] = 'partial'
+                o['ordered_time'] = now
+                print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
+            elif o['status'] == 'pending' and traded == 0:
+                o['status'] = 'ordered'
+                o['ordered_time'] = now
+                print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
             break
     except Exception as e:
         print('[ORDER_POLL][%s] ORDER query failed: %s' % (remark, e))
         return
 
-    # Layer 2: If ORDER not found, query DEAL (成交记录)
+    # Layer 2: If ORDER not found, query DEAL (????)
     if not found:
         try:
             qmt_deals = trading.get_trade_detail_data(acct, 'STOCK', 'DEAL', strategy_name)
@@ -474,7 +501,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
         except Exception as e:
             print('[ORDER_POLL][%s] DEAL query failed: %s' % (remark, e))
 
-    # Layer 3: If still not found, check POSITION (持仓验证)
+    # Layer 3: If still not found, check POSITION (????)
     if not found:
         _code = o.get('stock', '')
         _expected_vol = o.get('vol', 0)

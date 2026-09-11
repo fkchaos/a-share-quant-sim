@@ -206,11 +206,18 @@ def load_strategy_positions(strategy_name):
         return {}
 
 def save_strategy_positions(strategy_name, positions):
-    """Save per-strategy positions to JSON."""
-    import json
+    """Save per-strategy positions to JSON (atomic: tmp + rename)."""
+    import json, os, tempfile
     path = _get_positions_path(strategy_name)
-    with open(path, 'w') as f:
-        json.dump(positions, f)
+    tmp = path + '.tmp'
+    try:
+        with open(tmp, 'w') as f:
+            json.dump(positions, f)
+        os.rename(tmp, path)
+    except Exception as e:
+        print('[RISK] WARN: save positions failed: %s' % e)
+        try: os.unlink(tmp)
+        except Exception: pass
 
 def strategy_buy(strategy_name, code, shares, cost_price, date=''):
     """Record a buy in strategy's position file."""

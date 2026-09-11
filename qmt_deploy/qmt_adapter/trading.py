@@ -30,8 +30,13 @@ def _get_account_id():
     return str(ACCOUNT_CONFIG.get('account_id', ''))
 
 
+_qmt_funcs_loaded = False
+
 def _get_qmt_func():
-    """Get QMT built-in functions by walking up ALL frames."""
+    """Get QMT built-in functions by walking up ALL frames. Cached after first call."""
+    global _qmt_funcs_loaded
+    if _qmt_funcs_loaded:
+        return
     frame = sys._getframe(1)
     while frame is not None:
         g = frame.f_globals
@@ -42,6 +47,7 @@ def _get_qmt_func():
                 trading.passorder = g['passorder']
             if 'get_last_order_id' in g:
                 trading.get_last_order_id = g['get_last_order_id']
+            _qmt_funcs_loaded = True
             return
         frame = frame.f_back
 
@@ -195,8 +201,11 @@ class QmtAccount(object):
             return 0
         return accounts[0].m_dStockValue + accounts[0].m_dFundValue
 
-    def buy(self, stock_code, shares, price=-1, reason='BUY', strategy_name='V61C'):
+    def buy(self, stock_code, shares, price=-1, reason='BUY', strategy_name='v61c'):
         """Buy order.
+
+        Convention: strategy_name is lowercase internally, converted to
+        UPPERCASE only at passorder call (QMT API requires uppercase).
 
         passorder params (official):
           opType=23 (stock buy), orderType=1101 (single, shares),
@@ -227,7 +236,7 @@ class QmtAccount(object):
             14,                     # prType: counterparty price (counterparty)
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
-            strategy_name,          # strategyName
+            strategy_name.upper(),  # strategyName (QMT requires UPPERCASE)
             _qt,                    # quickTrade: 0=backtest, 2=live
             remark,                 # userOrderId -> m_strRemark in callback
             self.C                  # ContextInfo
@@ -256,7 +265,7 @@ class QmtAccount(object):
         start_order_poll(self.C, remark)
         return remark
 
-    def sell(self, stock_code, shares, price=-1, reason='SELL', strategy_name='V61C'):
+    def sell(self, stock_code, shares, price=-1, reason='SELL', strategy_name='v61c'):
         """Sell order.
 
         passorder params (official):
@@ -485,7 +494,7 @@ def _sync_strategy_position(o, remark):
     """Sync _positions_*.json after order fill."""
     try:
         from . import qmt_runner
-        strategy = o.get('strategy_name', '').lower()
+        strategy = o.get('strategy_name', '')
         code = o.get('stock', '')
         shares = o.get('filled', 0)
         price = o.get('price', 0)
@@ -514,7 +523,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     order_status = _ORD_ST_255_UNKNOWN
     order_query_ok = False
     try:
-        qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER', strategy_name)
+        qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER', strategy_name.upper())
         for order in (qmt_orders or []):
             r = getattr(order, 'm_strRemark', '')
             if r != remark:
@@ -584,7 +593,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     # ---- Layer 2: ORDER not found -> query DEAL (accumulate all matching) ----
     if not order_found or not order_query_ok:
         try:
-            qmt_deals = trading.get_trade_detail_data(acct, 'STOCK', 'DEAL', strategy_name)
+            qmt_deals = trading.get_trade_detail_data(acct, 'STOCK', 'DEAL', strategy_name.upper())
             total_deal_vol = 0
             for deal in (qmt_deals or []):
                 r = getattr(deal, 'm_strRemark', '')

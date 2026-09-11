@@ -12,6 +12,7 @@ No unified rebalance day. Buy when slots are available.
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from .strategy_base import get_bar_date as _get_bar_date, load_hold_days, persist_hold_days
 
 # Debug switch (set by entry file via set_debug())
 _DEBUG = False
@@ -37,25 +38,7 @@ _kline_cache_date = None
 _risk_config = None
 
 
-def _get_bar_date(C):
-    """Get current bar date from ContextInfo. NEVER use datetime.now()."""
-    # Method 1: get_bar_timetag (preferred)
-    try:
-        timetag = C.get_bar_timetag(C.barpos)
-        from datetime import datetime
-        if timetag > 0:
-            return datetime.fromtimestamp(timetag / 1000).strftime('%Y%m%d')
-    except Exception as _e:
-        pass  # Method 1 not available, try Method 2
-    # Method 2: get_market_data_ex (subscribe=True, default)
-    try:
-        _mk = C.stockcode + '.' + C.market
-        _data = C.get_market_data_ex(['close'], [_mk], count=1)
-        if _mk in _data and len(_data[_mk]) > 0:
-            return str(_data[_mk].index[-1])[:10]
-    except Exception as _e:
-        print('[BAR] WARN: _get_bar_date both methods failed: %s' % _e)
-    return 'unknown'
+# _get_bar_date imported from strategy_base
 
 
 def init(C):
@@ -79,22 +62,11 @@ def init(C):
     _hold_days = {}
 
     # Load persisted hold_days from file
-    import json as _json
-    import os as _os
-    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days_v61c.json')
+    _hold_days, _last_date = load_hold_days('v61c')
     _today_init = _get_bar_date(C)
-    try:
-        with open(_persist_path, 'r') as _f:
-            _data = _json.load(_f)
-            _hold_days = _data.get('hold_days', {})
-            _last_date = _data.get('last_date', '')
-            # If date changed (new day), keep hold_days but update date
-            if _last_date != _today_init:
-                print('[INIT] new day detected: %s -> %s, keeping %d positions' % (
-                    _last_date, _today_init, len(_hold_days)))
-    except Exception as _e:
-        print('[INIT] WARN: hold_days load failed, starting fresh: %s' % _e)
-        _hold_days = {}
+    if _last_date and _last_date != _today_init:
+        print('[INIT] new day detected: %s -> %s, keeping %d positions' % (
+            _last_date, _today_init, len(_hold_days)))
 
     _last_trade_date = None
     _last_buy_date = None
@@ -209,9 +181,8 @@ def on_signal(C):
                 # Dropped out of ranking -> sell
                 if _DEBUG:
                     print('[%s][V61C] time exit: %s days=%d, NOT in Top%d -> SELL' % (today, code, days, _sell_out_of))
-                _account.sell_all(code, strategy_name='V61C')
+                _account.sell_all(code, strategy_name='v61c')
                 _hold_days.pop(code, None)
-                qmt_runner.strategy_sell('v61c', code, 999999)  # sell all
 
     # 4. Rank drop sell: sell holdings that dropped out of Top N
     if ranked_codes:
@@ -221,9 +192,8 @@ def on_signal(C):
             if code not in ranked_codes and _hold_days.get(code, 0) > 0:
                 if _DEBUG:
                     print('[%s][V61C] rank drop: %s NOT in Top%d -> SELL' % (today, code, _sell_out_of))
-                _account.sell_all(code, strategy_name='V61C')
+                _account.sell_all(code, strategy_name='v61c')
                 _hold_days.pop(code, None)
-                qmt_runner.strategy_sell('v61c', code, 999999)  # sell all
 
     # 4. Check if slots are available -> buy
     # 4. Check if slots are available -> buy
@@ -320,15 +290,8 @@ def on_signal(C):
                         _hold_days[code] = 0
                     _last_buy_date = today
 
-    # Persist hold_days after all changes (sells + buys)
-    import json as _json
-    import os as _os
-    _persist_path = _os.path.join(_os.path.dirname(__file__), '_hold_days_v61c.json')
-    try:
-        with open(_persist_path, 'w') as _f:
-            _json.dump({'hold_days': _hold_days, 'last_date': today}, _f)
-    except Exception as _e:
-        print('[WARN] failed to persist hold_days: %s' % str(_e))
+    # Persist hold_days after all changes
+    persist_hold_days('v61c', _hold_days, today)
 
 
 

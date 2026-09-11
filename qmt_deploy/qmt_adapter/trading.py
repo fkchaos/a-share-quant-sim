@@ -410,8 +410,8 @@ def start_order_poll(C, remark, strategy_name='default'):
 
 def _do_order_check_single(ContextInfo, remark, strategy_name):
     """Check status of a single order.
-    SINGLE SOURCE OF TRUTH: all fill accounting happens here via ORDER query.
-    deal_callback is logging-only (callback timing is unreliable).
+    THREE-LAYER CONFIRMATION: ORDER -> DEAL -> POSITION
+    (QMT ORDER list may not include fully executed orders)
     """
     import time
     now = time.time()
@@ -419,83 +419,106 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     if not o or o['status'] not in ('pending', 'ordered', 'partial'):
         return  # finished or unknown - skip
 
-    # Query ORDER from QMT
+    _get_qmt_func()
+    trading = sys.modules[__name__]
+    acct = _get_account_id()
+
+    # Layer 1: Query ORDER (委托列表)
+    found = False
     try:
-        _get_qmt_func()
-        trading = sys.modules[__name__]
-        acct = _get_account_id()
-        qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER')
+        qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER', strategy_name)
+        for order in (qmt_orders or []):
+            r = getattr(order, 'm_strRemark', '')
+            if r != remark:
+                continue
+            found = True
+            traded = getattr(order, 'm_nVolumeTraded', 0)
+            vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
+            order_id = getattr(order, 'm_strOrderSysID', '')
+            if order_id:
+                o['order_id'] = order_id
+
+            # Delta fill: new volume since last check
+            prev_filled = o['filled']
+            delta = traded - prev_filled
+            if delta > 0:
+                o['filled'] = traded
+                _update_internal_fill(o, remark, delta, traded, vol)
+            break
     except Exception as e:
-        print('[ORDER_POLL][%s] query failed: %s' % (remark, e))  # always
+        print('[ORDER_POLL][%s] ORDER query failed: %s' % (remark, e))
         return
 
-    # Match by remark
-    found = False
-    for order in (qmt_orders or []):
-        r = getattr(order, 'm_strRemark', '')
-        if r != remark:
-            continue
-        found = True
-        traded = getattr(order, 'm_nVolumeTraded', 0)
-        vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
-        order_id = getattr(order, 'm_strOrderSysID', '')
-        if order_id:
-            o['order_id'] = order_id
+    # Layer 2: If ORDER not found, query DEAL (成交记录)
+    if not found:
+        try:
+            qmt_deals = trading.get_trade_detail_data(acct, 'STOCK', 'DEAL', strategy_name)
+            for deal in (qmt_deals or []):
+                r = getattr(deal, 'm_strRemark', '')
+                if r != remark:
+                    continue
+                found = True
+                traded = getattr(deal, 'm_nVolume', 0)
+                vol = o.get('vol', 0)
+                order_id = getattr(deal, 'm_strOrderSysID', '')
+                if order_id:
+                    o['order_id'] = order_id
 
-        # Delta fill: new volume since last check
-        prev_filled = o['filled']
-        delta = traded - prev_filled
-        if delta > 0:
-            o['filled'] = traded
-            # Record delta into _internal_positions
-            code = o['stock']
-            reason = remark.split('-')[0] if '-' in remark else ''
-            if reason == 'BUY':
-                if code in _internal_positions:
-                    _internal_positions[code]['shares'] += delta
-                else:
-                    _internal_positions[code] = {'shares': delta, 'cost': o.get('price', 0), 'name': ''}
-                print('[ORDER_POLL][%s] fill +%d -> %d/%d' % (remark, delta, traded, vol))
-            elif reason in ('SELL', 'SELL_ALL', 'RISK'):
-                if code in _internal_positions:
-                    _internal_positions[code]['shares'] -= delta
-                    if _internal_positions[code]['shares'] <= 0:
-                        del _internal_positions[code]
-                print('[ORDER_POLL][%s] fill -%d -> %d/%d' % (remark, delta, traded, vol))
+                # Deal found = fully executed
+                if traded > 0 and o['status'] != 'filled':
+                    o['status'] = 'filled'
+                    o['filled'] = traded
+                    _update_internal_fill(o, remark, traded, traded, vol)
+                    print('[ORDER_POLL][%s] confirmed via DEAL: %d shares executed' % (remark, traded))
+                break
+        except Exception as e:
+            print('[ORDER_POLL][%s] DEAL query failed: %s' % (remark, e))
 
-        # Status transitions
-        if traded >= vol and vol > 0 and o['status'] != 'filled':
+    # Layer 3: If still not found, check POSITION (持仓验证)
+    if not found:
+        _code = o.get('stock', '')
+        _expected_vol = o.get('vol', 0)
+        _reason = remark.split('-')[0] if '-' in remark else ''
+        try:
+            _positions = trading.get_trade_detail_data(acct, 'STOCK', 'POSITION')
+            for pos in (_positions or []):
+                _pos_code = getattr(pos, 'm_strInstrumentID', '') + '.' + getattr(pos, 'm_strExchangeID', '')
+                _pos_vol = abs(getattr(pos, 'm_nVolume', 0))
+                if _pos_code == _code and _pos_vol > 0:
+                    found = True
+                    o['status'] = 'filled'
+                    o['filled'] = _expected_vol
+                    print('[ORDER_POLL][%s] confirmed via POSITION: %s has %d shares' % (remark, _code, _pos_vol))
+                    _update_internal_position(_code, _pos_vol, _reason, o)
+                    break
+        except Exception as e:
+            print('[ORDER_POLL][%s] POSITION query failed: %s' % (remark, e))
+
+    # Status transitions and timeout handling
+    if found:
+        # Check if fully filled
+        if o['filled'] >= o.get('vol', 0) and o['status'] != 'filled':
             o['status'] = 'filled'
-            print('[ORDER_POLL][%s] fully filled %d/%d' % (remark, traded, vol))
-            return  # done
-        elif traded > 0 and o['status'] in ('pending', 'ordered'):
+            print('[ORDER_POLL][%s] fully filled %d/%d' % (remark, o['filled'], o.get('vol', 0)))
+        elif o['filled'] > 0 and o['status'] in ('pending', 'ordered'):
             o['status'] = 'partial'
             o['ordered_time'] = now
-            print('[ORDER_POLL][%s] partial %d/%d' % (remark, traded, vol))
-        elif o['status'] == 'pending' and traded == 0:
+            print('[ORDER_POLL][%s] partial %d/%d' % (remark, o['filled'], o.get('vol', 0)))
+        elif o['status'] == 'pending':
             o['status'] = 'ordered'
             o['ordered_time'] = now
-            print('[ORDER_POLL][%s] ordered vol=%d' % (remark, vol))
-        break
+            print('[ORDER_POLL][%s] ordered vol=%d' % (remark, o.get('vol', 0)))
 
-    # If QMT didn't find the order, check timeout
-    # (QMT may not have processed it yet, or it was silently rejected)
-    if not found:
-        age = now - o.get('timestamp', now)
-        if o['status'] == 'pending' and age > 60:
-            o['status'] = 'rejected'
-            print('[ORDER_POLL][%s] rejected after %ds (QMT never acknowledged)' % (remark, int(age)))
+        # Remove if fully filled
+        if o['status'] == 'filled':
             _orders.pop(remark, None)
         return
 
-    # Timeout handling - use ordered_time if available, otherwise timestamp
-    ref_time = o.get('ordered_time', o.get('timestamp', now))
-    age = now - ref_time
-
-    # Pending + 60s with no QMT record -> rejected (QMT never accepted it)
+    # Not found in any layer - timeout check
+    age = now - o.get('timestamp', now)
     if o['status'] == 'pending' and age > 60:
         o['status'] = 'rejected'
-        print('[ORDER_POLL][%s] rejected after %ds (QMT never accepted)' % (remark, int(age)))
+        print('[ORDER_POLL][%s] rejected after %ds (not found in ORDER/DEAL/POSITION)' % (remark, int(age)))
         _orders.pop(remark, None)
         return
 
@@ -506,16 +529,47 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             try:
                 ctx = o.get('context', None)
                 if ctx:
-                    trading = sys.modules[__name__]
                     result = trading.cancel(order_id, o.get('account_id', ''), o.get('account_type', 'STOCK'), ctx)
                     print('[ORDER_POLL][%s] cancel: order_id=%s (%d/%d filled after %ds) result=%s'
-                          % (remark, order_id, o['filled'], o['vol'], int(age), result))
+                          % (remark, order_id, o['filled'], o.get('vol', 0), int(age), result))
                     o['status'] = 'cancelled'
                     _orders.pop(remark, None)
             except Exception as e:
                 print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))
         else:
             print('[ORDER_POLL][%s] ordered but no order_id' % remark)
+
+
+def _update_internal_fill(o, remark, delta, traded, vol):
+    """Update _internal_positions after fill detected."""
+    code = o['stock']
+    reason = remark.split('-')[0] if '-' in remark else ''
+    if reason == 'BUY':
+        if code in _internal_positions:
+            _internal_positions[code]['shares'] += delta
+        else:
+            _internal_positions[code] = {'shares': delta, 'cost': o.get('price', 0), 'name': ''}
+        print('[ORDER_POLL][%s] fill +%d -> %d/%d' % (remark, delta, traded, vol))
+    elif reason in ('SELL', 'SELL_ALL', 'RISK'):
+        if code in _internal_positions:
+            _internal_positions[code]['shares'] -= delta
+            if _internal_positions[code]['shares'] <= 0:
+                del _internal_positions[code]
+        print('[ORDER_POLL][%s] fill -%d -> %d/%d' % (remark, delta, traded, vol))
+
+
+def _update_internal_position(code, pos_vol, reason, o):
+    """Update _internal_positions after POSITION-based confirmation."""
+    if reason == 'BUY':
+        if code not in _internal_positions:
+            _internal_positions[code] = {'shares': pos_vol, 'cost': o.get('price', 0), 'name': ''}
+        else:
+            _internal_positions[code]['shares'] = pos_vol
+    elif reason in ('SELL', 'SELL_ALL', 'RISK'):
+        if code in _internal_positions:
+            _internal_positions[code]['shares'] = pos_vol
+        else:
+            _internal_positions[code] = {'shares': pos_vol, 'cost': 0, 'name': ''}
 
 # ============================================================
 # Callback functions (QMT auto-calls these, no registration needed)

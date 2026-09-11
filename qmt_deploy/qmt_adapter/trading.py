@@ -199,7 +199,7 @@ class QmtAccount(object):
 
         passorder params (official):
           opType=23 (stock buy), orderType=1101 (single, shares),
-          prType=14 (counterparty price), quickTrade=2 (immediate)
+          prType=14 (counterparty price), quickTrade=0(backtest)/2(live)
         """
         _get_qmt_func()
         
@@ -214,8 +214,10 @@ class QmtAccount(object):
         now = datetime.datetime.now()
         remark = 'B-%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S'))
 
-        print('[PASSORDER] opType=23, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=2, remark=%s' % (
-            self.account_id, stock_code, shares, strategy_name, remark))
+        _is_bt = getattr(self.C, 'do_back_test', False)
+        _qt = 0 if _is_bt else 2
+        print('[PASSORDER] opType=23, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=%d, remark=%s' % (
+            self.account_id, stock_code, shares, strategy_name, _qt, remark))
         trading.passorder(
             23,                     # opType: stock buy
             1101,                   # orderType: single stock, shares
@@ -225,7 +227,7 @@ class QmtAccount(object):
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             strategy_name,          # strategyName
-            2,                      # quickTrade: 2=immediate (live mode)
+            _qt,                    # quickTrade: 0=backtest, 2=live
             remark,                 # userOrderId -> m_strRemark in callback
             self.C                  # ContextInfo
         )
@@ -258,7 +260,7 @@ class QmtAccount(object):
 
         passorder params (official):
           opType=24 (stock sell), orderType=1101 (single, shares),
-          prType=14 (counterparty price), quickTrade=2 (immediate)
+          prType=14 (counterparty price), quickTrade=0(backtest)/2(live)
         """
         _get_qmt_func()
         trading = sys.modules[__name__]
@@ -266,8 +268,10 @@ class QmtAccount(object):
         now = datetime.datetime.now()
         remark = 'S-%s-%s-%s' % (reason, stock_code.split('.')[0], now.strftime('%H%M%S'))
 
-        print('[PASSORDER] opType=24, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=2, remark=%s' % (
-            self.account_id, stock_code, shares, strategy_name, remark))
+        _is_bt = getattr(self.C, 'do_back_test', False)
+        _qt = 0 if _is_bt else 2
+        print('[PASSORDER] opType=24, orderType=1101, account=%s, stockCode=%s, prType=14, price=-1, vol=%d, strategyName=%s, quickTrade=%d, remark=%s' % (
+            self.account_id, stock_code, shares, strategy_name, _qt, remark))
         trading.passorder(
             24,                     # opType: stock sell
             1101,                   # orderType: single stock, shares
@@ -277,7 +281,7 @@ class QmtAccount(object):
             -1,                     # price: -1 ignored when prType != 11
             shares,                 # volume
             strategy_name,          # strategyName
-            2,                      # quickTrade: 2=immediate (live mode)
+            _qt,                    # quickTrade: 0=backtest, 2=live
             remark,                 # userOrderId,
             self.C                  # ContextInfo
         )
@@ -334,6 +338,16 @@ class QmtAccount(object):
 # ============================================================
 def cancel(order_id, account_id, account_type, C):
     """Cancel an order by order_id. Returns result string."""
+    try:
+        C.cancel_stock_order(order_id)
+        return 'cancelled'
+    except Exception as e:
+        print('[CANCEL] failed: order_id=%s error=%s' % (order_id, e))
+        return 'error: %s' % e
+
+
+def cancel_safe(order_id, C):
+    """Cancel order with automatic account detection. Safer wrapper."""
     try:
         C.cancel_stock_order(order_id)
         return 'cancelled'

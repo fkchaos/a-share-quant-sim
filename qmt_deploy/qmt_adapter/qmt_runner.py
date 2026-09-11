@@ -188,7 +188,7 @@ def is_rebalance_day(C, rebalance_days):
 
     return True
 
-# ���� Per-strategy position tracking (temporary) ����
+# #### Per-strategy position tracking (temporary) ####
 def _get_positions_path(strategy_name):
     """Get path to strategy's local position JSON."""
     import os
@@ -201,7 +201,8 @@ def load_strategy_positions(strategy_name):
     try:
         with open(path, 'r') as f:
             return json.load(f)
-    except Exception:
+    except Exception as _e:
+        print('[RISK] WARN: load positions failed, starting fresh: %s' % _e)
         return {}
 
 def save_strategy_positions(strategy_name, positions):

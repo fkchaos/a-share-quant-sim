@@ -83,55 +83,56 @@ def load_kline(C, stock_list, days=120):
 
 
 def get_close_price(C, code, bar_date=''):
-    """Get latest close price for a stock.
+    """Get close price for a stock.
 
-    Uses latest available data (no end_time) for current price.
-    For non-main-chart stocks, must subscribe first.
+    Backtest: pass end_time=bar_date to get bar-date close price.
+    Live: no end_time, get latest available price.
     """
     try:
-        # Subscribe first (required for non-main-chart stocks)
         try:
             C.subscribe_quote(code, period='1d')
         except Exception:
-            print('[KLINE] get_close_price subscribe error: %s' % code)
-        # Get latest price (no end_time = latest available)
-        data = C.get_market_data_ex(['close'], [code], period='1d', count=1)
+            pass
+        _is_bt = getattr(C, 'do_back_test', False)
+        if _is_bt and bar_date:
+            data = C.get_market_data_ex(['close'], [code], period='1d', count=1,
+                                        end_time=bar_date)
+        else:
+            data = C.get_market_data_ex(['close'], [code], period='1d', count=1)
         if code in data and len(data[code]) > 0:
             return data[code]['close'].iloc[-1]
     except Exception as e:
-        print('[DEBUG] get_close_price error: %s %s' % (code, e))
+        print('[KLINE] get_close_price error: %s %s' % (code, e))
     return 0.0
 
 
 def get_close_prices_batch(C, stock_list, bar_date=''):
-    """Get latest close prices for multiple stocks.
+    """Get close prices for multiple stocks.
 
-    Uses latest available data (no end_time) for current prices.
-    For non-main-chart stocks, must subscribe first.
+    Backtest: pass end_time=bar_date to get bar-date close prices.
+    Live: no end_time, get latest available prices.
     """
     try:
-        # Subscribe first (required for non-main-chart stocks)
         for code in stock_list:
             try:
                 C.subscribe_quote(code, period='1d')
             except Exception:
-                pass  # individual stock, continue batch
-        # Get latest prices (no end_time = latest available)
-        data = C.get_market_data_ex(['close'], stock_list, period='1d', count=1)
+                pass
+        _is_bt = getattr(C, 'do_back_test', False)
+        if _is_bt and bar_date:
+            data = C.get_market_data_ex(['close'], stock_list, period='1d', count=1,
+                                        end_time=bar_date)
+        else:
+            data = C.get_market_data_ex(['close'], stock_list, period='1d', count=1)
         result = {}
         for code in stock_list:
             if code in data and len(data[code]) > 0:
                 result[code] = data[code]['close'].iloc[-1]
         return result
-    except Exception:
+    except Exception as e:
+        print('[KLINE] get_close_prices_batch error: %s' % e)
         return {}
 
-
-_DEBUG = False
-
-def set_debug(flag):
-    global _DEBUG
-    _DEBUG = flag
 
 def get_kline_data_multi(C, stock_list, count=10):
     """Get multi-day K-line data for multiple stocks.
@@ -139,7 +140,7 @@ def get_kline_data_multi(C, stock_list, count=10):
     Returns dict: {code: DataFrame(index=date, columns=[close,volume,amount,high,low])}
     Used for turnover calculation (v61c) and liquidity/volume ratio (v75j).
     """
-    print('[KLINE] called: %d stocks, count=%d, DEBUG=%s' % (len(stock_list), count, _DEBUG))
+    print('[KLINE] called: %d stocks, count=%d' % (len(stock_list), count))
     from .config import MARKET_CONFIG
     period = MARKET_CONFIG.get('period', '1d')
     dividend_type = MARKET_CONFIG.get('dividend_type', 'front')

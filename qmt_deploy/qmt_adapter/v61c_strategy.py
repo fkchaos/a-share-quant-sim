@@ -45,16 +45,16 @@ def _get_bar_date(C):
         from datetime import datetime
         if timetag > 0:
             return datetime.fromtimestamp(timetag / 1000).strftime('%Y%m%d')
-    except Exception:
-        pass
+    except Exception as _e:
+        pass  # Method 1 not available, try Method 2
     # Method 2: get_market_data_ex (subscribe=True, default)
     try:
         _mk = C.stockcode + '.' + C.market
         _data = C.get_market_data_ex(['close'], [_mk], count=1)
         if _mk in _data and len(_data[_mk]) > 0:
             return str(_data[_mk].index[-1])[:10]
-    except Exception:
-        pass
+    except Exception as _e:
+        print('[BAR] WARN: _get_bar_date both methods failed: %s' % _e)
     return 'unknown'
 
 
@@ -92,7 +92,8 @@ def init(C):
             if _last_date != _today_init:
                 print('[INIT] new day detected: %s -> %s, keeping %d positions' % (
                     _last_date, _today_init, len(_hold_days)))
-    except Exception:
+    except Exception as _e:
+        print('[INIT] WARN: hold_days load failed, starting fresh: %s' % _e)
         _hold_days = {}
 
     _last_trade_date = None

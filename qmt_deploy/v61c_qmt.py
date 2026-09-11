@@ -24,14 +24,12 @@ from qmt_adapter.v61c_strategy import (
     set_debug as _set_debug,
 )
 from qmt_adapter.qmt_runner import set_risk_debug as _set_risk_debug
-from qmt_adapter import data as _kline_data
 
 
 def init(C):
     """QMT init - called once at strategy start."""
     _set_debug(DEBUG)
     _set_risk_debug(DEBUG)
-    _kline_data.set_debug(DEBUG)
     _init(C)
 
     # Live mode: register schedule_run timer

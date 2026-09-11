@@ -14,6 +14,7 @@ import datetime
 
 # Module-level order tracking
 _orders = {}  # remark -> {status, stock, vol, price, filled, timestamp, ...}
+_internal_positions = {}  # code -> {shares, cost, name} (fallback when POSITION API empty)
 _risk_debug = False
 
 
@@ -716,24 +717,20 @@ def _update_internal_position(code, pos_vol, reason, o):
 # Callback functions (QMT auto-calls these, no registration needed)
 # ============================================================
 
-_orders = {}  # remark -> {status, stock, vol, price, filled, name}
 
 def order_callback(ContextInfo, orderInfo):
     """Order callback - LOGGING ONLY. Status transitions in _do_order_check_single."""
-    if not _risk_debug:
-        return
     remark = getattr(orderInfo, 'm_strRemark', '')
     code = getattr(orderInfo, 'm_strInstrumentID', '') + '.' + getattr(orderInfo, 'm_strExchangeID', '')
     vol = getattr(orderInfo, 'm_nVolumeTotalOriginal', 0)
     traded = getattr(orderInfo, 'm_nVolumeTraded', 0)
     status = getattr(orderInfo, 'm_nOrderStatus', -1)
-    print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
+    if _risk_debug:
+        print('[ORDER_CB] %s vol=%d traded=%d status=%d remark=%s' % (code, vol, traded, status, remark))
 
 
 def deal_callback(ContextInfo, dealInfo):
     """Deal callback - LOGGING ONLY. All accounting in _do_order_check_single."""
-    if not _risk_debug:
-        return
     remark = getattr(dealInfo, 'm_strRemark', '')
     code = getattr(dealInfo, 'm_strInstrumentID', '') + '.' + getattr(dealInfo, 'm_strExchangeID', '')
     name = getattr(dealInfo, 'm_strInstrumentName', '')
@@ -741,7 +738,7 @@ def deal_callback(ContextInfo, dealInfo):
     vol = getattr(dealInfo, 'm_nVolume', 0)
     amount = getattr(dealInfo, 'm_dTradeAmount', 0)
     direction = getattr(dealInfo, 'm_nOffsetFlag', 0)
-
     dir_str = 'BUY' if direction == 48 else 'SELL'
-    print('[DEAL_CB] %s %s %s %d shares @ %.2f = %.0f CNY remark=%s' % (
-        code, name, dir_str, vol, price, amount, remark))
+    if _risk_debug:
+        print('[DEAL_CB] %s %s %s %d shares @ %.2f = %.0f CNY remark=%s' % (
+            code, name, dir_str, vol, price, amount, remark))

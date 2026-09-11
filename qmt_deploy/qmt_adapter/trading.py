@@ -364,6 +364,10 @@ def start_order_poll(C, remark, strategy_name='default'):
     timer_name = 'opoll_' + remark
     def _make_cb(r, s):
         def cb(ContextInfo):
+            # Heartbeat: show active order count
+            _active = sum(1 for v in _orders.values() if v.get('status') in ('pending', 'ordered', 'partial', 'cancel_pending'))
+            if _active > 0:
+                print('[ORDER_POLL][HEARTBEAT] %d active orders' % _active)
             try:
                 _do_order_check_single(ContextInfo, r, s)
             except Exception as e:
@@ -412,53 +416,59 @@ def start_order_poll(C, remark, strategy_name='default'):
 # Order state machine
 # ============================================================
 # States:
-#   pending   - order placed, waiting for QMT ack
-#   ordered   - QMT acknowledged, waiting for fill
-#   partial   - partially filled
-#   filled    - fully filled     [TERMINAL - remove from _orders]
-#   rejected  - rejected/failed  [TERMINAL - remove from _orders]
-#   cancelled - cancelled        [TERMINAL - remove from _orders]
+#   pending       - order placed, waiting for QMT ack
+#   ordered       - QMT acknowledged, waiting for fill
+#   partial       - partially filled
+#   cancel_pending - cancel requested, awaiting confirmation
+#   filled        - fully filled     [TERMINAL]
+#   rejected      - rejected/failed  [TERMINAL]
+#   cancelled     - cancelled        [TERMINAL]
 #
-# Transitions (trigger):
-#   pending -> ordered:   ORDER found, traded=0
-#   pending -> partial:   ORDER found, traded>0
-#   pending -> filled:    ORDER/DEAL/POSITION confirms traded>=vol
-#   pending -> rejected:  ORDER status=57 (废单) or 60s timeout
-#   ordered -> partial:   traded increases
-#   ordered -> filled:    traded >= vol
-#   ordered -> cancelled: ORDER status=54 (已撤) or 120s cancel
-#   partial -> filled:    traded >= vol
-#   partial -> cancelled: ORDER status=54 (已撤) or 120s cancel
+# Transitions:
+#   pending  -> ordered:       ORDER found, traded=0
+#   pending  -> partial:       ORDER found, traded>0
+#   pending  -> filled:        ORDER/DEAL/POSITION confirms traded>=vol
+#   pending  -> rejected:      ORDER status=57 or 60s timeout
+#   pending  -> cancel_pending: ORDER status 51/52 (cancel requested)
+#   ordered  -> partial:       traded increases
+#   ordered  -> filled:        traded >= vol
+#   ordered  -> cancelled:     ORDER status=54 (confirmed)
+#   ordered  -> cancel_pending: ORDER status 51/52
+#   partial  -> filled:        traded >= vol
+#   partial  -> cancelled:     ORDER status=54 or status=53 (partial cancel)
+#   partial  -> cancel_pending: ORDER status 51/52
+#   cancel_pending -> partial:  traded increases while cancel pending
+#   cancel_pending -> filled:   traded >= vol while cancel pending
+#   cancel_pending -> ordered:  cancel rejected (status reverts to 50)
 #
-# Terminal states: filled, rejected, cancelled
-#   -> immediately remove from _orders dict
+# Terminal: filled, rejected, cancelled -> remove from _orders
 # ============================================================
 
 # ORDER status codes (from QMT official docs)
-_ORD_ST_48_NOT_REPORTED = 48      # ??
-_ORD_ST_49_PENDING = 49           # ??
-_ORD_ST_50_REPORTED = 50          # ??
-_ORD_ST_51_REPORTED_CANCEL_REQ = 51  # ?????
-_ORD_ST_52_PARTIAL_CANCEL_REQ = 52   # ??????
-_ORD_ST_53_PARTIAL_CANCELLED = 53    # ?? (??????)
-_ORD_ST_54_CANCELLED = 54         # ??
-_ORD_ST_55_PARTIAL_FILLED = 55   # ??
-_ORD_ST_56_FILLED = 56           # ??
-_ORD_ST_57_REJECTED = 57         # ?? (????????????)
-_ORD_ST_86_CONFIRMED = 86        # ??
-_ORD_ST_255_UNKNOWN = 255        # ??
+_ORD_ST_48_NOT_REPORTED = 48
+_ORD_ST_49_PENDING = 49
+_ORD_ST_50_REPORTED = 50
+_ORD_ST_51_CANCEL_REQ = 51          # cancel requested (NOT confirmed)
+_ORD_ST_52_PARTIAL_CANCEL_REQ = 52  # partial cancel requested
+_ORD_ST_53_PARTIAL_CANCELLED = 53   # partial cancelled -> order done
+_ORD_ST_54_CANCELLED = 54           # fully cancelled (confirmed)
+_ORD_ST_55_PARTIAL_FILLED = 55
+_ORD_ST_56_FILLED = 56
+_ORD_ST_57_REJECTED = 57
+_ORD_ST_86_CONFIRMED = 86
+_ORD_ST_255_UNKNOWN = 255
 
-# Terminal states that mean order is dead
-_ORD_TERMINAL_CANCEL = {_ORD_ST_54, _ORD_ST_53, _ORD_ST_52, _ORD_ST_51}
 _ORD_TERMINAL_REJECT = {_ORD_ST_57}
+_ORD_TERMINAL_CANCEL = {_ORD_ST_54, _ORD_ST_53}  # 54=full cancel, 53=partial cancel (order done)
+_ORD_CANCEL_PENDING = {_ORD_ST_51, _ORD_ST_52}
 
-# Timeout thresholds (seconds)
-_TIMEOUT_PENDING_REJECT = 60     # pending + 60s -> rejected
-_TIMEOUT_CANCEL_WAIT = 120       # ordered/partial + 120s -> cancel request
+_TIMEOUT_PENDING_REJECT = 60
+_TIMEOUT_CANCEL_WAIT = 120
+_TIMEOUT_MAX_LIFETIME = 300
+_CANCEL_MAX_RETRIES = 3
 
 
 def _order_transition(o, remark, new_status, log_msg=None):
-    """Transition order to new_status. If terminal, remove from _orders."""
     old = o['status']
     o['status'] = new_status
     if log_msg:
@@ -468,16 +478,11 @@ def _order_transition(o, remark, new_status, log_msg=None):
 
 
 def _do_order_check_single(ContextInfo, remark, strategy_name):
-    """Check status of a single order. State machine approach.
-
-    Three-layer confirmation: ORDER -> DEAL -> POSITION
-    Handles terminal ORDER states immediately (no waiting for timeout).
-    """
     import time
     now = time.time()
     o = _orders.get(remark)
     if not o or o['status'] in ('filled', 'rejected', 'cancelled'):
-        return  # already terminal or unknown
+        return
 
     _get_qmt_func()
     trading = sys.modules[__name__]
@@ -486,6 +491,7 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     # ---- Layer 1: Query ORDER ----
     order_found = False
     order_status = _ORD_ST_255_UNKNOWN
+    order_query_ok = False
     try:
         qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER', strategy_name)
         for order in (qmt_orders or []):
@@ -500,28 +506,48 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             if order_id:
                 o['order_id'] = order_id
 
-            # --- Terminal ORDER states: immediate transition ---
+            # Terminal: rejected
             if order_status in _ORD_TERMINAL_REJECT:
                 _order_transition(o, remark, 'rejected',
                     'ORDER status=%d (rejected)' % order_status)
                 return
+
+            # Terminal: cancelled (54) or partial cancelled (53 -> order done)
             if order_status in _ORD_TERMINAL_CANCEL:
-                _order_transition(o, remark, 'cancelled',
-                    'ORDER status=%d (cancelled)' % order_status)
+                status_str = 'cancelled' if order_status == _ORD_ST_54 else 'partial_cancelled'
+                if traded > 0:
+                    o['filled'] = traded
+                    _update_internal_fill(o, remark, traded, traded, vol)
+                    _order_transition(o, remark, 'filled',
+                        '%s, %d/%d filled' % (status_str, traded, vol))
+                else:
+                    _order_transition(o, remark, 'cancelled',
+                        'ORDER status=%d (%s, no fills)' % (order_status, status_str))
                 return
 
-            # --- Non-terminal: update fill delta ---
+            # Intermediate: cancel pending
+            if order_status in _ORD_CANCEL_PENDING:
+                if o['status'] not in ('cancel_pending',):
+                    o['status'] = 'cancel_pending'
+                    print('[ORDER_POLL][%s] cancel pending (ORDER status=%d)' % (remark, order_status))
+            # Cancel rejected: status was cancel_pending but reverted to 50
+            elif order_status in (_ORD_ST_50_REPORTED, _ORD_ST_48_NOT_REPORTED, _ORD_ST_49_PENDING):
+                if o['status'] == 'cancel_pending':
+                    o['status'] = 'ordered'
+                    print('[ORDER_POLL][%s] cancel rejected, reverted to ordered (status=%d)' % (remark, order_status))
+
+            # Fill delta
             prev_filled = o['filled']
             delta = traded - prev_filled
             if delta > 0:
                 o['filled'] = traded
                 _update_internal_fill(o, remark, delta, traded, vol)
 
-            # --- State transitions ---
+            # State transitions
             if traded >= vol and vol > 0:
                 _order_transition(o, remark, 'filled',
                     'fully filled %d/%d' % (traded, vol))
-            elif traded > 0 and o['status'] in ('pending', 'ordered'):
+            elif traded > 0 and o['status'] in ('pending', 'ordered', 'cancel_pending'):
                 _order_transition(o, remark, 'partial',
                     'partial %d/%d' % (traded, vol))
                 o['ordered_time'] = now
@@ -529,73 +555,129 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
                 _order_transition(o, remark, 'ordered',
                     'ordered vol=%d' % vol)
                 o['ordered_time'] = now
+            order_query_ok = True
             return
     except Exception as e:
-        print('[ORDER_POLL][%s] ORDER query failed: %s' % (remark, e))
+        print('[ORDER_POLL][%s] ORDER query failed: %s (continuing to DEAL/POSITION)' % (remark, e))
+
+    # ---- Layer 2: ORDER not found -> query DEAL (accumulate all matching) ----
+    if not order_found or not order_query_ok:
+        try:
+            qmt_deals = trading.get_trade_detail_data(acct, 'STOCK', 'DEAL', strategy_name)
+            total_deal_vol = 0
+            for deal in (qmt_deals or []):
+                r = getattr(deal, 'm_strRemark', '')
+                if r != remark:
+                    continue
+                deal_vol = getattr(deal, 'm_nVolume', 0)
+                total_deal_vol += deal_vol
+                order_id = getattr(deal, 'm_strOrderSysID', '')
+                if order_id:
+                    o['order_id'] = order_id
+            if total_deal_vol > 0:
+                delta = total_deal_vol - o.get('filled', 0)
+                if delta > 0:
+                    o['filled'] = total_deal_vol
+                    vol = o.get('vol', 0)
+                    _update_internal_fill(o, remark, delta, total_deal_vol, vol)
+                if total_deal_vol >= o.get('vol', 0) and o.get('vol', 0) > 0:
+                    _order_transition(o, remark, 'filled',
+                        'confirmed via DEAL: %d/%d shares' % (total_deal_vol, o.get('vol', 0)))
+                else:
+                    if o['status'] not in ('partial',):
+                        _order_transition(o, remark, 'partial',
+                            'partial via DEAL: %d/%d shares' % (total_deal_vol, o.get('vol', 0)))
+                        o['ordered_time'] = now
+                return
+        except Exception as e:
+            print('[ORDER_POLL][%s] DEAL query failed: %s' % (remark, e))
+
+    # ---- Layer 3: check POSITION (BUY: confirm position exists; SELL: confirm decreased) ----
+    if not order_found or not order_query_ok:
+        try:
+            _code = o.get('stock', '')
+            _expected_vol = o.get('vol', 0)
+            _reason = remark.split('-')[0] if '-' in remark else ''
+            _positions = trading.get_trade_detail_data(acct, 'STOCK', 'POSITION')
+            for pos in (_positions or []):
+                _pos_code = getattr(pos, 'm_strInstrumentID', '') + '.' + getattr(pos, 'm_strExchangeID', '')
+                _pos_vol = abs(getattr(pos, 'm_nVolume', 0))
+                if _pos_code != _code:
+                    continue
+                if _reason == 'BUY' and _pos_vol > 0:
+                    actual_fill = min(_pos_vol, _expected_vol)
+                    o['filled'] = actual_fill
+                    _update_internal_position(_code, _pos_vol, _reason, o)
+                    if actual_fill >= _expected_vol:
+                        _order_transition(o, remark, 'filled',
+                            'confirmed via POSITION: %s has %d shares' % (_code, _pos_vol))
+                    else:
+                        _order_transition(o, remark, 'partial',
+                            'partial via POSITION: %d/%d shares' % (actual_fill, _expected_vol))
+                        o['ordered_time'] = now
+                    return
+                elif _reason in ('SELL', 'SELL_ALL', 'RISK'):
+                    _prev_shares = o.get('_prev_pos_vol', None)
+                    if _prev_shares is None:
+                        o['_prev_pos_vol'] = _pos_vol
+                    elif _pos_vol < _prev_shares:
+                        sold = _prev_shares - _pos_vol
+                        o['filled'] = sold
+                        _update_internal_position(_code, _pos_vol, _reason, o)
+                        if sold >= _expected_vol:
+                            _order_transition(o, remark, 'filled',
+                                'confirmed via POSITION: %s sold %d shares (pos %d->%d)' % (_code, sold, _prev_shares, _pos_vol))
+                        else:
+                            _order_transition(o, remark, 'partial',
+                                'partial via POSITION: sold %d/%d shares' % (sold, _expected_vol))
+                            o['ordered_time'] = now
+                        return
+        except Exception as e:
+            print('[ORDER_POLL][%s] POSITION query failed: %s' % (remark, e))
+
+    # ---- Timeout handling ----
+    age = now - o.get('timestamp', now)
+    ref_time = o.get('ordered_time', o.get('timestamp', now))
+    ref_age = now - ref_time
+
+    # No order_id after ordering for >30s -> force expire early
+    if o['status'] in ('ordered', 'partial') and not o.get('order_id', '') and ref_age > 30:
+        _order_transition(o, remark, 'rejected',
+            'no order_id after %ds, force expired' % int(ref_age))
         return
 
-    # ---- Layer 2: ORDER not found -> query DEAL ----
-    try:
-        qmt_deals = trading.get_trade_detail_data(acct, 'STOCK', 'DEAL', strategy_name)
-        for deal in (qmt_deals or []):
-            r = getattr(deal, 'm_strRemark', '')
-            if r != remark:
-                continue
-            traded = getattr(deal, 'm_nVolume', 0)
-            vol = o.get('vol', 0)
-            order_id = getattr(deal, 'm_strOrderSysID', '')
-            if order_id:
-                o['order_id'] = order_id
-            if traded > 0:
-                o['filled'] = traded
-                _update_internal_fill(o, remark, traded, traded, vol)
-                _order_transition(o, remark, 'filled',
-                    'confirmed via DEAL: %d shares' % traded)
-            return
-    except Exception as e:
-        print('[ORDER_POLL][%s] DEAL query failed: %s' % (remark, e))
+    # Max lifetime: force expired
+    if age > _TIMEOUT_MAX_LIFETIME:
+        _order_transition(o, remark, 'rejected',
+            'max lifetime %ds exceeded, force expired' % int(age))
+        return
 
-    # ---- Layer 3: DEAL not found -> check POSITION ----
-    try:
-        _code = o.get('stock', '')
-        _expected_vol = o.get('vol', 0)
-        _reason = remark.split('-')[0] if '-' in remark else ''
-        _positions = trading.get_trade_detail_data(acct, 'STOCK', 'POSITION')
-        for pos in (_positions or []):
-            _pos_code = getattr(pos, 'm_strInstrumentID', '') + '.' + getattr(pos, 'm_strExchangeID', '')
-            _pos_vol = abs(getattr(pos, 'm_nVolume', 0))
-            if _pos_code == _code and _pos_vol > 0:
-                o['filled'] = _expected_vol
-                _update_internal_position(_code, _pos_vol, _reason, o)
-                _order_transition(o, remark, 'filled',
-                    'confirmed via POSITION: %s has %d shares' % (_code, _pos_vol))
-                return
-    except Exception as e:
-        print('[ORDER_POLL][%s] POSITION query failed: %s' % (remark, e))
-
-    # ---- No record in any layer -> timeout handling ----
-    age = now - o.get('timestamp', now)
-
-    # pending + 60s with no record anywhere -> rejected
+    # Pending + 60s -> rejected
     if o['status'] == 'pending' and age > _TIMEOUT_PENDING_REJECT:
         _order_transition(o, remark, 'rejected',
-            'no record in ORDER/DEAL/POSITION after %ds' % int(age))
+            'no record anywhere after %ds' % int(age))
         return
 
-    # ordered/partial + 120s -> cancel request
-    if o['status'] in ('ordered', 'partial') and age > _TIMEOUT_CANCEL_WAIT:
+    # Ordered/partial/cancel_pending + 120s -> cancel (with retry)
+    if o['status'] in ('ordered', 'partial', 'cancel_pending') and ref_age > _TIMEOUT_CANCEL_WAIT:
         order_id = o.get('order_id', '')
-        if order_id:
+        cancel_retries = o.get('cancel_retries', 0)
+        if order_id and cancel_retries < _CANCEL_MAX_RETRIES:
             try:
                 ctx = o.get('context', None)
                 if ctx:
                     result = trading.cancel(order_id, o.get('account_id', ''),
                                             o.get('account_type', 'STOCK'), ctx)
-                    _order_transition(o, remark, 'cancelled',
-                        'cancel after %ds: %d/%d filled, result=%s' % (
-                            int(age), o['filled'], o.get('vol', 0), result))
+                    o['cancel_retries'] = cancel_retries + 1
+                    print('[ORDER_POLL][%s] cancel %d/%d: id=%s result=%s' % (
+                        remark, cancel_retries + 1, _CANCEL_MAX_RETRIES, order_id, result))
             except Exception as e:
-                print('[ORDER_POLL][%s] cancel failed: %s' % (remark, e))
+                o['cancel_retries'] = cancel_retries + 1
+                print('[ORDER_POLL][%s] cancel %d/%d failed: %s' % (
+                    remark, cancel_retries + 1, _CANCEL_MAX_RETRIES, e))
+        elif cancel_retries >= _CANCEL_MAX_RETRIES:
+            _order_transition(o, remark, 'cancelled',
+                'cancel failed %d times, force expired' % cancel_retries)
         else:
             print('[ORDER_POLL][%s] ordered but no order_id' % remark)
 

@@ -17,7 +17,8 @@ from datetime import datetime
 from .strategy_base import get_bar_date as _get_bar_date, load_hold_days, persist_hold_days
 
 # Debug switch (set by entry file via set_debug())
-_DEBUG = False
+# STARTUP: True for debugging, set to False when stable
+_DEBUG = True
 
 
 def set_debug(flag):
@@ -80,13 +81,16 @@ def init(C):
     # Build industry map at init
     _build_industry_map(C)
 
-    if _DEBUG:
-        print('[V75J] init done. pool=%d, tech=%d, hold_days_max=%d' % (
-            len(_stock_list), len(_tech_codes) if _tech_codes else 0, _hold_days_max))
-        print('[V75J] risk: SL=%.2f TP=%.2f HD=%d' % (
-            _risk_config['stop_loss'], _risk_config['take_profit'], _risk_config['hold_days_max']))
-        if _tech_codes:
-            print('[V75J] tech codes (first 10): %s' % ','.join(_tech_codes[:10]))
+    # Startup summary (always print, not gated by _DEBUG)
+    print('[INIT][V75J] init done. pool=%d, tech=%d, hold_days_loaded=%d, hold_days_max=%d' % (
+        len(_stock_list), len(_tech_codes) if _tech_codes else 0, len(_hold_days), _hold_days_max))
+    print('[INIT][V75J] risk: SL=%.2f%% TP=%.2f%% HD=%d MAX_HOLDINGS=%d' % (
+        _risk_config['stop_loss']*100, _risk_config['take_profit']*100,
+        _risk_config['hold_days_max'], _params.get('max_holdings', 3)))
+    print('[INIT][V75J] account: %s, pool: %d stocks' % (
+        _account.account_id if _account else 'NONE', len(_stock_list)))
+    if _tech_codes:
+        print('[INIT][V75J] tech codes (first 10): %s' % ','.join(_tech_codes[:10]))
 
 
 #coding:gbk

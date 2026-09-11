@@ -15,7 +15,8 @@ from datetime import datetime
 from .strategy_base import get_bar_date as _get_bar_date, load_hold_days, persist_hold_days
 
 # Debug switch (set by entry file via set_debug())
-_DEBUG = False
+# STARTUP: True for debugging, set to False when stable
+_DEBUG = True
 
 
 def set_debug(flag):
@@ -74,11 +75,14 @@ def init(C):
     _kline_cache = None
     _kline_cache_date = None
 
-    if _DEBUG:
-        print('[INIT][V61C] init done. pool=%d, rebalance_days=%d' % (
-            len(_stock_list), _params.get('rebalance_days', 5)))
-        print('[V61C] risk: SL=%.2f TP=%.2f HD=%d' % (
-            _risk_config['stop_loss'], _risk_config['take_profit'], _risk_config['hold_days_max']))
+    # Startup summary (always print, not gated by _DEBUG)
+    print('[INIT][V61C] init done. pool=%d, rebalance_days=%d, hold_days_loaded=%d' % (
+        len(_stock_list), _params.get('rebalance_days', 5), len(_hold_days)))
+    print('[INIT][V61C] risk: SL=%.2f%% TP=%.2f%% HD=%d MAX_HOLDINGS=%d' % (
+        _risk_config['stop_loss']*100, _risk_config['take_profit']*100,
+        _risk_config['hold_days_max'], _params.get('max_holdings', 5)))
+    print('[INIT][V61C] account: %s, pool: %d stocks' % (
+        _account.account_id if _account else 'NONE', len(_stock_list)))
 
 
 def on_signal(C):

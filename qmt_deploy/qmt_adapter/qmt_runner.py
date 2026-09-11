@@ -82,9 +82,9 @@ def check_risk(C, account, holding_days, risk_config=None, bar_date=None, strate
         except Exception as e:
             print('[RISK] WARN: limit_up check failed for %s: %s' % (code, e))
 
-        if _risk_debug:
-            print('[%s][RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) limit_up=%s -> %s' % (bar_date or '??',
-                code, cost_price, cur_price, pnl*100, sl*100, tp*100, hold_days, hd, is_limit_up,
+        # Always log risk decisions (remove _risk_debug gate for startup debugging)
+        print('[%s][RISK] %s: cost=%.2f cur=%.2f pnl=%.2f%% (SL=%.2f%% TP=%.2f%%) days=%d (HD=%d) limit_up=%s -> %s' % (bar_date or '??',
+            code, cost_price, cur_price, pnl*100, sl*100, tp*100, hold_days, hd, is_limit_up,
             'SELL' if (pnl < sl or (pnl > tp and not is_limit_up) or hold_days >= hd) else 'HOLD'))
 
         if pnl < sl:

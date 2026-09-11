@@ -501,8 +501,10 @@ def _sync_strategy_position(o, remark):
         reason = remark.split('-')[0] if '-' in remark else ''
         if reason == 'BUY' and shares > 0:
             qmt_runner.strategy_buy(strategy, code, shares, price)
+            print('[POSITION_SYNC] BUY %s %d shares @ %.2f -> _positions_%s.json' % (code, shares, price, strategy))
         elif reason in ('SELL', 'SELL_ALL', 'RISK') and shares > 0:
             qmt_runner.strategy_sell(strategy, code, shares)
+            print('[POSITION_SYNC] SELL %s %d shares -> _positions_%s.json' % (code, shares, strategy))
     except Exception as e:
         print('[ORDER_POLL] WARN: sync strategy position failed: %s' % e)
 

@@ -355,7 +355,7 @@ def _select_stocks(C):
         _kline_cache_date = today
 
     # Filter candidates: must have float_shares and kline data
-    # Also exclude limit up stocks (close == high)
+    # Exclude limit up stocks (close == high, or close >= prev_close * 1.095)
     candidates = []
     for code in _stock_list:
         if code not in FLOAT_SHARES:
@@ -368,10 +368,21 @@ def _select_stocks(C):
         df = kline_data[code]
         if len(df) < 3:
             continue
+        # Limit-up filter: exclude if latest bar is limit up
+        _c = df['close'].values
+        _h = df['high'].values
+        if len(_c) >= 2:
+            _prev = _c[-2]
+            if _prev > 0 and _c[-1] >= _prev * 1.095:
+                continue  # limit up, skip
+        elif _c[-1] == _h[-1] and _c[-1] > 0:
+            continue  # single bar, close==high = likely limit up
         candidates.append(code)
 
     if not candidates:
         return []
+
+    print('[V61C] candidates after filter: %d / %d stocks' % (len(candidates), len(_stock_list)))
 
     # Calculate factors
     turnover_scores = {}

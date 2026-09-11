@@ -165,13 +165,15 @@ def get_kline_data_multi(C, stock_list, count=10):
     if _sub_fail > 0:
         print('[KLINE] subscribe: ok=%d fail=%d codes=%s' % (_sub_ok, _sub_fail, ','.join(_sub_fail_codes)))
 
-    # Batch fetch
+    # Batch fetch (subscribe=True to auto-subscribe any missing stocks)
+    # subscribe_quote() is async - data may not be cached yet.
+    # subscribe=True ensures QMT fetches data for unsubscribed stocks.
     _fetch_ok = 0
     _fetch_miss = []
     try:
         data = C.get_market_data_ex(
             fields, stock_list, period=period, count=count,
-            subscribe=False
+            subscribe=True
         )
         for code in stock_list:
             if code in data and len(data[code]) > 0:
@@ -190,7 +192,7 @@ def get_kline_data_multi(C, stock_list, count=10):
             try:
                 klines = C.get_market_data_ex(
                     fields, [code], period=period, count=count,
-                    subscribe=False
+                    subscribe=True
                 )
                 if code in klines and len(klines[code]) > 0:
                     result[code] = klines[code]

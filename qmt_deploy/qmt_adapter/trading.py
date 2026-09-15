@@ -262,7 +262,7 @@ class QmtAccount(object):
             print('[BUY] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
 
         # Start order poll after placing order
-        start_order_poll(self.C, remark)
+        start_order_poll(self.C, remark, strategy_name)
         return remark
 
     def sell(self, stock_code, shares, price=-1, reason='SELL', strategy_name='v61c'):
@@ -316,7 +316,7 @@ class QmtAccount(object):
             print('[SELL] passorder sent: %s %d shares remark=%s' % (stock_code, shares, remark))
 
         # Start order poll after placing order
-        start_order_poll(self.C, remark)
+        start_order_poll(self.C, remark, strategy_name)
         return remark
 
     def sell_all(self, stock_code, price=-1, reason='SELL_ALL', strategy_name='default'):

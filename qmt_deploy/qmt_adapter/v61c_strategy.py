@@ -95,6 +95,7 @@ def on_signal(C):
     4. If any slots empty -> select new stocks -> buy
     """
     global _last_trade_date, _today_buys, _account, _stock_pool, _stock_list
+    global _sell_out_of
 
     global _kline_cache, _kline_cache_date, _risk_config, _last_buy_date
 

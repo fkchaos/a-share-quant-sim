@@ -43,7 +43,7 @@ _risk_config = None
 def init(C):
     """Init strategy."""
     global _stock_pool, _stock_list, _account, _last_buy_date, _sell_out_of
-    global _hold_days, _positions, _last_trade_date, _today_buys
+    global _hold_days, _last_trade_date, _today_buys
     global _kline_cache, _kline_cache_date, _risk_config
 
     from .qmt_data import ZZ1800_STOCKS
@@ -59,10 +59,8 @@ def init(C):
     _stock_list = _stock_pool
     _account = QmtAccount(C)
     _hold_days = {}
-    _positions = {}
-
-    # Load persisted hold_days + positions from file
-    _hold_days, _last_date, _positions = load_hold_days('v61c')
+    # Load persisted hold_days from file
+    _hold_days, _last_date, _ = load_hold_days('v61c')
     _today_init = _get_bar_date(C)
     if _last_date and _last_date != _today_init:
         print('[INIT] new day detected: %s -> %s, keeping %d positions' % (
@@ -293,7 +291,7 @@ def on_signal(C):
                     _last_buy_date = today
 
     # Persist hold_days after all changes
-    persist_hold_days('v61c', _hold_days, today, _positions)
+    persist_hold_days('v61c', _hold_days, today)
 
 
 

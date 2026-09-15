@@ -44,7 +44,11 @@ def load_hold_days(strategy_name):
 
 
 def persist_hold_days(strategy_name, hold_days, today, positions=None):
-    """Persist hold_days + positions to file (atomic: tmp + replace)."""
+    """Persist hold_days + positions to file (atomic: tmp + replace).
+
+    When positions is None, reads current positions from existing JSON
+    to avoid overwriting updates from strategy_buy/sell (order polling).
+    """
     import json, os
     path = os.path.join(os.path.dirname(__file__), '_hold_days_%s.json' % strategy_name)
     tmp = path + '.tmp'
@@ -52,6 +56,14 @@ def persist_hold_days(strategy_name, hold_days, today, positions=None):
         payload = {'hold_days': hold_days, 'last_date': today}
         if positions is not None:
             payload['positions'] = positions
+        else:
+            # Read existing positions to avoid overwriting order polling updates
+            try:
+                with open(path, 'r') as f:
+                    old = json.load(f)
+                payload['positions'] = old.get('positions', {})
+            except Exception:
+                payload['positions'] = {}
         with open(tmp, 'w') as f:
             json.dump(payload, f)
         os.replace(tmp, path)

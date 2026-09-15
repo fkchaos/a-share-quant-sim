@@ -586,12 +586,24 @@ def _run_signal_impl(account_id, date, strategy_name=None):
     # 如果用了return_all但实际需要的数量较少，先截取一个合理上限（避免后续过滤浪费）
     if _need_price_filter and len(cands) > params.get("MAX_HOLDINGS", 3) * 3:
         cands = cands[:params.get("MAX_HOLDINGS", 3) * 3]
-    # top_scores：用空 holdings 选股，让已持仓也参与打分
-    top_scores_raw = adapter.select(strategy_name, None, date,
-                                    cp, vp, ap, hp, lp, op,
-                                    current_holdings={},
-                                    params=params,
-                                    return_all=True)
+    # top_scores：直接用因子分数排序（不走select，避免广度过滤截断）
+    if strategy_name.startswith("v75"):
+        try:
+            from scripts.strategies.v75j_liquidity_only import calc_factors_v75j
+            factors = calc_factors_v75j(cp, vp, ap, hp, lp, op)
+            scores = list(factors.values())[0]
+            # 过滤科创板（688/689），与select_stocks_v75a一致
+            scores = scores[~scores.index.str.startswith(('688', '689'))]
+            top_scores_raw = [(c, round(s, 4)) for c, s in scores.head(10).items()]
+        except Exception as e:
+            logger.warning(f"v75 top_scores calc failed: {e}")
+            top_scores_raw = []
+    else:
+        top_scores_raw = adapter.select(strategy_name, None, date,
+                                        cp, vp, ap, hp, lp, op,
+                                        current_holdings={},
+                                        params=params,
+                                        return_all=True)
     # 市场状态识别 → 仓位乘数（用 strategy_adapter 统一接口）
     regime_label, regime_mult = adapter.calc_regime(strategy_name, cp, date, params)
     logger.info(f"市场状态: {regime_label}, 仓位乘数: {regime_mult}")

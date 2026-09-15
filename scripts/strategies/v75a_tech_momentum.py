@@ -32,8 +32,18 @@ except ImportError:
 
 
 def _load_industry_map(codes):
-    """Load industry from static dict (same source as QMT adapter)."""
-    return pd.Series({c: _STATIC_INDUSTRY.get(c, '') for c in codes})
+    """Load industry from static dict (same source as QMT adapter).
+
+    Handles both bare codes ('600183') and exchange-suffixed keys ('600183.SH').
+    """
+    result = {}
+    for c in codes:
+        ind = _STATIC_INDUSTRY.get(c, '')
+        if not ind:
+            # Try with .SH / .SZ suffix
+            ind = _STATIC_INDUSTRY.get(c + '.SH', '') or _STATIC_INDUSTRY.get(c + '.SZ', '')
+        result[c] = ind
+    return pd.Series(result)
 
 
 def calc_factors_v75a(close_panel, volume_panel, amount_panel,

@@ -37,11 +37,16 @@ _tech_codes = None
 
 
 def _load_tech_codes():
-    """Load tech stock codes from static dict (same source as QMT adapter)."""
+    """Load tech stock codes from static dict (same source as QMT adapter).
+
+    Returns bare codes (no .SH/.SZ suffix) to match panel columns.
+    """
     global _tech_codes
     if _tech_codes is not None:
         return _tech_codes
-    _tech_codes = [code for code, ind in _STATIC_INDUSTRY.items() if ind in _TECH_SECTORS]
+    raw_codes = [code for code, ind in _STATIC_INDUSTRY.items() if ind in _TECH_SECTORS]
+    # Strip .SH/.SZ suffix to match panel format
+    _tech_codes = [c.split('.')[0] for c in raw_codes]
     return _tech_codes
 
 

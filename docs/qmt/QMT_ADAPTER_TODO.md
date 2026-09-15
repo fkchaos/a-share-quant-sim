@@ -7,6 +7,12 @@
 - [x] P1: config.py更新 ✅ (2026-08-26)
 - [x] P1: sell_all验证 ✅ (之前已验证)
 - [x] P2: 清理遗留问题 ✅ (2026-08-26)
+- [x] P0: strategy_base.py 共享工具提取 ✅ (2026-09-11)
+- [x] P0: 订单状态机重写（7状态、3层确认）✅ (2026-09-11)
+- [x] P0: 原子JSON写入 ✅ (2026-09-11)
+- [x] P1: strategy_name lowercase/UPPERCASE 约定统一 ✅ (2026-09-11)
+- [x] P1: 订单成交后自动同步 positions JSON ✅ (2026-09-11)
+- [x] P1: PER_STRATEGY_POSITIONS 重新启用 ✅ (2026-09-11)
 
 ---
 
@@ -42,50 +48,6 @@
 
 ---
 
-## Key Technical Decisions
-
-1. **QMT volume单位**：QMT返回股（shares），不是手（lots），所以换手率=volume/float_shares，不需要*100
-2. **行业映射**：QMT环境不能import sqlite，改用C.get_instrument_detail()获取IndustryClassification
-3. **K线缓存**：每日首次获取后缓存，同一天内不重复fetch（避免QMT限流）
-4. **Python 3.6.8兼容**：无walrus(:=)、无dict union(|)、无debug f-string(=)
-
----
-
-## Original TODO (archived for reference)
-
-### P0: Restore Stock Selection Logic
-
-1. **v61c_strategy.py `_select_stocks(C)`** ✅ DONE
-   - ~~Get turnover data for last N days~~ ✅ (get_kline_data_multi + 5日均值)
-   - ~~Calculate rolling average turnover~~ ✅ (volume/float_shares, 5日均值)
-   - ~~Rank by low turnover + small cap~~ ✅ (等权50/50 rank)
-   - Add missing imports if needed ✅
-
-2. **v75j_strategy.py `_select_stocks(C)`** ✅ DONE
-   - ~~Import v75a factors~~ ✅ (改用QMT API获取行业映射)
-   - Apply breadth filter ✅ (MA20广度过滤)
-   - Calculate liquidity factor ✅ (float_shares排序)
-   - Select top N tech stocks ✅
-
-### P1: Verify Buy/Sell/GetHoldings in Backtest
-
-1. **Backtest run** - Run a short backtest (1-2 weeks)
-2. **Check trade log** - Verify buy/sell orders appear in QMT trade log
-3. **Check final positions** - Verify get_holdings returns correct positions
-4. **Check cash flow** - Verify cash decreases on buy, increases on sell
-
-### P1: Update config.py Real Account ID
-
-1. ~~Fill in real account_id~~ ✅ DONE
-2. Fill in real account type if different from STOCK
-
-### P2: Clean Up Issues
-
-1. ~~v61c_debug_strategy.py~~ - Legacy debug file, can archive if not needed
-2. Any other test artifacts
-
----
-
 ## Completed Changes (2026-08-27)
 
 ### 5. config.py - 策略参数集中化
@@ -112,7 +74,67 @@
 - date.today() 补偿 daily_kline 数据延迟
 - 今天买的 hold_days=0（buy_date < today_str 才加1）
 
-## Key Technical Decisions (updated)
+---
+
+## Completed Changes (2026-09-11)
+
+### 9. strategy_base.py — 共享工具提取
+- 从 v61c_strategy 和 v75j_strategy 提取 ~90 行重复代码
+- `get_bar_date(C)`: 从 ContextInfo 获取当前 bar 日期（禁止 datetime.now()）
+- `load_hold_days(strategy_name)`: 从 JSON 加载持仓天数
+- `persist_hold_days(strategy_name, hold_days, today)`: 原子写入持仓天数
+- `is_limit_up(close, prev_close)`: 涨停检测（9.5% 阈值）
+- `apply_limit_up_filter(codes, kline_data)`: 批量涨停过滤
+
+### 10. 订单状态机重写 (trading.py)
+- 7 状态：pending → ordered → partial → filled [TERMINAL]
+- 3 层确认：ORDER → DEAL → POSITION
+- 超时处理：60s pending→rejected, 120s→cancel, 300s→force expired
+- 撤单：最多 3 次重试
+- 无 order_id 超 30s → force expired
+- STATUS 53 (部分撤单) → terminal（已成交部分保留）
+- 10s 轮询间隔，自调度（schedule_run）
+
+### 11. 原子JSON写入
+- `_hold_days_{strategy}.json`: tmp + os.rename
+- `_positions_{strategy}.json`: tmp + os.rename
+- 防止写入中断导致文件损坏
+
+### 12. strategy_name 大小写约定
+- 内部（config, JSON, 日志）: lowercase (`'v61c'`, `'v75j'`)
+- QMT API（passorder, get_trade_detail_data）: UPPERCASE (`'V61C'`, `'V75J'`)
+- `QmtAccount.buy/sell()` 接收 lowercase，内部 `.upper()` 转换
+
+### 13. 订单成交后自动同步 positions JSON
+- `_order_transition(filled)` → `_sync_strategy_position()`
+- `_sync_strategy_position()` → `qmt_runner.strategy_buy/sell()`
+- 不再需要在 deal_callback 中手动更新
+
+---
+
+## Key Technical Decisions
+
+1. **QMT volume单位**：QMT返回股（shares），不是手（lots），所以换手率=volume/float_shares
+2. **行业映射**：QMT环境不能import sqlite，改用 `qmt_data_static.py` 静态数据
+3. **K线缓存**：每日首次获取后缓存，同一天内不重复fetch
+4. **Python 3.6.8兼容**：无walrus(:=)、无dict union(|)、无debug f-string(=)
 5. **仓位隔离**：共享股票账户无法拆子账户，用本地JSON实现per-strategy持仓
 6. **不从账户同步持仓**：JSON空=策略没买过，避免新策略初始化时拽入其他策略持仓
 7. **capital静态分配**：每策略固定资金池，不受其他策略买入影响
+8. **hold_days vs positions 分离**：更新频率不同（每 bar vs 仅成交），分开管理
+9. **三层订单确认**：ORDER 不可靠时回退 DEAL，DEAL 不可靠时回退 POSITION
+10. **涨停不卖止盈**：涨停时保留止盈仓位，防止卖出后无法买回
+
+---
+
+## 已知陷阱 (CLAUDE.md 交叉引用)
+
+详见 `CLAUDE.md` 陷阱 #27-34：
+- 订单状态机用 userOrderId (remark) 跟踪
+- 撤单前必须 can_cancel_order 检查
+- 持仓 JSON 必须在 deal_callback 后更新
+- 涨停过滤和资金容量过滤必须在选股阶段执行
+- T+1：持有首日跳过风控检查
+- 涨停不卖止盈
+- HOLD_DAYS_EXTEND：盈利>阈值时可延期持有
+- MAX_STOCK_PRICE：排除超过价格上限的股票

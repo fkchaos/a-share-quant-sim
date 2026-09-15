@@ -213,7 +213,7 @@ def save_strategy_positions(strategy_name, positions):
     try:
         with open(tmp, 'w') as f:
             json.dump(positions, f)
-        os.rename(tmp, path)
+        os.replace(tmp, path)
     except Exception as e:
         print('[RISK] WARN: save positions failed: %s' % e)
         try: os.unlink(tmp)

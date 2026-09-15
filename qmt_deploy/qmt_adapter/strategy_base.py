@@ -51,7 +51,7 @@ def persist_hold_days(strategy_name, hold_days, today):
     try:
         with open(tmp, 'w') as f:
             json.dump({'hold_days': hold_days, 'last_date': today}, f)
-        os.rename(tmp, path)
+        os.replace(tmp, path)
     except Exception as _e:
         print('[WARN] failed to persist hold_days: %s' % str(_e))
         try:

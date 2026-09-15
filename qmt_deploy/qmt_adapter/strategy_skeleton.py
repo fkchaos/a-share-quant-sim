@@ -1,15 +1,15 @@
 #coding:gbk
 """
-qmt_adapter/strategy_skeleton.py ¡ª QMT²ßÂÔ¹Ç¼Ü
+qmt_adapter/strategy_skeleton.py ï¿½ï¿½ QMTï¿½ï¿½ï¿½Ô¹Ç¼ï¿½
 ================================================
-init()+handlebar() Èë¿ÚÄ£°å£¬°ÑÎÒÃÇµÄ²ßÂÔÂß¼­½ÓÈëQMTÔËÐÐ»·¾³¡£
+init()+handlebar() ï¿½ï¿½ï¿½Ä£ï¿½å£¬ï¿½ï¿½ï¿½ï¿½ï¿½ÇµÄ²ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½ï¿½QMTï¿½ï¿½ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ï¿½
 
-ÓÃ·¨:
-  1. ¸´ÖÆ±¾ÎÄ¼þµ½QMT²ßÂÔ±à¼­Æ÷
-  2. ÐÞ¸Ä strategy_module Ö¸ÏòÄãµÄ²ßÂÔÎÄ¼þ
-  3. ÔÚQMTÖÐÔËÐÐ»Ø²â»òÊµÅÌ
+ï¿½Ã·ï¿½:
+  1. ï¿½ï¿½ï¿½Æ±ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½QMTï¿½ï¿½ï¿½Ô±à¼­ï¿½ï¿½
+  2. ï¿½Þ¸ï¿½ strategy_module Ö¸ï¿½ï¿½ï¿½ï¿½Ä²ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½
+  3. ï¿½ï¿½QMTï¿½ï¿½ï¿½ï¿½ï¿½Ð»Ø²ï¿½ï¿½Êµï¿½ï¿½
 
-×¢Òâ: ±¾ÎÄ¼þÔËÐÐÔÚQMTÄÚÖÃPython 3.6»·¾³ÖÐ¡£
+×¢ï¿½ï¿½: ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½QMTï¿½ï¿½ï¿½ï¿½Python 3.6ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½
 """
 #coding:gbk
 
@@ -19,18 +19,18 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
-# ©¤©¤ ²ßÂÔÅäÖÃ ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-# ÐÞ¸ÄÕâÀïÖ¸ÏòÄãµÄ²ßÂÔ
-STRATEGY_NAME = 'v61c'           # ²ßÂÔÃû
-ACCOUNT_ID = 'testS'             # ×Ê½ðÕËºÅ£¨»Ø²â¿ÉÌîÈÎÒâÖµ£©
+# ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+# ï¿½Þ¸ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½Ä²ï¿½ï¿½ï¿½
+STRATEGY_NAME = 'v61c'           # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+ACCOUNT_ID = 'testS'             # ï¿½Ê½ï¿½ï¿½ËºÅ£ï¿½ï¿½Ø²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½
 ACCOUNT_TYPE = 'stock'           # 'stock' / 'credit'
-MAX_HOLDINGS = 5                 # ×î´ó³Ö²ÖÊý
-MAX_DAILY_BUY = 5                # Ã¿ÈÕ×î´óÂòÈëÊý
-POSITION_SCALE = 1.0             # ²ÖÎ»±ÈÀý
-REBALANCE_DAYS = 5               # µ÷²ÖÖÜÆÚ£¨Ìì£©
+MAX_HOLDINGS = 5                 # ï¿½ï¿½ï¿½Ö²ï¿½ï¿½ï¿½
+MAX_DAILY_BUY = 5                # Ã¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+POSITION_SCALE = 1.0             # ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½
+REBALANCE_DAYS = 5               # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½ï¿½ì£©
 
 
-# ©¤©¤ È«¾Ö×´Ì¬£¨QMTÒªÇóÓÃÈ«¾Ö±äÁ¿±£´æ×´Ì¬£© ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+# ï¿½ï¿½ï¿½ï¿½ È«ï¿½ï¿½×´Ì¬ï¿½ï¿½QMTÒªï¿½ï¿½ï¿½ï¿½È«ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 class State(object):
     pass
 S = State()
@@ -42,26 +42,26 @@ S.day_count = 0
 
 
 def init(C):
-    """QMT³õÊ¼»¯º¯Êý¡£²ßÂÔÆô¶¯Ê±µ÷ÓÃÒ»´Î¡£
+    """QMTï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½Ò»ï¿½Î¡ï¿½
 
     Parameters
     ----------
     C : ContextInfo
-        QMTÉÏÏÂÎÄ¶ÔÏó
+        QMTï¿½ï¿½ï¿½ï¿½ï¿½Ä¶ï¿½ï¿½ï¿½
     """
-    # ÉèÖÃ½»Ò×Æ·ÖÖ£¨Ö÷Í¼Æ·ÖÖ£©
+    # ï¿½ï¿½ï¿½Ã½ï¿½ï¿½ï¿½Æ·ï¿½Ö£ï¿½ï¿½ï¿½Í¼Æ·ï¿½Ö£ï¿½
     S.stock = C.stockcode + '.' + C.market
     S.account_id = ACCOUNT_ID
     S.account_type = ACCOUNT_TYPE
 
-    # µ¼ÈëÎÒÃÇµÄ²ßÂÔÄ£¿é£¨ÐèÒª°Ñ²ßÂÔÎÄ¼þ·Åµ½QMT¿É·ÃÎÊµÄÂ·¾¶£©
-    # Èç¹û²ßÂÔÎÄ¼þºÍ±¾ÎÄ¼þÔÚÍ¬Ò»Ä¿Â¼£¬¿ÉÒÔÖ±½Óimport
+    # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÇµÄ²ï¿½ï¿½ï¿½Ä£ï¿½é£¨ï¿½ï¿½Òªï¿½Ñ²ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½Åµï¿½QMTï¿½É·ï¿½ï¿½Êµï¿½Â·ï¿½ï¿½ï¿½ï¿½
+    # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½Í±ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½Í¬Ò»Ä¿Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö±ï¿½ï¿½import
     try:
         from strategy import select, get_params
         S.select = select
         S.params = get_params()
     except ImportError:
-        # ±¸Ñ¡£ºÖ±½ÓÓÃÄ¬ÈÏ²ÎÊý
+        # ï¿½ï¿½Ñ¡ï¿½ï¿½Ö±ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½Ï²ï¿½ï¿½ï¿½
         S.select = None
         S.params = {
             'STOP_LOSS': -0.08,
@@ -73,11 +73,11 @@ def init(C):
         }
 
     S.initialized = True
-    print('[INIT] ²ßÂÔ=%s ÕËºÅ=%s ²ÎÊý=%s' % (STRATEGY_NAME, S.account_id, S.params))
+    print('[INIT] ï¿½ï¿½ï¿½ï¿½=%s ï¿½Ëºï¿½=%s ï¿½ï¿½ï¿½ï¿½=%s' % (STRATEGY_NAME, S.account_id, S.params))
 
 
 def handlebar(C):
-    """QMTÖ÷Ñ­»·º¯Êý¡£Ã¿¸ùKÏßµ÷ÓÃÒ»´Î¡£
+    """QMTï¿½ï¿½Ñ­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½Kï¿½ßµï¿½ï¿½ï¿½Ò»ï¿½Î¡ï¿½
 
     Parameters
     ----------
@@ -86,30 +86,30 @@ def handlebar(C):
     if not S.initialized:
         return
 
-    # »ñÈ¡µ±Ç°ÈÕÆÚ
+    # ï¿½ï¿½È¡ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½
     bar_date = timetag_to_datetime(C.get_bar_timetag(C.barpos), '%Y%m%d%H%M%S')
 
-    # »Ø²âÄ£Ê½£ºÌø¹ýÀúÊ·KÏß£¬Ö»ÔÚ×îºóÒ»¸ùÖ´ÐÐ
-    # ÊµÅÌÄ£Ê½£ºÃ¿¸ö·Ö±Ê¶¼Ö´ÐÐ£¨ÓÉquicktrade²ÎÊý¿ØÖÆ£©
+    # ï¿½Ø²ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê·Kï¿½ß£ï¿½Ö»ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Ö´ï¿½ï¿½
+    # Êµï¿½ï¿½Ä£Ê½ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½Ö±Ê¶ï¿½Ö´ï¿½Ð£ï¿½ï¿½ï¿½quicktradeï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ£ï¿½
     if not C.is_last_bar():
         return
 
-    # ½»Ò×Ê±¼ä¼ì²é£¨ÊµÅÌÓÃ£©
+    # ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½é£¨Êµï¿½ï¿½ï¿½Ã£ï¿½
     now = datetime.now()
     now_time = now.strftime('%H%M%S')
     if now_time < '093000' or now_time > '150000':
         return
 
-    # ©¤©¤ 1. »ñÈ¡ÕË»§ÐÅÏ¢ ©¤©¤
+    # ï¿½ï¿½ï¿½ï¿½ 1. ï¿½ï¿½È¡ï¿½Ë»ï¿½ï¿½ï¿½Ï¢ ï¿½ï¿½ï¿½ï¿½
     from qmt_adapter.trading import QmtAccount
     acct = QmtAccount(C, S.account_id, S.account_type)
     cash = acct.get_cash()
     current_holdings = acct.get_holdings()
 
-    # ©¤©¤ 2. ·ç¿Ø¼ì²é£¨Ö¹Ëð/Ö¹Ó¯/µ½ÆÚ£© ©¤©¤
+    # ï¿½ï¿½ï¿½ï¿½ 2. ï¿½ï¿½Ø¼ï¿½é£¨Ö¹ï¿½ï¿½/Ö¹Ó¯/ï¿½ï¿½ï¿½Ú£ï¿½ ï¿½ï¿½ï¿½ï¿½
     sell_codes = []
     for code, info in list(S.holdings.items()):
-        # »ñÈ¡µ±Ç°¼Û¸ñ
+        # ï¿½ï¿½È¡ï¿½ï¿½Ç°ï¿½Û¸ï¿½
         data = C.get_market_data_ex(['close'], [code], period='1d', count=1, subscribe=False)
         if code not in data:
             continue
@@ -120,7 +120,7 @@ def handlebar(C):
 
         pnl = (current_price - cost) / cost
 
-        # Ö¹Ëð
+        # Ö¹ï¿½ï¿½
         if pnl <= S.params['STOP_LOSS']:
             sell_codes.append((code, 'STOP_LOSS'))
             continue
@@ -130,22 +130,22 @@ def handlebar(C):
             sell_codes.append((code, 'TAKE_PROFIT'))
             continue
 
-        # ³Ö²ÖÌìÊý
+        # ï¿½Ö²ï¿½ï¿½ï¿½ï¿½ï¿½
         entry_date = info.get('entry_date', bar_date)
-        # ¼ò»¯£ºÓÃbar_count¹ÀËãÌìÊý
+        # ï¿½ò»¯£ï¿½ï¿½ï¿½bar_countï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         hold_days = S.day_count - info.get('entry_day', S.day_count)
         if hold_days >= S.params['HOLD_DAYS_MAX']:
             sell_codes.append((code, 'HOLD_DAYS'))
 
-    # Ö´ÐÐÂô³ö
+    # Ö´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     for code, reason in sell_codes:
         if code in current_holdings:
-            acct.sell_all(code, reason=reason)
+            acct.sell_all(code, reason=reason, strategy_name=STRATEGY_NAME)
             if code in S.holdings:
                 del S.holdings[code]
             print('[SELL] %s %s %s' % (bar_date, code, reason))
 
-    # ©¤©¤ 3. Ñ¡¹É£¨µ÷²ÖÈÕÖ´ÐÐ£© ©¤©¤
+    # ï¿½ï¿½ï¿½ï¿½ 3. Ñ¡ï¿½É£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö´ï¿½Ð£ï¿½ ï¿½ï¿½ï¿½ï¿½
     days_since_rebalance = S.day_count
     if S.last_rebalance_date is not None:
         days_since_rebalance = S.day_count - S.last_rebalance_date
@@ -153,34 +153,34 @@ def handlebar(C):
     if days_since_rebalance >= S.params.get('REBALANCE_DAYS', REBALANCE_DAYS):
         S.last_rebalance_date = S.day_count
 
-        # »ñÈ¡¹ÉÆ±³ØÐÐÇé£¨¼ò»¯£ºÓÃÖ÷Í¼Æ·ÖÖ£©
-        # Êµ¼ÊÓ¦ÓÃÖÐÐèÒª»ñÈ¡Õû¸ö¹ÉÆ±³ØµÄÐÐÇé
-        # ÕâÀïÓÃQMTµÄget_stock_list_in_sector»ñÈ¡»¦ÉîA¹É
-        stock_list = C.get_stock_list_in_sector('»¦ÉîA¹É')
+        # ï¿½ï¿½È¡ï¿½ï¿½Æ±ï¿½ï¿½ï¿½ï¿½ï¿½é£¨ï¿½ò»¯£ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ·ï¿½Ö£ï¿½
+        # Êµï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ±ï¿½Øµï¿½ï¿½ï¿½ï¿½ï¿½
+        # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½QMTï¿½ï¿½get_stock_list_in_sectorï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½Aï¿½ï¿½
+        stock_list = C.get_stock_list_in_sector('ï¿½ï¿½ï¿½ï¿½Aï¿½ï¿½')
 
-        # »ñÈ¡ÐÐÇéÊý¾ÝÓÃÓÚ´ò·Ö
+        # ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ï¿½
         close_data = C.get_market_data_ex(
             ['close', 'volume', 'amount'],
-            stock_list[:200],  # QMT¿ÉÄÜÓÐÊýÁ¿ÏÞÖÆ£¬ÏÈÈ¡Ç°200
+            stock_list[:200],  # QMTï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ£ï¿½ï¿½ï¿½È¡Ç°200
             period='1d',
             count=120,
             subscribe=False,
         )
 
-        # ×ª»»ÎªÎÒÃÇµÄ¸ñÊ½
+        # ×ªï¿½ï¿½Îªï¿½ï¿½ï¿½ÇµÄ¸ï¿½Ê½
         from qmt_adapter.data import qmt_to_our_format
         factor_data = {}
         for code in stock_list[:200]:
             if code in close_data:
                 factor_data[code] = qmt_to_our_format(close_data, code)
 
-        # µ÷ÓÃÎÒÃÇµÄÑ¡¹ÉÂß¼­
+        # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Çµï¿½Ñ¡ï¿½ï¿½ï¿½ß¼ï¿½
         if S.select is not None and factor_data:
             candidates = S.select(factor_data, bar_date, current_holdings, S.params)
         else:
             candidates = []
 
-        # ©¤©¤ 4. ÂòÈë ©¤©¤
+        # ï¿½ï¿½ï¿½ï¿½ 4. ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         available = cash * POSITION_SCALE
         to_buy = [c for c in candidates if c not in current_holdings]
         buy_count = min(len(to_buy), MAX_DAILY_buy - len([t for t in S.trade_log if t.get('date') == bar_date and t.get('action') == 'BUY']))
@@ -188,21 +188,21 @@ def handlebar(C):
         for code in to_buy[:buy_count]:
             if len(current_holdings) >= MAX_HOLDINGS:
                 break
-            # »ñÈ¡¼Û¸ñ
+            # ï¿½ï¿½È¡ï¿½Û¸ï¿½
             if code not in close_data:
                 continue
             price = close_data[code]['close'].values[-1]
             if price <= 0:
                 continue
 
-            # ¼ÆËãÂòÈë¹ÉÊý
+            # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             per_stock = min(available / buy_count, S.params.get('MAX_POSITION', 0.25) * 100000)
             shares = int(per_stock / price / 100) * 100
             if shares < 100:
                 continue
 
-            # ÏÂµ¥
-            success = acct.buy(code, shares, reason=STRATEGY_NAME)
+            # ï¿½Âµï¿½
+            success = acct.buy(code, shares, reason='BUY', strategy_name=STRATEGY_NAME)
             if success:
                 S.holdings[code] = {
                     'shares': shares,

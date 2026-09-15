@@ -189,43 +189,24 @@ def is_rebalance_day(C, rebalance_days):
     return True
 
 # #### Per-strategy position tracking (temporary) ####
-def _get_positions_path(strategy_name):
-    """Get path to strategy's local position JSON."""
-    import os
-    return os.path.join(os.path.dirname(__file__), '_positions_%s.json' % strategy_name)
-
 def load_strategy_positions(strategy_name):
-    """Load per-strategy positions. Empty dict if file not found."""
-    import json, os
-    path = _get_positions_path(strategy_name)
-    try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except Exception as _e:
-        print('[RISK] WARN: load positions failed, starting fresh: %s' % _e)
-        return {}
+    """Load per-strategy positions from hold_days JSON. Empty dict if not found."""
+    from .strategy_base import load_hold_days
+    _, _, positions = load_hold_days(strategy_name)
+    return positions
 
 def save_strategy_positions(strategy_name, positions):
-    """Save per-strategy positions to JSON (atomic: tmp + rename)."""
-    import json, os, tempfile
-    path = _get_positions_path(strategy_name)
-    tmp = path + '.tmp'
-    try:
-        with open(tmp, 'w') as f:
-            json.dump(positions, f)
-        os.replace(tmp, path)
-    except Exception as e:
-        print('[RISK] WARN: save positions failed: %s' % e)
-        try: os.unlink(tmp)
-        except Exception: pass
+    """Save per-strategy positions to hold_days JSON."""
+    from .strategy_base import update_positions_only
+    update_positions_only(strategy_name, positions)
 
 def strategy_buy(strategy_name, code, shares, cost_price, date=''):
-    """Record a buy in strategy's position file."""
+    """Record a buy in strategy's hold_days JSON."""
     pos = load_strategy_positions(strategy_name)
     if code in pos:
         old = pos[code]
-        total_cost = old['cost_price'] * old['shares'] + cost_price * shares
-        total_shares = old['shares'] + shares
+        total_cost = old.get('cost_price', 0) * old.get('shares', 0) + cost_price * shares
+        total_shares = old.get('shares', 0) + shares
         pos[code] = {
             'shares': total_shares,
             'cost_price': round(total_cost / total_shares, 4) if total_shares > 0 else 0,
@@ -236,21 +217,21 @@ def strategy_buy(strategy_name, code, shares, cost_price, date=''):
     save_strategy_positions(strategy_name, pos)
 
 def strategy_sell(strategy_name, code, shares):
-    """Record a sell in strategy's position file."""
+    """Record a sell in strategy's hold_days JSON."""
     pos = load_strategy_positions(strategy_name)
     if code in pos:
-        pos[code]['shares'] -= shares
+        pos[code]['shares'] = pos[code].get('shares', 0) - shares
         if pos[code]['shares'] <= 0:
             del pos[code]
         save_strategy_positions(strategy_name, pos)
 
 def get_strategy_holdings(strategy_name, account):
-    """Get holdings: per-strategy if enabled, else account-wide."""
+    """Get holdings: per-strategy from hold_days JSON, else account-wide."""
     from .config import PER_STRATEGY_POSITIONS
     if not PER_STRATEGY_POSITIONS:
         return account.get_holdings()
     pos = load_strategy_positions(strategy_name)
-    return [{'code': c, 'shares': v['shares'], 'avg_cost': v['cost_price']} 
+    return [{'code': c, 'shares': v.get('shares', 0), 'avg_cost': v.get('cost_price', 0)}
             for c, v in pos.items() if v.get('shares', 0) > 0]
 
 def strategy_stock_count(strategy_name):

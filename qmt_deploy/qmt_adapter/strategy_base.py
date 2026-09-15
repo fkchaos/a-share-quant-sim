@@ -31,29 +31,57 @@ def get_bar_date(C):
 
 
 def load_hold_days(strategy_name):
-    """Load persisted hold_days from file. Returns (hold_days_dict, last_date_str)."""
+    """Load persisted hold_days from file. Returns (hold_days_dict, last_date_str, positions_dict)."""
     import json, os
     path = os.path.join(os.path.dirname(__file__), '_hold_days_%s.json' % strategy_name)
     try:
         with open(path, 'r') as f:
             data = json.load(f)
-        return data.get('hold_days', {}), data.get('last_date', '')
+        return data.get('hold_days', {}), data.get('last_date', ''), data.get('positions', {})
     except Exception as _e:
         print('[INIT] WARN: hold_days load failed, starting fresh: %s' % _e)
-        return {}, ''
+        return {}, '', {}
 
 
-def persist_hold_days(strategy_name, hold_days, today):
-    """Persist hold_days to file (atomic: tmp + rename)."""
+def persist_hold_days(strategy_name, hold_days, today, positions=None):
+    """Persist hold_days + positions to file (atomic: tmp + replace)."""
     import json, os
     path = os.path.join(os.path.dirname(__file__), '_hold_days_%s.json' % strategy_name)
     tmp = path + '.tmp'
     try:
+        payload = {'hold_days': hold_days, 'last_date': today}
+        if positions is not None:
+            payload['positions'] = positions
         with open(tmp, 'w') as f:
-            json.dump({'hold_days': hold_days, 'last_date': today}, f)
+            json.dump(payload, f)
         os.replace(tmp, path)
     except Exception as _e:
         print('[WARN] failed to persist hold_days: %s' % str(_e))
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+
+
+def update_positions_only(strategy_name, positions):
+    """Update only positions field in hold_days file (without touching hold_days/last_date)."""
+    import json, os
+    path = os.path.join(os.path.dirname(__file__), '_hold_days_%s.json' % strategy_name)
+    tmp = path + '.tmp'
+    try:
+        # Read existing data
+        data = {}
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+        except Exception:
+            pass
+        data['positions'] = positions
+        with open(tmp, 'w') as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except Exception as _e:
+        print('[WARN] failed to update positions: %s' % str(_e))
         try:
             os.unlink(tmp)
         except Exception:

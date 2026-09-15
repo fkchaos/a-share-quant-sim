@@ -167,14 +167,13 @@ def on_signal(C):
             _hold_days.pop(code, None)
 
     # 4. Check if slots are available -> buy
-    holdings = qmt_runner.get_strategy_holdings('v75j', _account)
-    current_count = len([p for p in holdings if p.get('shares', 0) > 0])
+    # Use _hold_days (memory) for slot count, consistent with risk check
+    current_count = len([c for c, d in _hold_days.items() if d >= 0])
     slots = max_holdings - current_count
 
-    if _DEBUG and holdings:
-        for p in holdings:
-            print('[V75J] hold: %s shares=%d cost=%.2f days=%d' % (
-                p['code'], p['shares'], p['avg_cost'], _hold_days.get(p['code'], 0)))
+    if _DEBUG and _hold_days:
+        for code, days in _hold_days.items():
+            print('[V75J] hold: %s days=%d' % (code, days))
 
     if slots > 0:
         # Breadth filter before buying

@@ -104,8 +104,48 @@ def main():
     else:
         print("⚠️ 没有有效数据可写入")
 
+    # ── 补全指数数据（sh000001/sz399001/sz399006）──
+    # 腾讯API对指数数据返回不完整，需单独处理
+    from datetime import datetime, timedelta
+    _INDICES = {'sh000001': '上证指数', 'sz399001': '深证成指', 'sz399006': '创业板指'}
+    print(f"\n📈 检查指数数据完整性...")
+    conn = sqlite3.connect(_db_path('quant_stocks.db'))
+    index_updated = 0
+    for idx_code, idx_name in _INDICES.items():
+        # 检查指数最近数据
+        row = conn.execute(
+            "SELECT date FROM daily_kline WHERE code=? ORDER BY date DESC LIMIT 1",
+            (idx_code,)
+        ).fetchone()
+        idx_latest = row[0] if row else '1990-01-01'
+        
+        # 如果指数数据比个股数据落后超过1天，用baostock补全
+        if idx_latest < start_date:
+            print(f"  ⚠️ {idx_name}({idx_code}) 数据落后: {idx_latest} < {start_date}，用baostock补全...")
+            try:
+                # baostock对指数数据更可靠
+                idx_df = pm.get_daily_kline([idx_code], idx_latest, end_date, is_index=True)
+                if idx_df is not None and not idx_df.empty:
+                    for _, r in idx_df.iterrows():
+                        conn.execute(
+                            "INSERT OR REPLACE INTO daily_kline(code,date,open,high,low,close,volume) VALUES(?,?,?,?,?,?,?)",
+                            (idx_code, str(r['date'])[:10], float(r.get('open', 0) or 0),
+                             float(r.get('high', 0) or 0), float(r.get('low', 0) or 0),
+                             float(r.get('close', 0) or 0), float(r.get('volume', 0) or 0))
+                        )
+                    index_updated += len(idx_df)
+                    print(f"  ✅ {idx_name}: 更新 {len(idx_df)} 条")
+            except Exception as e:
+                print(f"  ❌ {idx_name} 补全失败: {e}")
+    conn.commit()
+    conn.close()
+    if index_updated > 0:
+        print(f"📈 指数数据补全: {index_updated} 条")
+    else:
+        print(f"📈 指数数据已是最新")
+
     print(f"\n⏱️ 总耗时: {time.time()-t0:.1f}s")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

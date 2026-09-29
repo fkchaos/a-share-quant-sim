@@ -520,14 +520,22 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
     trading = sys.modules[__name__]
     acct = _get_account_id()
 
+    _age = int(now - o.get('timestamp', now))
+    print('[ORDER_POLL][%s] check: status=%s stock=%s vol=%d age=%ds strategy=%s acct=%s' % (
+        remark, o['status'], o.get('stock',''), o.get('vol',0), _age, strategy_name, acct))
+
     # ---- Layer 1: Query ORDER ----
     order_found = False
     order_status = _ORD_ST_255_UNKNOWN
     order_query_ok = False
     try:
-        qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER', strategy_name.upper())
+        _query_strat = strategy_name.upper()
+        qmt_orders = trading.get_trade_detail_data(acct, 'STOCK', 'ORDER', _query_strat)
+        _total_orders = len(qmt_orders or [])
+        _remarks_found = []
         for order in (qmt_orders or []):
             r = getattr(order, 'm_strRemark', '')
+            _remarks_found.append(r)
             if r != remark:
                 continue
             order_found = True
@@ -535,6 +543,8 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             vol = getattr(order, 'm_nVolumeTotalOriginal', 0)
             order_id = getattr(order, 'm_strOrderSysID', '')
             order_status = getattr(order, 'm_nOrderStatus', _ORD_ST_255_UNKNOWN)
+            print('[ORDER_POLL][%s] ORDER match: status=%d traded=%d/%d orderId=%s' % (
+                remark, order_status, traded, vol, order_id))
             if order_id:
                 o['order_id'] = order_id
 
@@ -591,6 +601,10 @@ def _do_order_check_single(ContextInfo, remark, strategy_name):
             return
     except Exception as e:
         print('[ORDER_POLL][%s] ORDER query failed: %s (continuing to DEAL/POSITION)' % (remark, e))
+
+    if not order_found:
+        print('[ORDER_POLL][%s] ORDER not found: strategy=%s total_orders=%d remarks=%s' % (
+            remark, _query_strat, _total_orders, _remarks_found[:5]))
 
     # ---- Layer 2: ORDER not found -> query DEAL (accumulate all matching) ----
     if not order_found or not order_query_ok:

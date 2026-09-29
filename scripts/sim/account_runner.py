@@ -158,13 +158,21 @@ def load_account(account_id, stale_days=30):
             try:
                 from datetime import datetime as dt
                 buy_date = added[:10]
-                # 用上证指数K线计算交易日天数（sh000001在daily_kline表中）
+                # 用个股数据判断交易日（比指数数据更可靠）
                 import sqlite3
                 _conn = sqlite3.connect(os.path.join(DATA_DIR, 'quant_stocks.db'))
-                _rows = _conn.execute("SELECT date, volume FROM daily_kline WHERE code='sh000001'").fetchall()
+                # 查询任意股票有数据的日期（交易日）
+                _rows = _conn.execute("""
+                    SELECT date, COUNT(*) as cnt 
+                    FROM daily_kline 
+                    WHERE date > ? AND volume > 0
+                    GROUP BY date 
+                    HAVING cnt >= 100
+                    ORDER BY date
+                """, (buy_date,)).fetchall()
                 _conn.close()
                 if _rows:
-                    dates = sorted([r[0] for r in _rows if r[1] > 0])
+                    dates = [r[0] for r in _rows]
                     latest_td = dates[-1]
                     # 盘中优化：今天买了0天，昨天买了1天...
                     from datetime import date as _date
@@ -172,9 +180,9 @@ def load_account(account_id, stale_days=30):
                     _today_str = _today.strftime('%Y-%m-%d')
                     if _today_str > latest_td and _today.weekday() < 5 and buy_date < _today_str:
                         # 今天是交易日但数据未更新，且买入日在今天之前，包含今天
-                        hd = sum(1 for d in dates if d > buy_date) + 1
+                        hd = len(dates) + 1
                     else:
-                        hd = sum(1 for d in dates if d > buy_date and d <= latest_td)
+                        hd = len(dates)
                 else:
                     buy_dt = dt.strptime(buy_date, "%Y-%m-%d")
                     hd = max(0, (dt.now() - buy_dt).days)

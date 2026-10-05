@@ -13,6 +13,7 @@ from core.provider_manager import ProviderManager
 from core.providers.baostock import BaoStockProvider
 from core.providers.tencent import TencentProvider
 from core.db import upsert_kline_batch, get_stock_name_map, _db_path
+from core.holidays import is_cn_holiday
 
 BATCH_SIZE = 100
 
@@ -24,6 +25,16 @@ def main():
     parser.add_argument('--start', type=str, default=None, help='开始日期 YYYY-MM-DD')
     parser.add_argument('--end', type=str, default=None, help='结束日期 YYYY-MM-DD')
     args = parser.parse_args()
+
+    # Auto mode (no explicit --start/--end): skip weekends and statutory
+    # holidays to avoid pointless provider calls. Explicit dates always
+    # run (manual backfill must not be blocked).
+    from datetime import datetime
+    if not (args.start and args.end):
+        _today = datetime.now()
+        if _today.weekday() >= 5 or is_cn_holiday(_today.strftime('%Y-%m-%d')):
+            print(f"Skip: auto mode, {_today.strftime('%Y-%m-%d')} is weekend/statutory holiday")
+            return
 
     # 初始化 ProviderManager（自动读取 config/data_sources.yaml）
     pm = ProviderManager()

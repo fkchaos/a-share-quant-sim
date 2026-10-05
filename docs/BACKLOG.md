@@ -115,7 +115,7 @@
 
 | 日期 | 事项 | 结果 |
 |------|------|------|
-| 10-05 | 法定假日表 core/holidays.py | 2026官方+2027预估，接入is_trade_day/cron_monitor，16测试通过 |
+| 10-05 | 法定假日表 core/holidays.py | 2026官方+2027预估，接入is_trade_day/cron_monitor/数据更新脚本，16测试通过 |
 | 08-19 | Provider架构实现 | SimProvider测试通过，account_runner适配完成 |
 | 08-19 | 迅投因子看板爬取 | 412因子存档，8典型因子IC验证 |
 | 08-19 | v82/v83实验 | 8因子全部无效，IC差异R1-R3排除5可能 |

@@ -124,6 +124,7 @@
 33. **⚠️ QMT HOLD_DAYS_EXTEND** — 盈利>阈值时可延期持有，用`hold_days_extend`参数
 34. **⚠️ QMT MAX_STOCK_PRICE** — 排除超过价格上限的股票，参数在config.py中配置
 35. **⚠️ v61e排名掉出Top15不是启动信号** — v61e假设"排名掉出Top15=启动信号"，WF回测Sharpe 0.913远低于v61c的2.530。排名掉出=换手率升高/市值变大=资金在撤，不是流入。如需寻找启动信号，建议研究资金流向、板块轮动等更直接的指标
+36. **⚠️ core/holidays.py 法定假日表** — 交易日判断用（is_trade_day在weekday检查后调用，DB数据检查仍是兜底）。2026为官方数据（国务院2025-11-04通知），2027为预估值（官方通知一般11月初发布，发布后更新，遗留项见docs/BACKLOG.md B17）。假日表错漏最多漏一天交易，不会在休市日交易
 
 26. **⚠️ QMT策略文件必须GBK编码且不用中文** — 所有.py文件第一行必须`#coding:gbk`，文件必须实际保存为GBK编码。字符串常量用英文（如TECH_SECTORS用'Electronics'不用'电子'），UTF-8编辑器修改GBK文件=中文变"锟斤拷"
 
@@ -132,7 +133,7 @@
 ## 项目结构
 
 ```
-core/           — 共享引擎（account, db, strategy_map, factors, trading）
+core/           — 共享引擎（account, db, strategy_map, factors, trading, holidays）
   providers/      — 交易Provider（sim_provider=模拟盘, qmt_provider=QMT实盘）
   trading.py      — 交易门面层（直接模式/Provider模式切换）
   trading_provider.py — Provider基类接口

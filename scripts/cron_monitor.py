@@ -18,8 +18,12 @@ import json
 import os
 import re
 import glob
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from core.holidays import is_cn_holiday
 
 # ─── 配置 ───────────────────────────────────────────────────────────────────
 
@@ -192,10 +196,10 @@ def check_jobs():
             summary[job_id] = {"name": name, "state": "paused"}
             continue
 
-        # 跳过非工作日 job（cron 表达式含 1-5 的）
+        # 跳过非工作日 job（cron 表达式含 1-5 的）：周末和法定假日都跳过
         schedule = job.get("schedule", {}).get("expr", "")
-        if "1-5" in schedule and weekday >= 5:
-            summary[job_id] = {"name": name, "state": "skip_weekend"}
+        if "1-5" in schedule and (weekday >= 5 or is_cn_holiday(today)):
+            summary[job_id] = {"name": name, "state": "skip_non_trading_day"}
             continue
 
         # 获取最新输出

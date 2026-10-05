@@ -306,7 +306,8 @@ def is_trade_day(date_str):
     """
     判断是否为交易日：
     1. 周一到周五（weekday 0-4）
-    2. DB 中有该日期的 K 线数据（排除节假日）
+    2. 非法定假日（core/holidays.py，2026官方+2027预估）
+    3. DB 中有该日期的 K 线数据（兜底校验，数据缺失时仍跳过）
 
     注意：如果当天数据未入库，说明数据更新有问题，跳过是正确的。
 
@@ -325,6 +326,11 @@ def is_trade_day(date_str):
     except ValueError:
         return False
     if dt.weekday() > 4:
+        return False
+
+    # Statutory holiday early-exit (independent of DB state, see core/holidays.py)
+    from core.holidays import is_cn_holiday
+    if is_cn_holiday(date_str):
         return False
 
     # 检查 DB 最新数据日期
